@@ -9,10 +9,10 @@ use {
 #[test]
 fn a_program_normalizes_to_the_canonical_shape() {
     // Top-level `=` always breaks; exactly one blank line between items; the tail closes the file.
-    let source = "use /std/{Nat};\nlet double(n : Nat) -> Nat = n + n;\n\n\n\ndouble(21)\n";
+    let source = "use /std/{Nat};\nlet double(n : Nat) -> Nat => n + n;\n\n\n\ndouble(21)\n";
     assert_eq!(
         formatted(source),
-        "use /std/{Nat};\n\nlet double(n: Nat) -> Nat =\n    n + n;\n\ndouble(21)\n"
+        "use /std/{Nat};\n\nlet double(n: Nat) -> Nat =>\n    n + n;\n\ndouble(21)\n"
     );
 }
 
@@ -69,7 +69,7 @@ fn foreign_declarations_are_canonical_as_written() {
 
 #[test]
 fn formatting_is_idempotent() {
-    let source = "use /std/{Nat};\n\nlet double(n : Nat) -> Nat =\n    n + n;\n\ndouble(21)\n";
+    let source = "use /std/{Nat};\n\nlet double(n : Nat) -> Nat =>\n    n + n;\n\ndouble(21)\n";
     let once = formatted(source);
     assert_eq!(formatted(&once), once);
 }
@@ -118,8 +118,8 @@ fn an_overflowing_telescope_dedents_its_closer() {
         "pub induct Choice(Alphabet: Type, Beta: Type, Gamma: Type, Delta: Type, Epsilon: Type, Zeta: Type): pub Type\n",
         "| only(Alphabet)\n",
         "end\n\n",
-        "satisfy (@Alphabet: Type, @Beta: Type, use Show(Alphabet), use Show(Beta), use Show(Str), use Show(Alphabet)) => Renderable(Alphabet) {\n",
-        "    render(a) = Show/show(a),\n",
+        "satisfy (@Alphabet: Type, @Beta: Type, use Show(Alphabet), use Show(Beta), use Show(Str), use Show(Alphabet)) -> Renderable(Alphabet) {\n",
+        "    render(a) => Show/show(a),\n",
         "}\n",
     );
     let output = formatted(source);
@@ -128,7 +128,7 @@ fn an_overflowing_telescope_dedents_its_closer() {
         "\n): pub Type {\n    render(Alphabet) -> Str,",
         "\n): pub Type {\n    first: Alphabet,",
         "\n): pub Type\n| only(Alphabet)",
-        "\n) => Renderable(Alphabet) {",
+        "\n) -> Renderable(Alphabet) {",
     ] {
         assert!(output.contains(closer), "missing {closer:?} in:\n{output}");
     }
@@ -142,8 +142,8 @@ fn an_overflowing_telescope_dedents_its_closer() {
 fn a_witness_head_breaks_its_telescope_before_its_application() {
     let source = concat!(
         "use /std/{Monad, Io};\n\n",
-        "satisfy (@M: (Type) -> Type, @E: Type, use Monad(M), use Monad/Lift(Io, M)) => Monad/Lift(Io, (A: Type) => Carrier(M, E, A)) {\n",
-        "    lift(@A, m) = m,\n",
+        "satisfy (@M: (Type) -> Type, @E: Type, use Monad(M), use Monad/Lift(Io, M)) -> Monad/Lift(Io, (A: Type) => Carrier(M, E, A)) {\n",
+        "    lift(@A, m) => m,\n",
         "}\n",
     );
     let output = concat!(
@@ -153,8 +153,8 @@ fn a_witness_head_breaks_its_telescope_before_its_application() {
         "    @E: Type,\n",
         "    use Monad(M),\n",
         "    use Monad/Lift(Io, M),\n",
-        ") => Monad/Lift(Io, (A: Type) => Carrier(M, E, A)) {\n",
-        "    lift(@A, m) = m,\n",
+        ") -> Monad/Lift(Io, (A: Type) => Carrier(M, E, A)) {\n",
+        "    lift(@A, m) => m,\n",
         "}\n",
     );
     assert_eq!(formatted(source), output);
@@ -213,7 +213,7 @@ fn a_block_string_literal_takes_the_canonical_indentation() {
 /// A literal keeps the spelling it was written in, where any other spelling of its value reads back alike: a decimal its sign and exponent, a character's and a string's escapes — an escape is often written because its character is hard to see or to type — and a block's lines theirs. A character no reader sees, typed raw, is the one spelling the formatter changes, to its escape.
 #[test]
 fn a_literal_keeps_the_spelling_it_was_written_in() {
-    let source = "use /std/{Flt, Char, Str};\n\nlet half: Flt =\n    0.5;\n\nlet big: Flt =\n    1.0e9;\n\nlet small: Flt =\n    -2.5e-3;\n\nlet signed: Flt =\n    +4.0;\n\nlet accent: Char =\n    '\\u{301}';\n\nlet letters: Str =\n    \"\\u{41}\\t\\u{200B}\";\n\nlet kind(c: Char) -> Str =\n    match c | '\\u{41}' => \"a\" | _ => \"b\" end;\n\nhalf\n";
+    let source = "use /std/{Flt, Char, Str};\n\nlet half: Flt =\n    0.5;\n\nlet big: Flt =\n    1.0e9;\n\nlet small: Flt =\n    -2.5e-3;\n\nlet signed: Flt =\n    +4.0;\n\nlet accent: Char =\n    '\\u{301}';\n\nlet letters: Str =\n    \"\\u{41}\\t\\u{200B}\";\n\nlet kind(c: Char) -> Str =>\n    match c | '\\u{41}' => \"a\" | _ => \"b\" end;\n\nhalf\n";
     assert_eq!(formatted(source), source);
 
     assert_eq!(

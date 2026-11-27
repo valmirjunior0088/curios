@@ -2,7 +2,7 @@
 use /std/{Nat, Bool};
 use /std/Bool/{True, False, Holds};
 
-let F(c: Bool) -> Type =
+let F(c: Bool) -> Type =>
     match c | true => {} | false => Nat end;
 
 let f(
@@ -15,15 +15,15 @@ let f(
     match match h(p) == h(q) | true => k(0) | false => k(1) end
     | false => true
     | true => k(0)
-    end) =
-    let g(i: Nat) -> Nat = match i | 0 => h(p) | _ + 1 => h(q) end
+    end) =>
+    let g(i: Nat) -> Nat => match i | 0 => h(p) | _ + 1 => h(q) end
     and m(
         _: {},
     ) -> Holds(
         match match g(0) == g(1) | true => k(0) | false => k(1) end
         | false => true
         | true => k(0)
-        end) =
+        end) =>
         match match g(0) == g(1) | true => k(0) | false => k(1) end
         | false => True/qed()
         | true =>

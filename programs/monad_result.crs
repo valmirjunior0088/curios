@@ -3,7 +3,7 @@
 -- N is read from the command line so the loop survives constant folding; output is 3N.
 use /std/{Str, Nat, List, Option, Result, Try, Io, Proc, Fmt};
 
-let loop(n: Nat, acc: Nat) -> Result(Str, Nat) =
+let loop(n: Nat, acc: Nat) -> Result(Str, Nat) =>
     match n
     | 0 => Result/pure(acc)
     | m + 1 =>
@@ -11,10 +11,10 @@ let loop(n: Nat, acc: Nat) -> Result(Str, Nat) =
         loop(m, a)
     end;
 
-let total(n: Nat) -> Nat =
+let total(n: Nat) -> Nat =>
     match loop(n, 0) | success(v) => v | failure(_) => 0 end;
 
-let execute() -> Try(Io, Str, {}) =
+let execute() -> Try(Io, Str, {}) =>
     let arguments = Proc/args()!;
     let bytes = Option/to_result(List/try_get(arguments, 1), "no input")!;
     let s = Result/map_failure(Str/of_bytes(bytes), (_) => "invalid utf-8")!;

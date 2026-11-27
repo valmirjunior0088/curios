@@ -2,7 +2,7 @@
 -- Each table holds a string, an integer, a float, a list of booleans and a list of strings, as a configuration file's tables do. The document is built from the command line's N, so no closed term folds it away; at 800 it is about 100 KB.
 use /std/{Str, Nat, List, Option, Result, Try, Io, Proc, Fmt, Toml};
 
-let table(i: Nat) -> Str =
+let table(i: Nat) -> Str =>
     Str/join("", [
         Fmt/render("[section_%]\n")(i),
         Fmt/render("name = \"entry number %\"\n")(i),
@@ -11,7 +11,7 @@ let table(i: Nat) -> Str =
         Fmt/render("flags = [true, false, %]\n")(i % 2 == 1),
         Fmt/render("tags = [\"a%\", \"b%\", \"c\"]\n\n")(i)(i % 13)]);
 
-let execute() -> Try(Io, Str, {}) =
+let execute() -> Try(Io, Str, {}) =>
     let arguments = Proc/args()!;
     let bytes = Option/to_result(List/try_get(arguments, 1), "no input")!;
     let s = Result/map_failure(Str/of_bytes(bytes), (_) => "invalid utf-8")!;

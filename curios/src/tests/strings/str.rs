@@ -35,7 +35,7 @@ fn a_string_literal_spells_as_itself_in_a_report() {
         use /std/{Str};
         use /std/Bool/{True, False};
 
-        let Named(name: Str) -> Prop =
+        let Named(name: Str) -> Prop =>
             match Str/eql(name, "body") | true => True | false => False end;
 
         let evidence: Named("body") = ?;

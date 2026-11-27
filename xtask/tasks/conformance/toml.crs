@@ -4,18 +4,18 @@ use /std/{Str, List, Option, Result, Try, Io, Proc, Fmt, Json, Toml, Map, Path, 
 use /std/time/{Date, Time, DateTime, OffsetDateTime};
 
 --- The member `key` of `members`, where it is a string.
-let member(members: List({Str, Json}), key: Str) -> Option(Str) =
+let member(members: List({Str, Json}), key: Str) -> Option(Str) =>
     match List/find(members, (m: {Str, Json}) => m.0 == key)
     | some((_, str(text))) => Option/some(text)
     | _ => Option/none()
     end;
 
 --- Whether the floats `a` and `b` are one value as toml-test compares them: a NaN of either sign is a NaN, and any other float is compared as IEEE compares it.
-let same_float(a: Flt, b: Flt) -> Bool =
+let same_float(a: Flt, b: Flt) -> Bool =>
     Flt/is_nan(a) && Flt/is_nan(b) || Flt/le(a, b) && Flt/le(b, a);
 
 --- Whether the scalar `value` is what toml-test's tag `kind` and text `text` state, the text read by `/std`'s own reader of its kind rather than by the decoder under test.
-let scalar(value: Toml, kind: Str, text: Str) -> Bool =
+let scalar(value: Toml, kind: Str, text: Str) -> Bool =>
     match value
     | str(s) => kind == "string" && s == text
     | int(i) =>
@@ -32,7 +32,7 @@ let scalar(value: Toml, kind: Str, text: Str) -> Bool =
     end;
 
 --- Whether `value` is what the tagged JSON `expected` states: a table an object of its keys, an array an array of its elements in order, and a scalar the object toml-test tags it with, its `type` and its `value`.
-let agree(value: Toml, expected: Json) -> Bool =
+let agree(value: Toml, expected: Json) -> Bool =>
     match (value, expected)
     | (table(entries), obj(members)) =>
         let pairs = Map/to_list(entries);
@@ -54,7 +54,7 @@ let agree(value: Toml, expected: Json) -> Bool =
     end;
 
 --- The file at `name` under `root`, as text where it is text.
-let text(root: Path, name: Str) -> Try(Io, Str, Option(Str)) =
+let text(root: Path, name: Str) -> Try(Io, Str, Option(Str)) =>
     let bytes =
         Try/map_failure(
             File/read_all(Path/join(root, Path/of_str(name))),
@@ -62,7 +62,7 @@ let text(root: Path, name: Str) -> Try(Io, Str, Option(Str)) =
     Try/pure(Result/to_option(Str/of_bytes(bytes)));
 
 --- What is wrong with the case `name` under `root`, or nothing.
-let judged(root: Path, name: Str) -> Try(Io, Str, Option(Str)) =
+let judged(root: Path, name: Str) -> Try(Io, Str, Option(Str)) =>
     let source = text(root, name)!;
     let decoded = Option/bind(source, (s: Str) => Result/to_option(Toml/decode(s)));
     match (Str/starts_with(name, "invalid/"), decoded)
@@ -86,7 +86,7 @@ let judged(root: Path, name: Str) -> Try(Io, Str, Option(Str)) =
         end
     end;
 
-let execute() -> Try(Io, Str, {}) =
+let execute() -> Try(Io, Str, {}) =>
     let arguments = Proc/args()!;
     let given =
         Option/to_result(List/try_get(arguments, 1), "the corpus's directory is the one argument")!;

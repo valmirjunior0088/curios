@@ -1,24 +1,24 @@
 use /std/{Nat, Flt, Bool, Char, Str, Option, Parse, Toml};
 
-let dec_digit(c: Char) -> Option(Nat) =
+let dec_digit(c: Char) -> Option(Nat) =>
     match Nat/in_range(c.code, '0', '9')
     | true => Option/some(c.code - '0')
     | false => Option/none()
     end;
 
-let oct_digit(c: Char) -> Option(Nat) =
+let oct_digit(c: Char) -> Option(Nat) =>
     match Nat/in_range(c.code, '0', '7')
     | true => Option/some(c.code - '0')
     | false => Option/none()
     end;
 
-let bin_digit(c: Char) -> Option(Nat) =
+let bin_digit(c: Char) -> Option(Nat) =>
     match Nat/in_range(c.code, '0', '1')
     | true => Option/some(c.code - '0')
     | false => Option/none()
     end;
 
-let magnitude_stop(acc: Nat, seen: Bool, pend: Bool) -> Parse(Str, Nat) =
+let magnitude_stop(acc: Nat, seen: Bool, pend: Bool) -> Parse(Str, Nat) =>
     match
     | pend => Parse/commit(Parse/fail("malformed underscore"))
     | seen => Parse/pure(acc)
@@ -29,8 +29,8 @@ let magnitude_stop(acc: Nat, seen: Bool, pend: Bool) -> Parse(Str, Nat) =
 let magnitude_limit: Nat =
     9223372036854775808;
 
-let magnitude(radix: Nat, digit_of: (Char) -> Option(Nat)) -> Parse(Str, Nat) =
-    let go(acc: Nat, seen: Bool, pend: Bool) -> Parse(Str, Nat) =
+let magnitude(radix: Nat, digit_of: (Char) -> Option(Nat)) -> Parse(Str, Nat) =>
+    let go(acc: Nat, seen: Bool, pend: Bool) -> Parse(Str, Nat) =>
         let next = Parse/str/peek()!;
         match next
         | none() => magnitude_stop(acc, seen, pend)
@@ -57,7 +57,7 @@ let magnitude(radix: Nat, digit_of: (Char) -> Option(Nat)) -> Parse(Str, Nat) =
         end;
     go(0, false, false);
 
-let leading_zero() -> Parse(Str, Bool) =
+let leading_zero() -> Parse(Str, Bool) =>
     Parse/lookahead(
         Parse/or(
             Parse/map(
@@ -67,17 +67,17 @@ let leading_zero() -> Parse(Str, Bool) =
                 (_) => true),
             Parse/pure(false)));
 
-let sign() -> Parse(Str, {Bool, Bool}) =
+let sign() -> Parse(Str, {Bool, Bool}) =>
     let s = Parse/optional(Parse/str/char_if((c) => c == '+' || c == '-'))!;
     match s
     | some(c) => Parse/pure((c == '-', true))
     | none() => Parse/pure((false, false))
     end;
 
-let is_radix_marker(c: Char) -> Bool =
+let is_radix_marker(c: Char) -> Bool =>
     match c | 'x' | 'o' | 'b' => true | _ => false end;
 
-let prefixed() -> Parse(Str, Nat) =
+let prefixed() -> Parse(Str, Nat) =>
     let _ = Parse/str/expect('0')!;
     let marker = Parse/str/char()!;
     match marker
@@ -88,18 +88,18 @@ let prefixed() -> Parse(Str, Nat) =
     end;
 
 --- Refuse a leading zero past the digits it opens. Its callers commit to the refusal: a date or a time was offered the same digits first and declined, so what is left is a number written with a leading zero, and the reason is not one a later alternative may displace.
-let refuse_leading_zero(@A: Type) -> Parse(Str, A) =
+let refuse_leading_zero(@A: Type) -> Parse(Str, A) =>
     let _ = Parse/str/take_while((c) => Char/is_ascii_digit(c) || c == '_')!;
     Parse/fail("leading zero");
 
-let decimal() -> Parse(Str, Nat) =
+let decimal() -> Parse(Str, Nat) =>
     let leading = leading_zero()!;
     match leading
     | true => Parse/commit(refuse_leading_zero())
     | false => magnitude(10, dec_digit)
     end;
 
-let int_magnitude(signed: Bool) -> Parse(Str, Nat) =
+let int_magnitude(signed: Bool) -> Parse(Str, Nat) =>
     match signed
     | true => decimal()
     | false =>
@@ -111,7 +111,7 @@ let int_magnitude(signed: Bool) -> Parse(Str, Nat) =
     end;
 
 --- An integer in any of the bases TOML writes, refused past the range an `Int` holds.
-pub let int_value() -> Parse(Str, Toml) =
+pub let int_value() -> Parse(Str, Toml) =>
     let (negative, signed) = sign()!;
     let mag = int_magnitude(signed)!;
     -- `magnitude` already refused past `2⁶³`, the most negative integer's magnitude and one past the most positive's.
@@ -127,21 +127,21 @@ let flt_digits_stop(
     shift: Nat,
     seen: Bool,
     pend: Bool,
-) -> Parse(Str, {Nat, Nat, Nat}) =
+) -> Parse(Str, {Nat, Nat, Nat}) =>
     match
     | pend => Parse/commit(Parse/fail("malformed underscore"))
     | seen => Parse/pure((sig, count, shift))
     | _ => Parse/fail("expected digit")
     end;
 
-let flt_digits(sig0: Nat, count0: Nat, frac: Bool) -> Parse(Str, {Nat, Nat, Nat}) =
+let flt_digits(sig0: Nat, count0: Nat, frac: Bool) -> Parse(Str, {Nat, Nat, Nat}) =>
     let go(
         sig: Nat,
         count: Nat,
         shift: Nat,
         seen: Bool,
         pend: Bool,
-    ) -> Parse(Str, {Nat, Nat, Nat}) =
+    ) -> Parse(Str, {Nat, Nat, Nat}) =>
         let next = Parse/str/peek()!;
         match next
         | none() => flt_digits_stop(sig, count, shift, seen, pend)
@@ -164,15 +164,15 @@ let flt_digits(sig0: Nat, count0: Nat, frac: Bool) -> Parse(Str, {Nat, Nat, Nat}
         end;
     go(sig0, count0, 0, false, false);
 
-let exp_stop(acc: Nat, seen: Bool, pend: Bool) -> Parse(Str, Nat) =
+let exp_stop(acc: Nat, seen: Bool, pend: Bool) -> Parse(Str, Nat) =>
     match
     | pend => Parse/commit(Parse/fail("malformed underscore"))
     | seen => Parse/pure(acc)
     | _ => Parse/fail("expected digit")
     end;
 
-let exp_digits() -> Parse(Str, Nat) =
-    let go(acc: Nat, seen: Bool, pend: Bool) -> Parse(Str, Nat) =
+let exp_digits() -> Parse(Str, Nat) =>
+    let go(acc: Nat, seen: Bool, pend: Bool) -> Parse(Str, Nat) =>
         let next = Parse/str/peek()!;
         match next
         | none() => exp_stop(acc, seen, pend)
@@ -195,7 +195,7 @@ let exp_digits() -> Parse(Str, Nat) =
     go(0, false, false);
 
 --- A float's named values, `inf` and `nan`, under either sign.
-pub let flt_special() -> Parse(Str, Toml) =
+pub let flt_special() -> Parse(Str, Toml) =>
     let (negative, _) = sign()!;
     Parse/or(
         Parse/map(
@@ -205,23 +205,23 @@ pub let flt_special() -> Parse(Str, Toml) =
             Parse/str/literal("nan"),
             (()) => Toml/flt(match negative | true => -nan.0 | false => +nan.0 end)));
 
-let frac_fields(sig0: Nat, count0: Nat) -> Parse(Str, {Nat, Nat, Nat, Bool}) =
+let frac_fields(sig0: Nat, count0: Nat) -> Parse(Str, {Nat, Nat, Nat, Bool}) =>
     let (sig, count, down) = flt_digits(sig0, count0, true)!;
     Parse/pure((sig, count, down, true));
 
-let frac_part(sig0: Nat, count0: Nat) -> Parse(Str, {Nat, Nat, Nat, Bool}) =
+let frac_part(sig0: Nat, count0: Nat) -> Parse(Str, {Nat, Nat, Nat, Bool}) =>
     let dot = Parse/optional(Parse/str/expect('.'))!;
     match dot
     | none() => Parse/pure((sig0, count0, 0, false))
     | some(_) => Parse/commit(frac_fields(sig0, count0))
     end;
 
-let exp_fields() -> Parse(Str, {Nat, Bool, Bool}) =
+let exp_fields() -> Parse(Str, {Nat, Bool, Bool}) =>
     let (eneg, _) = sign()!;
     let emag = exp_digits()!;
     Parse/pure((emag, eneg, true));
 
-let exp_part() -> Parse(Str, {Nat, Bool, Bool}) =
+let exp_part() -> Parse(Str, {Nat, Bool, Bool}) =>
     let marker = Parse/optional(Parse/str/char_if((c) => c == 'e' || c == 'E'))!;
     match marker
     | none() => Parse/pure((0, false, false))
@@ -229,7 +229,7 @@ let exp_part() -> Parse(Str, {Nat, Bool, Bool}) =
     end;
 
 --- A float written out: digits, an optional fraction and an optional exponent, with a leading zero refused.
-pub let flt_number() -> Parse(Str, Toml) =
+pub let flt_number() -> Parse(Str, Toml) =>
     let (negative, _) = sign()!;
     let leading = leading_zero()!;
     match leading

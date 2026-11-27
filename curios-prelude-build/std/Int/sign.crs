@@ -5,43 +5,43 @@ use /std/Bool/{True, Holds};
 
 -- Each is by [`Int/view`], whose arms are the forms a sign is computed of.
 --- Conversion decides a sign where the operand's term alone decides the comparison; it reads no hypothesis, so under one a proof takes these laws.
-pub let of_pos(a: Int, p: Holds(+0 < a)) -> Eq()(sign(a), +1) =
+pub let of_pos(a: Int, p: Holds(+0 < a)) -> Eq()(sign(a), +1) =>
     match Int/view(a)
     | nonneg(0) => match p end
     | nonneg(_ + 1) => Eq/refl()
     | neg(_) => match p end
     end;
 
-pub let of_neg(a: Int, p: Holds(a < +0)) -> Eq()(sign(a), -1) =
+pub let of_neg(a: Int, p: Holds(a < +0)) -> Eq()(sign(a), -1) =>
     match Int/view(a)
     | nonneg(_) => match p end
     | neg(_) => Eq/refl()
     end;
 
-pub let at_least(a: Int) -> Holds(-1 <= sign(a)) =
+pub let at_least(a: Int) -> Holds(-1 <= sign(a)) =>
     match Int/view(a)
     | nonneg(0) | nonneg(_ + 1) | neg(_) => True/qed()
     end;
 
-pub let at_most(a: Int) -> Holds(sign(a) <= +1) =
+pub let at_most(a: Int) -> Holds(sign(a) <= +1) =>
     match Int/view(a)
     | nonneg(0) | nonneg(_ + 1) | neg(_) => True/qed()
     end;
 
-pub let of_not_pos(a: Int, p: Holds(a <= +0)) -> Holds(sign(a) <= +0) =
+pub let of_not_pos(a: Int, p: Holds(a <= +0)) -> Holds(sign(a) <= +0) =>
     match Int/view(a)
     | nonneg(0) => True/qed()
     | nonneg(_ + 1) => match p end
     | neg(_) => True/qed()
     end;
 
-pub let of_not_neg(a: Int, p: Holds(+0 <= a)) -> Holds(+0 <= sign(a)) =
+pub let of_not_neg(a: Int, p: Holds(+0 <= a)) -> Holds(+0 <= sign(a)) =>
     match Int/view(a)
     | nonneg(0) | nonneg(_ + 1) => True/qed()
     | neg(_) => match p end
     end;
 
-pub let of_mul(a: Int, b: Int) -> Eq()(sign(a * b), sign(a) * sign(b)) =
+pub let of_mul(a: Int, b: Int) -> Eq()(sign(a * b), sign(a) * sign(b)) =>
     match (Int/view(a), Int/view(b))
     | (nonneg(0), _)
     | (nonneg(_ + 1), nonneg(0))
@@ -52,7 +52,7 @@ pub let of_mul(a: Int, b: Int) -> Eq()(sign(a * b), sign(a) * sign(b)) =
     | (neg(_), neg(_)) => Eq/refl()
     end;
 
-pub let of_sign(a: Int) -> Eq()(sign(sign(a)), sign(a)) =
+pub let of_sign(a: Int) -> Eq()(sign(sign(a)), sign(a)) =>
     match Int/view(a)
     | nonneg(m) => match m | 0 | _ + 1 => Eq/refl() end
     | neg(_) => Eq/refl()
@@ -61,7 +61,7 @@ pub let of_sign(a: Int) -> Eq()(sign(sign(a)), sign(a)) =
 --- An integer is its sign times its magnitude.
 ---
 --- A product of two operations conversion reads no arm of, so a proof takes this where it rebuilds an integer from the two.
-pub let times_abs(a: Int) -> Eq()(a, sign(a) * Nat/to_int(Int/abs(a))) =
+pub let times_abs(a: Int) -> Eq()(a, sign(a) * Nat/to_int(Int/abs(a))) =>
     match Int/view(a)
     | nonneg(m) => match m | 0 | _ + 1 => Eq/refl() end
     | neg(_) => Eq/refl()

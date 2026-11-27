@@ -16,7 +16,7 @@ satisfy Eql(Exit) {
 }
 
 satisfy Show(Exit) {
-    show(e) =
+    show(e) =>
         match e
         | exited(code) => Fmt/render("exited(%)")(code)
         | signaled(signal) => Fmt/render("signaled(%)")(signal)

@@ -5,7 +5,7 @@ induct Bad: Prop
 | c(f: (A: Prop) -> (A) -> A)
 end
 
-let bad(b: Bad) -> False =
+let bad(b: Bad) -> False =>
     match b | c(f) => bad(f(Bad)(b)) end;
 
 bad(Bad/c((A) => (x) => x))

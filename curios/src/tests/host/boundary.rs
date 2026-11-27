@@ -32,7 +32,7 @@ fn written(source: &str, row: HostOp, failure: Failure) -> Vec<u8> {
 }
 
 const OPEN: &str = r#"
-    let entry() -> /std/Io({}) =
+    let entry() -> /std/Io({}) =>
         let r = /std/Try/run(/std/Try/scope((s) => /std/File/open(s, /std/Path/of_str("a.txt"), /std/File/Mode/read())))!;
         match r
         | success(_) => /std/print("opened")
@@ -73,7 +73,7 @@ fn a_write_the_host_answers_would_block_is_handed_on_by_a_flush() {
     let code = failing(
         r#"
         use /std/{Io, Try, Proc};
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let r = Try/run(Io/write(Proc/stdout, 0x[0x41]))!;
             match r | success(_) => Proc/exit(@{}, 0) | failure(_) => Proc/exit(@{}, 7) end;
         entry()

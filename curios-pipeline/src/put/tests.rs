@@ -9,12 +9,12 @@ use {
 const HANDED_PAST: &str = "use /std/{Nat};
 use /std/Bool/{False};
 
-let hide(n: Nat, f: (Nat) -> False) -> False =
+let hide(n: Nat, f: (Nat) -> False) -> False =>
     match n | 0 => wrap(n)(f) | k + 1 => f(k) end
-and wrap(m: Nat) -> ((Nat) -> False) -> False =
+and wrap(m: Nat) -> ((Nat) -> False) -> False =>
     match m | 0 => (g) => g(0) | k + 1 => (g) => hide(k, g) end;
 
-let spin(n: Nat) -> False =
+let spin(n: Nat) -> False =>
     hide(n, (c) => spin(c));
 
 spin(0)
@@ -27,7 +27,7 @@ induct Bad: Prop
 | c(f: (A: Prop) -> (A) -> A)
 end
 
-let bad(b: Bad) -> False =
+let bad(b: Bad) -> False =>
     match b | c(f) => bad(f(Bad)(b)) end;
 
 bad(Bad/c((A) => (x) => x))

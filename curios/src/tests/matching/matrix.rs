@@ -7,7 +7,7 @@ use crate::test_support::*;
 fn match_rejects_inconsistent_tuple_arity() {
     let source = r#"
         use /std/{Nat};
-        let f(p : { Nat, Nat }) -> Nat =
+        let f(p : { Nat, Nat }) -> Nat =>
             match p
             | (x, y) => x
             | (x,) => x
@@ -29,7 +29,7 @@ fn match_rejects_inconsistent_tuple_arity() {
 fn match_rejects_duplicate_row() {
     let source = r#"
         use /std/{Option, Nat};
-        let f(a : Option(Nat), b : Option(Nat)) -> Nat =
+        let f(a : Option(Nat), b : Option(Nat)) -> Nat =>
             match (a, b)
             | (some(x), some(y)) => x + y
             | (some(x), some(y)) => x
@@ -52,7 +52,7 @@ fn match_rejects_duplicate_row() {
 fn match_rejects_duplicate_flat_tag() {
     let source = r#"
         use /std/{Option, Nat};
-        let f(o : Option(Nat)) -> Nat =
+        let f(o : Option(Nat)) -> Nat =>
             match o
             | some(a) => a
             | some(b) => b
@@ -71,7 +71,7 @@ fn match_rejects_duplicate_flat_tag() {
 // Of two arms that take the same value, the later is the one no value reaches, and the report stands under its pattern rather than under the whole match.
 #[test]
 fn a_duplicate_arm_is_reported_at_the_later_arm() {
-    let source = "use /std/{Option, Nat};\n\nlet f(o: Option(Nat)) -> Nat =\n    match o\n    | some(x) => x\n    | none() => 0\n    | none() => 1\n    end;\n\n/std/print(Nat/to_str(f(Option/some(3))))\n";
+    let source = "use /std/{Option, Nat};\n\nlet f(o: Option(Nat)) -> Nat =>\n    match o\n    | some(x) => x\n    | none() => 0\n    | none() => 1\n    end;\n\n/std/print(Nat/to_str(f(Option/some(3))))\n";
 
     let error = error(source);
     assert!(
@@ -85,7 +85,7 @@ fn a_duplicate_arm_is_reported_at_the_later_arm() {
 fn match_rejects_incomplete_nat_pattern() {
     let source = r#"
         use /std/{Nat};
-        let f(n : Nat) -> Nat =
+        let f(n : Nat) -> Nat =>
             match n
             | n2 + 1 => n2
             end;
@@ -104,7 +104,7 @@ fn match_rejects_incomplete_nat_pattern() {
 fn a_nat_match_may_write_its_successor_arm_first() {
     let source = r#"
         use /std/{Nat};
-        let f(n : Nat) -> Nat =
+        let f(n : Nat) -> Nat =>
             match n
             | m + 1 => m
             | 0 => 0
@@ -120,7 +120,7 @@ fn a_nat_match_may_write_its_successor_arm_first() {
 fn a_nested_nat_literal_dispatches_by_value() {
     let source = r#"
         use /std/{Option, Nat};
-        let f(m : Option(Nat)) -> Nat =
+        let f(m : Option(Nat)) -> Nat =>
             match m | some(5) => 1 | _ => 0 end;
         /std/print(Nat/to_str(f(Option/some(5)) + 10 * f(Option/some(4)) + 100 * f(Option/none())))
         "#;
@@ -133,7 +133,7 @@ fn a_nested_nat_literal_dispatches_by_value() {
 fn a_literal_beside_a_successor_is_an_exception_written_before_it() {
     let source = r#"
         use /std/{Option, Nat};
-        let f(m : Option(Nat)) -> Nat =
+        let f(m : Option(Nat)) -> Nat =>
             match m | some(5) => 1 | some(n + 1) => n | _ => 0 end;
         /std/print(Nat/to_str(f(Option/some(5)) + 10 * f(Option/some(9)) + 100 * f(Option/some(0)) + 1000 * f(Option/none())))
         "#;
@@ -146,15 +146,15 @@ fn a_literal_beside_a_successor_is_an_exception_written_before_it() {
 fn a_match_shape_refusal_is_located_at_the_match() {
     for (source, line) in [
         (
-            "use /std/{Option, Nat};\n\nlet f(b: Option(Nat)) -> Nat =\n    match b\n    | some(5) => 1\n    | [] => 2\n    | _ => 0\n    end;\n\n/std/print(Nat/to_str(f(Option/some(5))))\n",
+            "use /std/{Option, Nat};\n\nlet f(b: Option(Nat)) -> Nat =>\n    match b\n    | some(5) => 1\n    | [] => 2\n    | _ => 0\n    end;\n\n/std/print(Nat/to_str(f(Option/some(5))))\n",
             "│  4 │     match b",
         ),
         (
-            "use /std/{Option, Nat};\n\nlet f(b: Option(Nat)) -> Nat =\n    1 + (match b | some(5) => 1 | [] => 2 | _ => 0 end);\n\n/std/print(Nat/to_str(f(Option/some(5))))\n",
+            "use /std/{Option, Nat};\n\nlet f(b: Option(Nat)) -> Nat =>\n    1 + (match b | some(5) => 1 | [] => 2 | _ => 0 end);\n\n/std/print(Nat/to_str(f(Option/some(5))))\n",
             "│  4 │     1 + (match b",
         ),
         (
-            "use /std/{Option, Nat};\n\nlet f(b: Option(Nat)) -> Nat =\n    let g = (k: Option(Nat)) =>\n        match k | some(5) => 1 | [] => 2 | _ => 0 end;\n    g(b);\n\n/std/print(Nat/to_str(f(Option/some(5))))\n",
+            "use /std/{Option, Nat};\n\nlet f(b: Option(Nat)) -> Nat =>\n    let g = (k: Option(Nat)) =>\n        match k | some(5) => 1 | [] => 2 | _ => 0 end;\n    g(b);\n\n/std/print(Nat/to_str(f(Option/some(5))))\n",
             "│  5 │         match k",
         ),
     ] {
@@ -171,7 +171,7 @@ fn a_match_shape_refusal_is_located_at_the_match() {
 fn a_default_reached_from_a_nested_dispatch_is_typed_at_the_matchs_type() {
     let source = r#"
         use /std/{Int, Option};
-        let f(m : Option(Option(Int))) -> Int =
+        let f(m : Option(Option(Int))) -> Int =>
             match m | some(some(x)) => x | _ => 0 end;
         /std/print(Int/to_str(f(Option/some(Option/some(-7))) + f(Option/some(Option/none())) + f(Option/none())))
         "#;
@@ -184,14 +184,14 @@ fn a_default_reached_from_a_nested_dispatch_is_typed_at_the_matchs_type() {
 fn a_default_reached_from_a_nested_dispatch_sequences_in_the_matchs_monad() {
     let source = r#"
         use /std/{Io, Nat, Option, print};
-        let h(m : Option(Option(Nat))) -> Io({}) =
+        let h(m : Option(Option(Nat))) -> Io({}) =>
             match m
             | some(some(_)) => print("deep\n")
             | _ =>
                 let _ = print("a\n")!;
                 print("b\n")
             end;
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let _ = h(Option/some(Option/none()))!;
             h(Option/some(Option/some(1)));
         entry()
@@ -205,7 +205,7 @@ fn a_default_reached_from_a_nested_dispatch_sequences_in_the_matchs_monad() {
 fn a_default_reached_from_a_nested_dispatch_is_typed_after_the_arms_in_inference() {
     let source = r#"
         use /std/{Int, Option};
-        let f(m : Option(Option(Int))) -> Int =
+        let f(m : Option(Option(Int))) -> Int =>
             let answer = match m | some(some(x)) => x | _ => 0 end;
             answer;
         /std/print(Int/to_str(f(Option/some(Option/some(-7))) + f(Option/none())))

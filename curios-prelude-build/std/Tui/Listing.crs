@@ -11,26 +11,26 @@ pub struct Listing(A: Type): pub Type {
     first: Nat,
 }
 
-let at(@A: Type, items: List(A), i: Nat) -> Option({i: Nat, ok: Holds(i < List/length(items))}) =
+let at(@A: Type, items: List(A), i: Nat) -> Option({i: Nat, ok: Holds(i < List/length(items))}) =>
     match Bool/holds(i < List/length(items))
     | none() => Option/none()
     | some(ok) => Option/some((i = i, ok = ok))
     end;
 
 --- `items` with the first selected and shown first.
-pub let new(@A: Type, items: List(A)) -> Listing(A) =
+pub let new(@A: Type, items: List(A)) -> Listing(A) =>
     Listing { items = items, cursor = at(items, 0), first = 0 };
 
 --- The selected index, or `none`.
-pub let index(@A: Type, l: Listing(A)) -> Option(Nat) =
+pub let index(@A: Type, l: Listing(A)) -> Option(Nat) =>
     Option/map(l.cursor, (c) => c.i);
 
 --- The selected item, or `none`.
-pub let selected(@A: Type, l: Listing(A)) -> Option(A) =
+pub let selected(@A: Type, l: Listing(A)) -> Option(A) =>
     Option/map(l.cursor, (c) => List/get(@A, l.items, c.i, @c.ok));
 
 -- The first row shown once `i` is selected among `rows` of them: `first`, moved as little as keeps `i` among them.
-let kept(first: Nat, i: Nat, rows: Nat) -> Nat =
+let kept(first: Nat, i: Nat, rows: Nat) -> Nat =>
     match
     | i < first => i
     | first + rows <= i => i + 1 - rows
@@ -38,12 +38,12 @@ let kept(first: Nat, i: Nat, rows: Nat) -> Nat =
     end;
 
 --- What `k` does to the listing shown `rows` high: up and down move the selection an item, page up and page down a page, home and end to either end, and the rows shown scroll so the selection stays among them. A move past either end goes no further than the end; a key with a modifier, and any other, leaves the listing.
-pub let handle(@A: Type, l: Listing(A), k: Key, rows: Nat) -> Listing(A) =
+pub let handle(@A: Type, l: Listing(A), k: Key, rows: Nat) -> Listing(A) =>
     match l.cursor
     | none() => l
     | some(c) =>
         let last = List/length(l.items) - 1;
-        let to(i: Nat) -> Listing(A) =
+        let to(i: Nat) -> Listing(A) =>
             match at(l.items, i)
             | none() => l
             | some(next) =>
@@ -68,7 +68,7 @@ pub let handle(@A: Type, l: Listing(A), k: Key, rows: Nat) -> Listing(A) =
     end;
 
 --- The items as rows, each as `show` writes it, the selected one in `highlight`, from the listing's first shown row, moved as little as keeps the selection visible at the given height. With nothing selected, no row is highlighted.
-pub let view(@A: Type, l: Listing(A), show: (A) -> Str, style: Style, highlight: Style) -> Pane =
+pub let view(@A: Type, l: Listing(A), show: (A) -> Str, style: Style, highlight: Style) -> Pane =>
     (w, h) =>
         let chosen = index(l);
         let first =
@@ -79,7 +79,7 @@ pub let view(@A: Type, l: Listing(A), show: (A) -> Str, style: Style, highlight:
                     List/zip(List/range(0, List/length(l.items)), l.items),
                     (e) => e.0 < first),
                 h);
-        let row(entry: {Nat, A}) -> View =
+        let row(entry: {Nat, A}) -> View =>
             let s =
                 match chosen == Option/some(entry.0)
                 | true => highlight

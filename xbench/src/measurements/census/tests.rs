@@ -5,7 +5,7 @@ use super::*;
 fn surveys_the_fold_accumulator_region() {
     let source = r#"
         use /std/{Nat, Str, Char, List, Proc};
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let taint = List/length(Proc/args()!);
             let n : Nat = taint;
             let text : Str = Nat/to_str(n);
@@ -51,22 +51,22 @@ fn death_birth_classifier_pins_the_canonical_pair() {
         | nil()
         | cons(Nat, Chain)
         end
-        let step(rest: Chain, acc: Chain) -> Chain =
+        let step(rest: Chain, acc: Chain) -> Chain =>
             match rest
             | nil() => acc
             | cons(v, tail) => step(tail, Chain/cons(v + 1, acc))
             end;
-        let build(n: Nat, acc: Chain) -> Chain =
+        let build(n: Nat, acc: Chain) -> Chain =>
             match n
             | 0 => acc
             | m + 1 => build(m, Chain/cons(n, acc))
             end;
-        let total(c: Chain, acc: Nat) -> Nat =
+        let total(c: Chain, acc: Nat) -> Nat =>
             match c
             | nil() => acc
             | cons(v, tail) => total(tail, (acc + v) % 1000003)
             end;
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let arguments = /std/Proc/args()!;
             let input = /std/List/try_get(arguments, 1);
             match input

@@ -5,7 +5,7 @@ use /std/Map/digits/{digit, small, Apart};
 use /std/Bool/{True, False, Holds};
 
 --- The value at `key`, or `none`.
-pub let try_get(@K: Type, use Hash/Key(K), @V: Type, m: Map(K, V), key: K) -> Option(V) =
+pub let try_get(@K: Type, use Hash/Key(K), @V: Type, m: Map(K, V), key: K) -> Option(V) =>
     Node/find(m.root, Hash/hash(key));
 
 -- Two keys the one is not the other of encode apart.
@@ -15,7 +15,7 @@ let apart_codes(
     key: K,
     other: K,
     apart: (Eq()(other, key)) -> False,
-) -> Eq()(Hash/hash(key) == Hash/hash(other), false) =
+) -> Eq()(Hash/hash(key) == Hash/hash(other), false) =>
     match Hash/hash(key) == Hash/hash(other)
     | false => Eq/refl()
     | true => match apart(Eq/sym(Hash/Key/inj(key, other, proved()))) end
@@ -33,7 +33,7 @@ let elsewhere(
     other: K,
     codes: Eq()(Hash/hash(key) == Hash/hash(other), false),
     answers: Node/Answers(n2, n, Hash/hash(key), x),
-) -> Eq()(Node/find(n2, Hash/hash(other)), Node/find(n, Hash/hash(other))) =
+) -> Eq()(Node/find(n2, Hash/hash(other)), Node/find(n, Hash/hash(other))) =>
     Eq/trans(
         answers(Hash/hash(other)),
         Eq/subst(
@@ -65,7 +65,7 @@ let parted_answers(
     Node/wedge(c, d, n2, key, Hash/hash(key), v, @small_d),
     n,
     Hash/hash(key),
-    Option/some(v)) =
+    Option/some(v)) =>
     Eq/subst(
         (t: Node(K, V)) =>
             Node/Answers(
@@ -94,7 +94,7 @@ pub let of_empty(
     use Hash/Key(K),
     @V: Type,
     key: K,
-) -> Eq()(try_get(Map/empty(), key), Option/none(@V)) =
+) -> Eq()(try_get(Map/empty(), key), Option/none(@V)) =>
     Eq/refl();
 
 --- `Map/insert` sets the value at its key.
@@ -105,7 +105,7 @@ pub let of_insert(
     m: Map(K, V),
     key: K,
     v: V,
-) -> Eq()(try_get(Map/insert(m, key, v), key), Option/some(v)) =
+) -> Eq()(try_get(Map/insert(m, key, v), key), Option/some(v)) =>
     match Node/insert(m.root, key, Hash/hash(key), v, @Eq/refl(), @m.sound)
     | vacant(_) => Eq/refl()
     | added(_, @_, @answers, @_) | replaced(_, @_, @answers, @_) => answers(Hash/hash(key))
@@ -124,7 +124,7 @@ pub let of_insert_other(
     v: V,
     other: K,
     apart: (Eq()(other, key)) -> False,
-) -> Eq()(try_get(Map/insert(m, key, v), other), try_get(m, other)) =
+) -> Eq()(try_get(Map/insert(m, key, v), other), try_get(m, other)) =>
     let codes = apart_codes(key, other, apart);
     match Node/insert(m.root, key, Hash/hash(key), v, @Eq/refl(), @m.sound)
     | vacant(gap) =>
@@ -161,7 +161,7 @@ pub let of_remove(
     @V: Type,
     m: Map(K, V),
     key: K,
-) -> Eq()(try_get(Map/remove(m, key), key), Option/none(@V)) =
+) -> Eq()(try_get(Map/remove(m, key), key), Option/none(@V)) =>
     match Node/remove(m.root, Hash/hash(key), @m.sound)
     | gone(_) => Eq/refl()
     | kept(_, @_, @answers, @_) => answers(Hash/hash(key))
@@ -181,7 +181,7 @@ pub let of_remove_other(
     key: K,
     other: K,
     apart: (Eq()(other, key)) -> False,
-) -> Eq()(try_get(Map/remove(m, key), other), try_get(m, other)) =
+) -> Eq()(try_get(Map/remove(m, key), other), try_get(m, other)) =>
     let codes = apart_codes(key, other, apart);
     match Node/remove(m.root, Hash/hash(key), @m.sound)
     | gone(nothing) =>
@@ -214,7 +214,7 @@ pub let of_map(
     m: Map(K, V),
     f: (V) -> W,
     key: K,
-) -> Eq()(try_get(Map/map(m, f), key), Option/map(try_get(m, key), f)) =
+) -> Eq()(try_get(Map/map(m, f), key), Option/map(try_get(m, key), f)) =>
     Node/mapped_find(m.root, f, Hash/hash(key));
 
 -- Two maps with one root are one map: what else a Map/map holds is the proof about its root.
@@ -225,7 +225,7 @@ let of_root(
     a: Map(K, V),
     b: Map(K, V),
     e: Eq()(a.root, b.root),
-) -> Eq()(a, b) =
+) -> Eq()(a, b) =>
     Eq/subst(
         (r: Node(K, V)) => (w: Node/Sound(r)) -> Eq()(a, Map { root = r, @sound = w }),
         e,
@@ -241,7 +241,7 @@ pub let inj(
     a: Map(K, V),
     b: Map(K, V),
     same: (key: K) -> Eq()(try_get(a, key), try_get(b, key)),
-) -> Eq()(a, b) =
+) -> Eq()(a, b) =>
     of_root(a, b, Node/canonical(a.root, b.root, a.sound, b.sound, same));
 
 -- Two keys whose encodings compare equal, as an equation, are one key.
@@ -251,7 +251,7 @@ let same_key(
     a: K,
     b: K,
     e: Eq()(Hash/hash(a) == Hash/hash(b), true),
-) -> Eq()(a, b) =
+) -> Eq()(a, b) =>
     Hash/Key/same(a, b, Bool/holds_of_eq(Hash/hash(a) == Hash/hash(b), e));
 
 -- Two keys whose encodings compare unequal, as an equation, are two keys.
@@ -261,7 +261,7 @@ let other_key(
     a: K,
     b: K,
     e: Eq()(Hash/hash(a) == Hash/hash(b), false),
-) -> (Eq()(b, a)) -> False =
+) -> (Eq()(b, a)) -> False =>
     Hash/Key/apart(a, b, Eq/subst((c: Bool) => Holds(Bool/not(c)), Eq/sym(e), True/qed()));
 
 -- What a sound branch's twigs answer at `k`, asked in turn by a combination that `none` leaves as it was, is what the branch answers there.
@@ -277,7 +277,7 @@ let either(
     f: (Option(V), R) -> R,
     keeps: (r: R) -> Eq()(f(Option/none(), r), r),
     r: R,
-) -> Eq()(Node/folded(tw.list, k, f, r), f(Node/find(Node/branch(at, tw), k), r)) =
+) -> Eq()(Node/folded(tw.list, k, f, r), f(Node/find(Node/branch(at, tw), k), r)) =>
     let s = small(k, at);
     Eq/trans(
         Node/either_in(
@@ -306,7 +306,7 @@ let inserted_all(
     key: K,
 ) -> Eq()(
     try_get(Node/fold(n, acc, (k: K, v: V, m: Map(K, V)) => Map/insert(m, k, v)), key),
-    Option/or(Node/find(n, Hash/hash(key)), try_get(acc, key))) =
+    Option/or(Node/find(n, Hash/hash(key)), try_get(acc, key))) =>
     match n
     | empty() => Eq/refl()
     | leaf(k0, v0) =>
@@ -317,7 +317,7 @@ let inserted_all(
             try_get(Map/insert(acc, k0, v0), key),
             Option/or(
                 match b | true => Option/some(v0) | false => Option/none() end,
-                try_get(acc, key))) =
+                try_get(acc, key))) =>
             match b
             | true =>
                 Eq/subst(
@@ -357,7 +357,7 @@ and inserted_in(
         l,
         Hash/hash(key),
         (x: Option(V), r: Option(V)) => Option/or(x, r),
-        try_get(acc, key))) =
+        try_get(acc, key))) =>
     match l
     | [] => Eq/refl()
     | [h, ..r] =>
@@ -388,7 +388,7 @@ pub let of_union(
     a: Map(K, V),
     b: Map(K, V),
     key: K,
-) -> Eq()(try_get(Map/union(a, b), key), Option/or(try_get(b, key), try_get(a, key))) =
+) -> Eq()(try_get(Map/union(a, b), key), Option/or(try_get(b, key), try_get(a, key))) =>
     inserted_all(b.root, b.sound, a, key);
 
 -- What `Map/filter`'s step keeps of a value found at `key`, over what the Map/map it began with Map/has there.
@@ -399,7 +399,7 @@ let kept(
     key: K,
     found: Option(V),
     rest: Option(V),
-) -> Option(V) =
+) -> Option(V) =>
     match found
     | some(v), pred(key, v) => Option/some(v)
     | _ => rest
@@ -420,7 +420,7 @@ let kept_all(
         Node/fold(n, acc, (k: K, v: V, m: Map(K, V)) =>
             match pred(k, v) | true => Map/insert(m, k, v) | false => m end),
         key),
-    kept(pred, key, Node/find(n, Hash/hash(key)), try_get(acc, key))) =
+    kept(pred, key, Node/find(n, Hash/hash(key)), try_get(acc, key))) =>
     match n
     | empty() => Eq/refl()
     | leaf(k0, v0) =>
@@ -438,7 +438,7 @@ let kept_all(
                 pred,
                 key,
                 match b | true => Option/some(v0) | false => Option/none() end,
-                try_get(acc, key))) =
+                try_get(acc, key))) =>
             match b
             | true =>
                 let at_key: Eq()(
@@ -506,7 +506,7 @@ and kept_in(
         l,
         Hash/hash(key),
         (x: Option(V), r: Option(V)) => kept(pred, key, x, r),
-        try_get(acc, key))) =
+        try_get(acc, key))) =>
     match l
     | [] => Eq/refl()
     | [h, ..r] =>
@@ -541,7 +541,7 @@ pub let of_filter(
     key: K,
 ) -> Eq()(
     try_get(Map/filter(m, pred), key),
-    Option/filter(try_get(m, key), (v: V) => pred(key, v))) =
+    Option/filter(try_get(m, key), (v: V) => pred(key, v))) =>
     kept_all(m.root, m.sound, pred, Map/empty(), key);
 
 --- `Map/intersection` Map/has at every key the first Map/map's value where the second Map/has an entry there, and none otherwise.
@@ -555,7 +555,7 @@ pub let of_intersection(
     key: K,
 ) -> Eq()(
     try_get(Map/intersection(a, b), key),
-    Option/filter(try_get(a, key), (_: V) => Map/has(b, key))) =
+    Option/filter(try_get(a, key), (_: V) => Map/has(b, key))) =>
     of_filter(a, (k: K, _: V) => Map/has(b, k), key);
 
 --- `Map/difference` Map/has at every key the first Map/map's value where the second Map/has no entry there, and none otherwise.
@@ -569,7 +569,7 @@ pub let of_difference(
     key: K,
 ) -> Eq()(
     try_get(Map/difference(a, b), key),
-    Option/filter(try_get(a, key), (_: V) => Bool/not(Map/has(b, key)))) =
+    Option/filter(try_get(a, key), (_: V) => Bool/not(Map/has(b, key)))) =>
     of_filter(a, (k: K, _: V) => Bool/not(Map/has(b, k)), key);
 
 --- `Map/update` sets the value at its key to what `f` answers of the value there.
@@ -580,7 +580,7 @@ pub let of_update(
     m: Map(K, V),
     key: K,
     f: (Option(V)) -> Option(V),
-) -> Eq()(try_get(Map/update(m, key, f), key), f(try_get(m, key))) =
+) -> Eq()(try_get(Map/update(m, key, f), key), f(try_get(m, key))) =>
     match f(try_get(m, key))
     | some(v) => of_insert(m, key, v)
     | none() => of_remove(m, key)
@@ -596,7 +596,7 @@ pub let of_update_other(
     f: (Option(V)) -> Option(V),
     other: K,
     apart: (Eq()(other, key)) -> False,
-) -> Eq()(try_get(Map/update(m, key, f), other), try_get(m, other)) =
+) -> Eq()(try_get(Map/update(m, key, f), other), try_get(m, other)) =>
     match f(try_get(m, key))
     | some(v) => of_insert_other(m, key, v, other, apart)
     | none() => of_remove_other(m, key, other, apart)
@@ -611,7 +611,7 @@ pub let of_listed(
     key: K,
     v: V,
     listed: Member()((key, v), Map/to_list(m)),
-) -> Eq()(try_get(m, key), Option/some(v)) =
+) -> Eq()(try_get(m, key), Option/some(v)) =>
     Node/entry_found(
         m.root,
         m.sound,
@@ -627,7 +627,7 @@ pub let listed(
     key: K,
     v: V,
     found: Eq()(try_get(m, key), Option/some(v)),
-) -> Member()((key, v), Map/to_list(m)) =
+) -> Member()((key, v), Map/to_list(m)) =>
     Eq/subst(
         (l: List({K, V})) => Member()((key, v), l),
         Eq/sym(Node/listed(m.root, [])),

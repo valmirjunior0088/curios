@@ -35,7 +35,7 @@ fn a_binder_in_the_body_an_arm_of_alternatives_shares_is_reported_once() {
     assert_eq!(
         lints(
             r#"
-        let f(o : Bool) -> Bool =
+        let f(o : Bool) -> Bool =>
             match o
             | true | false =>
                 let unused = o;
@@ -101,7 +101,7 @@ fn a_declaration_holding_a_goal_reports_no_let() {
     assert_eq!(
         lints(
             r#"
-        let f(n : Type) -> Type =
+        let f(n : Type) -> Type =>
             let _ = Type;
             ?;
         f
@@ -118,7 +118,7 @@ fn a_let_holding_its_value_to_a_constructor_is_read_whatever_it_binds() {
         lints(
             r#"
         pub induct Pair: pub Type | pair(Type, Type) end
-        pub let first(p: Pair) -> Type =
+        pub let first(p: Pair) -> Type =>
             let pair(_, _) = p;
             let pair(a, b) = p;
             a;

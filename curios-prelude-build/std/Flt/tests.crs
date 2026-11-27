@@ -159,17 +159,17 @@ let _an_exact_cancellation_is_negative_toward_negative: Eq()(
     "-0") =
     Eq/refl();
 
-let spelled(values: List(Flt)) -> List(Str) =
+let spelled(values: List(Flt)) -> List(Str) =>
     List/map(values, Flt/to_str);
 
-let read(text: Str) -> Str =
+let read(text: Str) -> Str =>
     match Flt/of_str(text)
     | some(value) => Flt/to_str(value)
     | none() => "none"
     end;
 
 -- `ord` is IEEE's `totalOrder`: the zeros apart, `-0` first, and a NaN past `+inf` rather than unordered.
-test ord_is_the_ieee_total_order =
+test ord_is_the_ieee_total_order =>
     Test/equal(
         [
             Flt/ord(-0.0, +0.0),
@@ -214,18 +214,18 @@ let _two_floats_of_one_key_are_one(
     a: Flt,
     b: Flt,
     e: Eq()(Flt/total_key(a), Flt/total_key(b)),
-) -> Eq()(a, b) =
+) -> Eq()(a, b) =>
     Flt/total_key_inj(a, b, e);
 
 let _two_floats_of_one_encoding_are_one(
     a: Flt,
     b: Flt,
     e: Eq()(Flt/to_le_bytes(a), Flt/to_le_bytes(b)),
-) -> Eq()(a, b) =
+) -> Eq()(a, b) =>
     Flt/eq_of_le_bytes(a, b, e);
 
 -- `ord` is the order `Nat/ord` reads through `total_key`: over the zeros, the infinities, and NaNs of both signs and both kinds, every pair answers alike.
-test ord_is_the_order_of_its_key =
+test ord_is_the_order_of_its_key =>
     let specimens =
         [
             Flt/neg(Flt/signaling_nan(+1.0)),
@@ -237,7 +237,7 @@ test ord_is_the_order_of_its_key =
             List/map(specimens, (y: Flt) => Nat/ord(Flt/total_key(x), Flt/total_key(y)))));
 
 -- A sort by `Flt/ord` places a NaN and the two zeros the same way whatever order they arrive in, which an order that answered `gt` for a NaN on both sides could not.
-test sort_places_nan_and_zeros_the_same_for_every_arrival_order =
+test sort_places_nan_and_zeros_the_same_for_every_arrival_order =>
     Test/all([
         Test/equal(
             spelled(List/sort_by([+1.0, +nan.0, +0.5, -0.0, +0.0], Flt/ord)),
@@ -250,7 +250,7 @@ test sort_places_nan_and_zeros_the_same_for_every_arrival_order =
             ["-0", "+0", "+0.5", "+1", "+nan"])]);
 
 -- `of_str` reads every spelling `to_str` writes, the infinities and the default NaN among them, in any case and with an optional sign.
-test of_str_reads_back_what_to_str_writes =
+test of_str_reads_back_what_to_str_writes =>
     Test/equal(
         [
             read(Flt/to_str(+inf.0)),
@@ -290,11 +290,11 @@ let _an_inexact_quotient_raises_inexact: Eq()(
     Exceptions { ..Exceptions/none, inexact = true }) =
     Eq/refl();
 
-let show(f: Flt) -> Str =
+let show(f: Flt) -> Str =>
     Flt/to_str(f);
 
 -- The remainder takes the integer nearest the quotient, ties to even, and keeps the dividend's sign on a zero; it is invalid for an infinite dividend or a zero divisor, and leaves the dividend under an infinite divisor.
-test remainder_is_to_the_nearest_quotient =
+test remainder_is_to_the_nearest_quotient =>
     Test/equal(
         List/map(
             [
@@ -309,7 +309,7 @@ test remainder_is_to_the_nearest_quotient =
         ["-1", "-1", "+1", "-0", "+1", "+nan", "+nan"]);
 
 -- `nextUp` and `nextDown` at every place IEEE names: the zeros, the negative least subnormal, both infinities and the largest finite value.
-test next_up_and_down_at_the_edges =
+test next_up_and_down_at_the_edges =>
     let least = Flt/of_le_bytes(0x[0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]);
     let largest = Flt/of_le_bytes(0x[0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xEF, 0x7F]);
     Test/equal(
@@ -328,7 +328,7 @@ test next_up_and_down_at_the_edges =
             Flt/to_le_bytes));
 
 -- The six §9.6 variants: a NaN gives way to a number only in the `_number` forms, and the magnitude forms compare absolute values, breaking a tie as `min` and `max` do.
-test the_min_and_max_variants =
+test the_min_and_max_variants =>
     Test/equal(
         List/map(
             [
@@ -343,7 +343,7 @@ test the_min_and_max_variants =
         ["+1", "+1", "+2", "-3", "-2", "-2", "+nan"]);
 
 -- The payload operations: a quiet and a signaling NaN built from a payload read it back, an inadmissible payload builds `+0`, and anything but a NaN has payload `-1`.
-test payloads_are_set_and_read =
+test payloads_are_set_and_read =>
     Test/all([
         Test/equal(
             List/map(
@@ -361,7 +361,7 @@ test payloads_are_set_and_read =
             Bool/not(Flt/is_signaling(Flt/quiet_nan(+1.0))))]);
 
 -- Every class IEEE names, and the predicates that answer it.
-test the_ten_classes =
+test the_ten_classes =>
     Test/equal(
         List/map(
             [
@@ -378,7 +378,7 @@ test the_ten_classes =
             "Class/positive_infinity()"]);
 
 -- Conversion to an integer in each direction, and `logB` where it is defined.
-test to_int_rounds_in_its_direction =
+test to_int_rounds_in_its_direction =>
     Test/all([
         Test/equal(
             List/map(
@@ -396,7 +396,7 @@ test to_int_rounds_in_its_direction =
         Test/equal(Flt/try_log_b(+inf.0), Option/none())]);
 
 -- The environment rounds in its direction, restores the one before a block, and accumulates what every operation raised; a `State` over its status sequences in it.
-let rounds_and_records() -> Env(Flt) =
+let rounds_and_records() -> Env(Flt) =>
     let third = Env/with_rounding(Rounding/toward_positive(), Env/div(+1.0, +3.0))!;
     let after = Env/rounding!;
     let _ = Env/mul(Flt/of_le_bytes(0x[0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xEF, 0x7F]), +2.0)!;
@@ -404,15 +404,15 @@ let rounds_and_records() -> Env(Flt) =
     Env/pure(
         match after == status.rounding | true => third | false => +nan.0 end);
 
-test the_environment_rounds_and_records =
+test the_environment_rounds_and_records =>
     let (third, raised) = Env/run(rounds_and_records());
     Test/all([
         Test/equal(show(third), show(rounded/div(Rounding/toward_positive(), +1.0, +3.0))),
         Test/equal(raised, Exceptions { ..Exceptions/none, overflow = true, inexact = true })]);
 
 -- IEEE's comparison table (§5.11): a quiet comparison is invalid only at a signaling NaN, a signaling one at any NaN; the saved flags test as they were.
-test comparisons_signal_as_ieee_tabulates =
-    let raised(m: Env(Bool)) -> Exceptions = Env/run(m).1;
+test comparisons_signal_as_ieee_tabulates =>
+    let raised(m: Env(Bool)) -> Exceptions => Env/run(m).1;
     let invalid = Exceptions { ..Exceptions/none, invalid = true };
     Test/equal(
         [
@@ -425,7 +425,7 @@ test comparisons_signal_as_ieee_tabulates =
         [Exceptions/none, invalid, Exceptions/none, invalid, invalid, Exceptions/none]);
 
 -- A NaN other than the default spells as the bytes that build it, and TOML keeps a NaN's sign both ways.
-test a_nan_spells_its_pattern_and_toml_keeps_its_sign =
+test a_nan_spells_its_pattern_and_toml_keeps_its_sign =>
     let negative = Result/unwrap_or(Toml/decode("v = -nan"), Map/empty());
     Test/all([
         Test/equal(
@@ -448,7 +448,7 @@ let _a_nan_spells_its_kind_in_a_type: Eq()(Flt/to_str(Flt/signaling_nan(+18.0)),
 let _hex_spells_three_in_a_type: Eq()(Flt/to_hex_str(+3.0), "+0x1.8p+1") =
     Eq/refl();
 
-let reads_back(f: Flt) -> Bool =
+let reads_back(f: Flt) -> Bool =>
     let decimal =
         match Flt/of_str(Flt/to_str(f))
         | some(g) => Flt/to_le_bytes(g) == Flt/to_le_bytes(f)
@@ -461,7 +461,7 @@ let reads_back(f: Flt) -> Bool =
         end;
     decimal && hex;
 
-test every_class_reads_back_from_its_text =
+test every_class_reads_back_from_its_text =>
     let least = Flt/of_le_bytes(0x[0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]);
     let largest = Flt/of_le_bytes(0x[0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xEF, 0x7F]);
     Test/equal(
@@ -478,7 +478,7 @@ test every_class_reads_back_from_its_text =
             reads_back),
         List/map(List/range(0, 15), (_) => true));
 
-test nan_and_hex_text_spell_as_ieee_writes_them =
+test nan_and_hex_text_spell_as_ieee_writes_them =>
     Test/all([
         Test/equal(
             List/map([+nan.0, -nan.0, Flt/signaling_nan(+1.0), Flt/quiet_nan(+5.0)], Flt/to_str),
@@ -506,8 +506,8 @@ test nan_and_hex_text_spell_as_ieee_writes_them =
                 Option/none()])]);
 
 -- Text reads in a direction too: a tenth lands on either side of itself, and a value past the largest finite one stops at it toward zero.
-test text_reads_in_a_direction =
-    let read(r: Rounding, s: Str) -> Str =
+test text_reads_in_a_direction =>
+    let read(r: Rounding, s: Str) -> Str =>
         match rounded/of_str(r, s)
         | some(f) => Flt/to_str(f)
         | none() => "none"
@@ -526,7 +526,7 @@ test text_reads_in_a_direction =
             Flt/to_str(Flt/neg(Flt/next_up(+1.0))))]);
 
 -- A fixed number of significant digits, rounded in a direction, carrying into the next power of ten when it rounds up past it.
-test significant_digits_round_in_a_direction =
+test significant_digits_round_in_a_direction =>
     let third = +1.0 / +3.0;
     Test/equal(
         [
@@ -591,7 +591,7 @@ let _an_augmented_product_adds_back_exactly: Eq()(
     Flt/fma(+0.1, +0.1, Flt/neg(Flt/augmented_mul(+0.1, +0.1).0))) =
     Eq/refl();
 
-test reductions_round_once_and_signal_as_ieee_defines =
+test reductions_round_once_and_signal_as_ieee_defines =>
     let invalid = Exceptions { ..Exceptions/none, invalid = true };
     let (pr, sf) =
         Flt/scaled_prod([
@@ -624,7 +624,7 @@ test reductions_round_once_and_signal_as_ieee_defines =
             Flt/is_nan(Flt/scaled_prod_diff(Vec/of_list([+inf.0]), Vec/of_list([+inf.0])).0),
             true)]);
 
-test augmented_operations_answer_the_error =
+test augmented_operations_answer_the_error =>
     let tiny = Flt/scale(+1.0, -60);
     Test/all([
         Test/equal(Spell/spell(Flt/augmented_add(+1.0, tiny)), Spell/spell((+1.0, tiny))),
@@ -638,7 +638,7 @@ test augmented_operations_answer_the_error =
             Exceptions { ..Exceptions/none, overflow = true, inexact = true })]);
 
 -- §8.3's alternate handling: an exception the block handles is not recorded, and its result is replaced.
-test handled_exceptions_are_not_recorded =
+test handled_exceptions_are_not_recorded =>
     let overflow = Exceptions { ..Exceptions/none, overflow = true };
     let (caught, raised) =
         Env/run(
@@ -667,7 +667,7 @@ test handled_exceptions_are_not_recorded =
 -- The interval is open at both infinities rather than closed on the finite extremes, and every non-finite input is checked because each fails for a different reason: `+inf` by the upper bound, `-inf` by the lower, a NaN by both, since every IEEE comparison with one is false. `try_to_nat` needs no lower bound at all — `f >= +0.0` has already rejected the NaN and `-inf`.
 --
 -- `-0.0` is the case that pins which equality this follows. IEEE says `-0.0 >= +0.0`, so it converts to `0` rather than being rejected as negative — correct, since it truncates to `0` — even though `Flt`'s own identity is bitwise and holds the two zeros apart.
-test narrowings_answer_their_partiality_with_an_option =
+test narrowings_answer_their_partiality_with_an_option =>
     Test/all([
         Test/equal(Flt/try_to_nat(+1.5), Option/some(1)),
         Test/equal(Flt/try_to_nat(-1.5), Option/none()),
@@ -679,7 +679,7 @@ test narrowings_answer_their_partiality_with_an_option =
         Test/equal(Flt/try_to_int(+nan.0), Option/none())]);
 
 -- `identical` is the bit pattern: the two zeros apart, a NaN identical to itself, and a quiet NaN apart from a signaling one, where `eql` answers IEEE's way on each.
-test identical_compares_bit_patterns_where_eql_is_ieee =
+test identical_compares_bit_patterns_where_eql_is_ieee =>
     Test/equal(
         [
             Flt/identical(+0.0, -0.0),
@@ -691,7 +691,7 @@ test identical_compares_bit_patterns_where_eql_is_ieee =
         [false, true, false, true, true, false]);
 
 -- The predicates answer at the edges IEEE's equality has: `-0.0` is zero, a NaN of either kind is a NaN and no infinity, and the infinities are infinite.
-test the_predicates_answer_at_the_zeros_the_nans_and_the_infinities =
+test the_predicates_answer_at_the_zeros_the_nans_and_the_infinities =>
     Test/equal(
         [
             Flt/is_zero(-0.0),

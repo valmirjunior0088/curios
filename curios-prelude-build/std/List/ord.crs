@@ -3,7 +3,7 @@ use /std/ops/{Ord};
 use /std/Bool/{True, Holds};
 
 --- Lexicographic, a proper prefix first.
-pub let ord(@T: Type, use Ord(T), a: List(T), b: List(T)) -> Ordering =
+pub let ord(@T: Type, use Ord(T), a: List(T), b: List(T)) -> Ordering =>
     match (a, b)
     | ([], []) => Ordering/eq()
     | ([], [_, .._]) => Ordering/lt()
@@ -23,7 +23,7 @@ let flips(
     use Ord(T),
     a: List(T),
     b: List(T),
-) -> Eq()(ord(b, a), Ordering/flip(ord(a, b))) =
+) -> Eq()(ord(b, a), Ordering/flip(ord(a, b))) =>
     match a
     | [] => match b | [] | [_, .._] => Eq/refl() end
     | [x, ..xs] =>
@@ -41,7 +41,7 @@ let chains(
     a: List(T),
     b: List(T),
     c: List(T),
-) -> Holds(Ordering/chains(ord(a, b), ord(b, c), ord(a, c))) =
+) -> Holds(Ordering/chains(ord(a, b), ord(b, c), ord(a, c))) =>
     match a
     | [] =>
         match b
@@ -68,7 +68,7 @@ let trans(
     c: List(T),
     below: Holds(Ordering/is_le(ord(a, b))),
     above: Holds(Ordering/is_le(ord(b, c))),
-) -> Holds(Ordering/is_le(ord(a, c))) =
+) -> Holds(Ordering/is_le(ord(a, c))) =>
     Ordering/chains/le(ord(a, b), ord(b, c), ord(a, c), chains(a, b, c), below, above);
 
 --- `ord(a, b)` is `eq` only where `a` is `b`: the order agrees with equality.
@@ -78,7 +78,7 @@ let eq(
     a: List(T),
     b: List(T),
     h: Eq()(ord(a, b), Ordering/eq()),
-) -> Eq()(a, b) =
+) -> Eq()(a, b) =>
     match a
     | [] =>
         match b
@@ -95,22 +95,22 @@ let eq(
         end
     end;
 
-satisfy (@T: Type, use Ord(T)) => Ord(List(T)) {
+satisfy (@T: Type, use Ord(T)) -> Ord(List(T)) {
     ord = ord,
-    lt(a, b) = Ordering/is_lt(ord(a, b)),
-    le(a, b) = Ordering/is_le(ord(a, b)),
+    lt(a, b) => Ordering/is_lt(ord(a, b)),
+    le(a, b) => Ordering/is_le(ord(a, b)),
     flips = flips,
     trans = trans,
     eq = eq,
-    is_lt(_, _) = Eq/refl(),
-    is_le(_, _) = Eq/refl(),
+    is_lt(_, _) => Eq/refl(),
+    is_le(_, _) => Eq/refl(),
 }
 
 -- The empty list's encoding, nothing, before one beginning with a delimited run, which begins with a byte whatever it delimits.
 let empty_first(
     x: Bytes,
     rest: Bytes,
-) -> Eq()(Bytes/ord(0x[], 0x[..Hash/delimited(x), ..rest]), Ordering/lt()) =
+) -> Eq()(Bytes/ord(0x[], 0x[..Hash/delimited(x), ..rest]), Ordering/lt()) =>
     match x
     | 0x[] => Eq/refl()
     | 0x[0, .._] => Eq/refl()
@@ -121,7 +121,7 @@ let empty_first(
 let empty_last(
     x: Bytes,
     rest: Bytes,
-) -> Eq()(Bytes/ord(0x[..Hash/delimited(x), ..rest], 0x[]), Ordering/gt()) =
+) -> Eq()(Bytes/ord(0x[..Hash/delimited(x), ..rest], 0x[]), Ordering/gt()) =>
     match x
     | 0x[] => Eq/refl()
     | 0x[0, .._] => Eq/refl()
@@ -134,7 +134,7 @@ let mono(
     use Hash/Key(T),
     a: List(T),
     b: List(T),
-) -> Eq()(ord(a, b), Bytes/ord(Hash/hash(a), Hash/hash(b))) =
+) -> Eq()(ord(a, b), Bytes/ord(Hash/hash(a), Hash/hash(b))) =>
     match a
     | [] =>
         match b
@@ -156,6 +156,6 @@ let mono(
         end
     end;
 
-satisfy (@T: Type, use Hash/Key(T)) => Hash/Key(List(T)) {
+satisfy (@T: Type, use Hash/Key(T)) -> Hash/Key(List(T)) {
     mono = mono,
 }

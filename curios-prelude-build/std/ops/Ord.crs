@@ -36,31 +36,31 @@ pub concept Ord(A: Type): pub Type {
 pub use Ord/*;
 
 --- The first answer that is not `eq`, or `eq` where they all agree.
-pub let lexicographic(pieces: List(Ordering)) -> Ordering =
+pub let lexicographic(pieces: List(Ordering)) -> Ordering =>
     List/fold(pieces, Ordering/eq(), (piece, acc) => Ordering/then(acc, piece));
 
 --- The law that `ord` answers the flipped answer with its operands swapped: `gt` one way exactly where `lt` the other, and `eq` both ways or neither.
 ---
 --- `Ord` carries it of its own `ord` ([`flips`]); a theorem over a comparator it is handed takes it as a hypothesis.
-pub let Flips(@T: Type, ord: (T, T) -> Ordering) -> Prop =
+pub let Flips(@T: Type, ord: (T, T) -> Ordering) -> Prop =>
     (a: T, b: T) -> Eq()(ord(b, a), Ordering/flip(ord(a, b)));
 
 --- The law that `le` carries across a middle element.
-pub let Trans(@T: Type, le: (T, T) -> Bool) -> Prop =
+pub let Trans(@T: Type, le: (T, T) -> Bool) -> Prop =>
     (a: T, b: T, c: T, Holds(le(a, b)), Holds(le(b, c))) -> Holds(le(a, c));
 
 --- `ord` as a relation: what it does not answer `gt` at.
-pub let le_by(@T: Type, ord: (T, T) -> Ordering) -> (T, T) -> Bool =
+pub let le_by(@T: Type, ord: (T, T) -> Ordering) -> (T, T) -> Bool =>
     (a, b) => Ordering/is_le(ord(a, b));
 
 --- `ord` as a strict relation: what it answers `lt` at.
-pub let lt_by(@T: Type, ord: (T, T) -> Ordering) -> (T, T) -> Bool =
+pub let lt_by(@T: Type, ord: (T, T) -> Ordering) -> (T, T) -> Bool =>
     (a, b) => Ordering/is_lt(ord(a, b));
 
 --- `ord`, and `second` among what `ord` ties: the relation that holds where `ord` answers `lt`, and where it answers `eq` and `second` holds.
 ---
 --- At a `second` that always holds it is `le_by(ord)`. It is the order two sorts in a row leave a list in, the later sort's comparator first.
-pub let then(@T: Type, ord: (T, T) -> Ordering, second: (T, T) -> Bool) -> (T, T) -> Bool =
+pub let then(@T: Type, ord: (T, T) -> Ordering, second: (T, T) -> Bool) -> (T, T) -> Bool =>
     (a, b) =>
         match ord(a, b)
         | lt() => true
@@ -76,7 +76,7 @@ pub let chains(
     p: T,
     q: T,
     r: T,
-) -> Holds(Ordering/chains(ord(p, q), ord(q, r), ord(p, r))) =
+) -> Holds(Ordering/chains(ord(p, q), ord(q, r), ord(p, r))) =>
     match ord(p, q)
     | lt() =>
         match ord(q, r)
@@ -101,7 +101,7 @@ pub let chains(
 
 -- Of the three answers `eq` alone is its own flip.
 --- A value is `eq` to itself in its order.
-pub let refl(@T: Type, use Ord(T), a: T) -> Eq()(ord(a, a), Ordering/eq()) =
+pub let refl(@T: Type, use Ord(T), a: T) -> Eq()(ord(a, a), Ordering/eq()) =>
     match ord(a, a)
     | lt() => match flips(a, a) end
     | eq() => Eq/refl()
@@ -109,11 +109,17 @@ pub let refl(@T: Type, use Ord(T), a: T) -> Eq()(ord(a, a), Ordering/eq()) =
     end;
 
 --- `ord` answers `eq` at two values that are one.
-pub let of_eq(@T: Type, use Ord(T), a: T, b: T, e: Eq()(a, b)) -> Eq()(ord(a, b), Ordering/eq()) =
+pub let of_eq(@T: Type, use Ord(T), a: T, b: T, e: Eq()(a, b)) -> Eq()(ord(a, b), Ordering/eq()) =>
     Eq/subst((x: T) => Eq()(ord(a, x), Ordering/eq()), e, refl(a));
 
 --- `ord` answers `lt` where the first is below the second.
-pub let of_lt(@T: Type, use Ord(T), a: T, b: T, p: Holds(a < b)) -> Eq()(ord(a, b), Ordering/lt()) =
+pub let of_lt(
+    @T: Type,
+    use Ord(T),
+    a: T,
+    b: T,
+    p: Holds(a < b),
+) -> Eq()(ord(a, b), Ordering/lt()) =>
     match ord(a, b)
     | lt() => Eq/refl()
     | eq() | gt() =>
@@ -121,16 +127,34 @@ pub let of_lt(@T: Type, use Ord(T), a: T, b: T, p: Holds(a < b)) -> Eq()(ord(a, 
     end;
 
 --- `ord` answers `gt` where the second is below the first.
-pub let of_gt(@T: Type, use Ord(T), a: T, b: T, p: Holds(b < a)) -> Eq()(ord(a, b), Ordering/gt()) =
+pub let of_gt(
+    @T: Type,
+    use Ord(T),
+    a: T,
+    b: T,
+    p: Holds(b < a),
+) -> Eq()(ord(a, b), Ordering/gt()) =>
     Eq/trans(flips(b, a), Eq/cong(Ordering/flip, of_lt(b, a, p)));
 
 --- The first is below the second where `ord` answers `lt`.
-pub let below(@T: Type, use Ord(T), a: T, b: T, h: Eq()(ord(a, b), Ordering/lt())) -> Holds(a < b) =
+pub let below(
+    @T: Type,
+    use Ord(T),
+    a: T,
+    b: T,
+    h: Eq()(ord(a, b), Ordering/lt()),
+) -> Holds(a < b) =>
     Eq/subst(
         (x: Bool) => Holds(x),
         Eq/sym(Eq/trans(is_lt(a, b), Eq/cong(Ordering/is_lt, h))),
         True/qed());
 
 --- The second is below the first where `ord` answers `gt`.
-pub let above(@T: Type, use Ord(T), a: T, b: T, h: Eq()(ord(a, b), Ordering/gt())) -> Holds(b < a) =
+pub let above(
+    @T: Type,
+    use Ord(T),
+    a: T,
+    b: T,
+    h: Eq()(ord(a, b), Ordering/gt()),
+) -> Holds(b < a) =>
     below(b, a, Eq/trans(flips(a, b), Eq/cong(Ordering/flip, h)));

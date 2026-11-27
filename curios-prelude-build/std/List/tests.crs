@@ -4,7 +4,7 @@ use /std/ops/{Ord};
 use /std/Bool/{True, Holds};
 use /std/List/{Member, Permutation, Pairwise};
 
-test predicates_and_searches_answer_over_the_elements =
+test predicates_and_searches_answer_over_the_elements =>
     let l = [3, 1, 4, 1, 5];
     let empty: List(Nat) = [];
     Test/all([
@@ -20,7 +20,7 @@ test predicates_and_searches_answer_over_the_elements =
         Test/equal(List/last(l), Option/some(5)),
         Test/equal(List/last(empty), Option/none())]);
 
-test builders_reshape_a_list =
+test builders_reshape_a_list =>
     let l = [3, 1, 4, 1, 5];
     let (evens, odds) = List/partition(l, (x: Nat) => Nat/is_even(x));
     let (xs, ys) = List/unzip([(1, "a"), (2, "b")]);
@@ -47,8 +47,8 @@ test builders_reshape_a_list =
         Test/equal(List/intersperse([1, 2, 3], 0), [1, 0, 2, 0, 3])]);
 
 -- `traverse` collects under any `Monad`: over `Option` a single `none` sinks the whole list.
-test traverse_collects_under_a_monad =
-    let halve(x: Nat) -> Option(Nat) =
+test traverse_collects_under_a_monad =>
+    let halve(x: Nat) -> Option(Nat) =>
         match Nat/is_even(x)
         | true => Option/some(x / 2)
         | false => Option/none()
@@ -58,7 +58,7 @@ test traverse_collects_under_a_monad =
         Test/equal(List/traverse([2, 3, 6], halve), Option/none())]);
 
 -- The sort merges runs, the older on the left, and takes from the left where the comparator ties, which is what makes it stable: the two `1`s keep their order, and `sort_by` under a reversed comparator reverses the distinct keys while equal keys still keep theirs.
-test sort_is_stable_and_sort_by_takes_a_comparator =
+test sort_is_stable_and_sort_by_takes_a_comparator =>
     let pairs = [(2, "b"), (1, "x"), (2, "a"), (1, "y")];
     Test/all([
         Test/equal(List/sort([3, 1, 2]), [1, 2, 3]),
@@ -91,10 +91,10 @@ let _a_member_is_carried_across_a_permutation: Member()(1, [3, 1, 2]) =
     Permutation/member(a_rotation_is_a_permutation, Member/here());
 
 -- `ordered` decides a relation at each adjacent pair, and a comparator is read as one: by `Ord/le` alone, and by `Ord/then` with a second relation among what the comparator ties.
-test ordered_decides_each_adjacent_pair =
+test ordered_decides_each_adjacent_pair =>
     let empty: List(Nat) = [];
-    let by_number(p: {Nat, Str}, q: {Nat, Str}) -> Ordering = Nat/ord(p.0, q.0);
-    let by_text(p: {Nat, Str}, q: {Nat, Str}) -> Ordering = Str/ord(p.1, q.1);
+    let by_number(p: {Nat, Str}, q: {Nat, Str}) -> Ordering => Nat/ord(p.0, q.0);
+    let by_text(p: {Nat, Str}, q: {Nat, Str}) -> Ordering => Str/ord(p.1, q.1);
     let tied = [(1, "b"), (1, "a"), (2, "a")];
     Test/all([
         Test/assert("the empty list is in order", List/ordered(empty, Ord/le_by(Nat/ord))),
@@ -118,25 +118,25 @@ let _adjacent_order_reaches_every_pair(
     carries: Ord/Trans(le),
     l: List(T),
     given: Holds(List/ordered(l, le)),
-) -> Pairwise(le)(l) =
+) -> Pairwise(le)(l) =>
     Pairwise/of_ordered(le, carries, l, given);
 
-let counted(n: Nat, each: (Nat) -> Nat) -> List(Nat) =
-    let go(i: Nat, left: Nat, acc: List(Nat)) -> List(Nat) =
+let counted(n: Nat, each: (Nat) -> Nat) -> List(Nat) =>
+    let go(i: Nat, left: Nat, acc: List(Nat)) -> List(Nat) =>
         match left
         | 0 => acc
         | fewer + 1 => go(i + 1, fewer, [..acc, each(i)])
         end;
     go(0, n, []);
 
-let whole_and_in_order(l: List(Nat)) -> Test({}) =
+let whole_and_in_order(l: List(Nat)) -> Test({}) =>
     let sorted = List/sort(l);
     Test/all([
         Test/equal(List/length(sorted), List/length(l)),
         Test/assert("the sorted list is in order", List/ordered(sorted, Ord/le_by(Nat/ord)))]);
 
 -- A hundred thousand elements, which a sort as deep as its input or as costly as its square does not answer for: already in order, in reverse, and scattered.
-test sort_answers_at_a_hundred_thousand_elements_in_any_order =
+test sort_answers_at_a_hundred_thousand_elements_in_any_order =>
     Test/all([
         whole_and_in_order(counted(100000, (i) => i)),
         whole_and_in_order(counted(100000, (i) => 99999 - i)),
@@ -155,7 +155,7 @@ let _a_sort_rearranges_under_any_comparator(
     @T: Type,
     ord: (T, T) -> Ordering,
     l: List(T),
-) -> Permutation()(l, List/sort_by(l, ord)) =
+) -> Permutation()(l, List/sort_by(l, ord)) =>
     List/sort_by/permuted(l, ord);
 
 let _a_sort_is_in_order_under_the_flip(
@@ -163,7 +163,7 @@ let _a_sort_is_in_order_under_the_flip(
     ord: (T, T) -> Ordering,
     flips: Ord/Flips(ord),
     l: List(T),
-) -> Holds(List/ordered(List/sort_by(l, ord), Ord/le_by(ord))) =
+) -> Holds(List/ordered(List/sort_by(l, ord), Ord/le_by(ord))) =>
     List/sort_by/sorted(ord, flips, l);
 
 -- What stable buys: a list sorted by one comparator and then by another is in order by the second, and by the first among what the second ties.
@@ -178,7 +178,7 @@ let _two_sorts_order_by_both_keys(
 ) -> Holds(
     List/ordered(
         List/sort_by(List/sort_by(l, earlier), later),
-        Ord/then(later, Ord/le_by(earlier)))) =
+        Ord/then(later, Ord/le_by(earlier)))) =>
     let once = List/sort_by(l, earlier);
     List/sort_by/ordered(
         later,
@@ -194,19 +194,19 @@ let _two_sorts_order_by_both_keys(
 -- The theorem read at the orders the examples above sort by: a list of naturals and a list of texts, each by its type's own order.
 let _naturals_sort_in_order(
     l: List(Nat),
-) -> Holds(List/ordered(List/sort(l), Ord/le_by((a: Nat, b: Nat) => Ord/ord(a, b)))) =
+) -> Holds(List/ordered(List/sort(l), Ord/le_by((a: Nat, b: Nat) => Ord/ord(a, b)))) =>
     List/sort/sorted(l);
 
 let _texts_sort_in_order(
     l: List(Str),
-) -> Holds(List/ordered(List/sort(l), Ord/le_by((a: Str, b: Str) => Ord/ord(a, b)))) =
+) -> Holds(List/ordered(List/sort(l), Ord/le_by((a: Str, b: Str) => Ord/ord(a, b)))) =>
     List/sort/sorted(l);
 
-let _a_sort_of_texts_rearranges(l: List(Str)) -> Permutation()(l, List/sort(l)) =
+let _a_sort_of_texts_rearranges(l: List(Str)) -> Permutation()(l, List/sort(l)) =>
     List/sort/permuted(l);
 
 -- An update writes one element and keeps the rest, and the list it was made from still reads as it did.
-test set_writes_one_element_and_keeps_the_rest =
+test set_writes_one_element_and_keeps_the_rest =>
     let l = [3, 1, 4, 1, 5];
     Test/all([
         Test/equal(List/set(l, 0, 9), [9, 1, 4, 1, 5]),

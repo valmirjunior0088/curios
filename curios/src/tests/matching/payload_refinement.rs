@@ -17,10 +17,10 @@ fn an_inferred_implicit_does_not_break_a_refinement_key() {
         }
 
         satisfy Pred(Nat) {
-            test(n, b) = match b | true => true | false => false end,
+            test(n, b) => match b | true => true | false => false end,
         }
 
-        let refined(t : Nat, b : Bool) -> Str =
+        let refined(t : Nat, b : Bool) -> Str =>
             match Pred/test(t, b)
             | true =>
                 let p : Eq()(true, Pred/test(t, b)) = Eq/refl();
@@ -45,7 +45,7 @@ fn a_matched_payload_converts_against_the_value_it_carried() {
         | cons(V, L(V))
         end
 
-        let head_opt(@V : Type, l : L(V)) -> Option(V) =
+        let head_opt(@V : Type, l : L(V)) -> Option(V) =>
             match l | nil() => Option/none() | cons(h, t) => Option/some(h) end;
 
         let carried : Eq()(head_opt(L/cons(7, L/nil())), Option/some(7)) = Eq/refl();
@@ -67,7 +67,7 @@ fn a_matched_payload_still_refuses_a_false_equation() {
         | cons(V, L(V))
         end
 
-        let head_opt(@V : Type, l : L(V)) -> Option(V) =
+        let head_opt(@V : Type, l : L(V)) -> Option(V) =>
             match l | nil() => Option/none() | cons(h, t) => Option/some(h) end;
 
         let carried : Eq()(head_opt(L/cons(7, L/nil())), Option/some(8)) = Eq/refl();
@@ -96,19 +96,19 @@ fn an_immediate_arm_payload_survives_arithmetic_in_a_loop() {
         | cons(Nat, L)
         end
 
-        let build(n : Nat, acc : L) -> L =
+        let build(n : Nat, acc : L) -> L =>
             match n
             | 0 => acc
             | m + 1 => build(m, L/cons(m, acc))
             end;
 
-        let total(c : L, acc : Nat) -> Nat =
+        let total(c : L, acc : Nat) -> Nat =>
             match c
             | stop(z) => acc + z
             | cons(v, tail) => total(tail, acc + v)
             end;
 
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let bytes = match Try/run(Io/read(Proc/stdin, 16))!
                 | success(bytes(b, @_)) => b
                 | success(ended()) => 0x[]
@@ -137,8 +137,8 @@ fn an_error_in_an_arm_the_indices_rule_out_says_the_arm_may_be_left_out() {
         | zero(): (0)
         | other(n: Nat): (n + 1)
         end
-        let needs_zero(n: Nat, @ok: Holds(n == 0)) -> Nat = 7;
-        let w(t: Tag(1)) -> Nat = match t | zero() => needs_zero(1) | other(_) => 0 end;
+        let needs_zero(n: Nat, @ok: Holds(n == 0)) -> Nat => 7;
+        let w(t: Tag(1)) -> Nat => match t | zero() => needs_zero(1) | other(_) => 0 end;
         /std/print("unreachable")
         "#,
     );
@@ -157,7 +157,7 @@ fn an_error_in_an_arm_the_indices_rule_out_says_the_arm_may_be_left_out() {
         induct Two: (a: Nat, b: Nat) -> Type
         | mk(): (0, 1)
         end
-        let f(n: Nat, h: Eq()(n, 7), x: Two(n, n)) -> Eq()(n, 7) = match x | mk() => h end;
+        let f(n: Nat, h: Eq()(n, 7), x: Two(n, n)) -> Eq()(n, 7) => match x | mk() => h end;
         /std/print("unreachable")
         "#,
     );

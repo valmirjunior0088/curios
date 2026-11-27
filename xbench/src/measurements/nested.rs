@@ -17,7 +17,7 @@ fn towers(depth: usize, step: fn(&str, &str) -> String) -> String {
         right = step(&right, &format!("v{level}"));
     }
     fill!(
-        "use /std/{Nat, Eq, Io};\nlet towers(${binders}) -> Eq()(match ${left} <= ${right} | true => 0 | false => 0 end, 0) = Eq/refl();\nIo/pure(())",
+        "use /std/{Nat, Eq, Io};\nlet towers(${binders}) -> Eq()(match ${left} <= ${right} | true => 0 | false => 0 end, 0) => Eq/refl();\nIo/pure(())",
         binders,
         left,
         right

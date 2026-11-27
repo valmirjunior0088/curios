@@ -11,19 +11,19 @@ fn a_struct_under_a_premise_is_built_read_and_witnessed() {
             same(K, K) -> Bool
         }
         satisfy Key(Nat) {
-            same(a, b) = a == b
+            same(a, b) => a == b
         }
         pub struct Slot(K: Type, use Key(K), V: Type): pub Type {
             key: K,
             value: V,
             agrees: (K) -> Bool
         }
-        let slot(@K: Type, use Key(K), @V: Type, key: K, value: V) -> Slot(K, V) =
+        let slot(@K: Type, use Key(K), @V: Type, key: K, value: V) -> Slot(K, V) =>
             Slot { key = key, value = value, agrees = (other) => Key/same(key, other) };
-        let holds(@K: Type, use Key(K), @V: Type, at: Slot(K, V), key: K) -> Bool =
+        let holds(@K: Type, use Key(K), @V: Type, at: Slot(K, V), key: K) -> Bool =>
             Key/same(at.key, key);
-        satisfy (@K: Type, use Key(K), @V: Type, use Show(V)) => Show(Slot(K, V)) {
-            show(at) = Show/show(at.value)
+        satisfy (@K: Type, use Key(K), @V: Type, use Show(V)) -> Show(Slot(K, V)) {
+            show(at) => Show/show(at.value)
         }
         let one: Slot(Nat, Str) = slot(1, "one");
         let written: Slot(Nat, Str) = Slot { key = 2, value = "two", agrees = (other) => false };
@@ -45,13 +45,13 @@ fn an_inductive_under_a_premise_is_built_and_matched() {
             same(K, K) -> Bool
         }
         satisfy Key(Nat) {
-            same(a, b) = a == b
+            same(a, b) => a == b
         }
         pub induct Chain(K: Type, use Key(K), V: Type): pub Type
         | done()
         | link(K, V, Chain(K, V))
         end
-        let find(@K: Type, use Key(K), @V: Type, chain: Chain(K, V), key: K, otherwise: V) -> V =
+        let find(@K: Type, use Key(K), @V: Type, chain: Chain(K, V), key: K, otherwise: V) -> V =>
             match chain
             | done() => otherwise
             | link(at, value, rest) => match
@@ -75,16 +75,16 @@ fn a_struct_under_a_premise_is_destructured_and_updated() {
             same(K, K) -> Bool
         }
         satisfy Key(Nat) {
-            same(a, b) = a == b
+            same(a, b) => a == b
         }
         pub struct Slot(K: Type, use Key(K), V: Type): pub Type {
             key: K,
             value: V
         }
-        let value_of(@K: Type, use Key(K), @V: Type, at: Slot(K, V)) -> V =
+        let value_of(@K: Type, use Key(K), @V: Type, at: Slot(K, V)) -> V =>
             let Slot { key = key, value = value } = at;
             value;
-        let swap(@K: Type, use Key(K), @V: Type, at: Slot(K, V), value: V) -> Slot(K, V) =
+        let swap(@K: Type, use Key(K), @V: Type, at: Slot(K, V), value: V) -> Slot(K, V) =>
             Slot { ..at, value = value };
         let one: Slot(Nat, Str) = Slot { key = 1, value = "one" };
         print(Str/concat(value_of(one), value_of(swap(one, "uno"))))
@@ -103,7 +103,7 @@ fn a_type_under_a_premise_derives() {
             same(K, K) -> Bool
         }
         satisfy Key(Nat) {
-            same(a, b) = a == b
+            same(a, b) => a == b
         }
         pub struct Slot(K: Type, use Key(K), V: Type): pub Type {
             key: K,
@@ -113,9 +113,9 @@ fn a_type_under_a_premise_derives() {
         | done()
         | link(K, V, Chain(K, V))
         end
-        satisfy (@K: Type, use Key(K), @V: Type, use Eql(K), use Eql(V)) => Eql(Slot(K, V)) { .. }
-        satisfy (@K: Type, use Key(K), @V: Type, use Spell(K), use Spell(V)) => Spell(Slot(K, V)) { .. }
-        satisfy (@K: Type, use Key(K), @V: Type, use Spell(K), use Spell(V)) => Spell(Chain(K, V)) { .. }
+        satisfy (@K: Type, use Key(K), @V: Type, use Eql(K), use Eql(V)) -> Eql(Slot(K, V)) { .. }
+        satisfy (@K: Type, use Key(K), @V: Type, use Spell(K), use Spell(V)) -> Spell(Slot(K, V)) { .. }
+        satisfy (@K: Type, use Key(K), @V: Type, use Spell(K), use Spell(V)) -> Spell(Chain(K, V)) { .. }
         let one: Slot(Nat, Str) = Slot { key = 1, value = "one" };
         let chain: Chain(Nat, Str) = Chain/link(1, "one", Chain/done());
         print(Str/concat(Bool/to_str(one == one), Str/concat(Spell/spell(one), Spell/spell(chain))))
@@ -136,13 +136,13 @@ fn two_dictionaries_make_two_types() {
             same(K, K) -> Bool
         }
         satisfy Key(Nat) {
-            same(a, b) = a == b
+            same(a, b) => a == b
         }
         pub struct Slot(K: Type, use Key(K), V: Type): pub Type {
             key: K,
             value: V
         }
-        let other: Key(Nat) = Key { same(a, b) = false };
+        let other: Key(Nat) = Key { same(a, b) => false };
         let one: Slot(Nat, Str) = Slot { key = 1, value = "one" };
         let wrong: Slot(Nat, use other, Str) = one;
         print("no")
@@ -170,7 +170,7 @@ fn a_type_at_the_registered_dictionary_prints_as_written() {
             same(K, K) -> Bool
         }
         satisfy Key(Nat) {
-            same(a, b) = a == b
+            same(a, b) => a == b
         }
         pub struct Slot(K: Type, use Key(K), V: Type): pub Type {
             key: K,
@@ -261,20 +261,20 @@ fn a_type_naming_another_dictionary_is_read_under_it() {
             same(K, K) -> Bool
         }
         satisfy Key(Nat) {
-            same(a, b) = a == b
+            same(a, b) => a == b
         }
         pub struct Slot(K: Type, use Key(K), V: Type): pub Type {
             key: K,
             value: V
         }
-        let never: Key(Nat) = Key { same(a, b) = false };
+        let never: Key(Nat) = Key { same(a, b) => false };
         pub induct Chain(K: Type, use Key(K), V: Type): pub Type
         | done()
         | link(K, V, Chain(K, V))
         end
-        let holds(@K: Type, use Key(K), @V: Type, at: Slot(K, V), key: K) -> Bool =
+        let holds(@K: Type, use Key(K), @V: Type, at: Slot(K, V), key: K) -> Bool =>
             Key/same(at.key, key);
-        let find(@K: Type, use Key(K), @V: Type, chain: Chain(K, V), key: K, otherwise: V) -> V =
+        let find(@K: Type, use Key(K), @V: Type, chain: Chain(K, V), key: K, otherwise: V) -> V =>
             match chain
             | done() => otherwise
             | link(at, value, rest) => match
@@ -282,8 +282,8 @@ fn a_type_naming_another_dictionary_is_read_under_it() {
                 | _ => find(rest, key, otherwise)
                 end
             end;
-        satisfy (@K: Type, use Key(K), @V: Type) => Show(Slot(K, V)) {
-            show(at) = Bool/to_str(Key/same(at.key, at.key))
+        satisfy (@K: Type, use Key(K), @V: Type) -> Show(Slot(K, V)) {
+            show(at) => Bool/to_str(Key/same(at.key, at.key))
         }
         let plain: Slot(Nat, Str) = Slot { key = 2, value = "two" };
         let bare: Slot(Nat, use never, Str) = Slot { key = 2, value = "two" };
@@ -308,14 +308,14 @@ fn two_dictionaries_in_one_call_are_refused() {
             same(K, K) -> Bool
         }
         satisfy Key(Nat) {
-            same(a, b) = a == b
+            same(a, b) => a == b
         }
         pub struct Slot(K: Type, use Key(K), V: Type): pub Type {
             key: K,
             value: V
         }
-        let never: Key(Nat) = Key { same(a, b) = false };
-        let alike(@K: Type, use Key(K), @V: Type, left: Slot(K, V), right: Slot(K, V)) -> Bool =
+        let never: Key(Nat) = Key { same(a, b) => false };
+        let alike(@K: Type, use Key(K), @V: Type, left: Slot(K, V), right: Slot(K, V)) -> Bool =>
             Key/same(left.key, right.key);
         let plain: Slot(Nat, Str) = Slot { key = 2, value = "two" };
         let bare: Slot(Nat, use never, Str) = Slot { key = 2, value = "two" };
@@ -339,17 +339,17 @@ fn a_premise_over_a_stuck_key_waits_for_the_argument_that_gives_it() {
             same(K, K) -> Bool
         }
         satisfy Key(Nat) {
-            same(a, b) = a == b
+            same(a, b) => a == b
         }
-        let never: Key(Nat) = Key { same(a, b) = false };
-        let Pick(b: Bool) -> Type = match b | true => Nat | false => Str end;
+        let never: Key(Nat) = Key { same(a, b) => false };
+        let Pick(b: Bool) -> Type => match b | true => Nat | false => Str end;
         induct Flag: (Bool) -> Type | flag(b: Bool): (b) end
-        let same_at(@b: Bool, use Key(Pick(b)), at: Flag(b), key: Pick(b)) -> Bool =
+        let same_at(@b: Bool, use Key(Pick(b)), at: Flag(b), key: Pick(b)) -> Bool =>
             Key/same(key, key);
-        let same_after(@b: Bool, at: Flag(b), use Key(Pick(b)), key: Pick(b)) -> Bool =
+        let same_after(@b: Bool, at: Flag(b), use Key(Pick(b)), key: Pick(b)) -> Bool =>
             Key/same(key, key);
-        let Shelf(b: Bool, use Key(Pick(b))) -> Type = List(Pick(b));
-        let on_shelf(@b: Bool, use Key(Pick(b)), at: Shelf(b), key: Pick(b)) -> Bool =
+        let Shelf(b: Bool, use Key(Pick(b))) -> Type => List(Pick(b));
+        let on_shelf(@b: Bool, use Key(Pick(b)), at: Shelf(b), key: Pick(b)) -> Bool =>
             Key/same(key, key);
         let shelved: Shelf(true, use never) = [1, 2];
         print(Str/join(" ", [
@@ -373,7 +373,7 @@ fn a_call_runs_under_the_dictionary_an_argument_names_wherever_its_key_is_fixed(
             same(K, K) -> Bool
         }
         satisfy Key(Nat) {
-            same(a, b) = a == b
+            same(a, b) => a == b
         }
         pub struct Slot(K: Type, use Key(K), V: Type): pub Type {
             key: K,
@@ -383,14 +383,14 @@ fn a_call_runs_under_the_dictionary_an_argument_names_wherever_its_key_is_fixed(
         | done()
         | link(K, V, Chain(K, V))
         end
-        let never: Key(Nat) = Key { same(a, b) = false };
-        let holds(@K: Type, use Key(K), @V: Type, at: Slot(K, V), key: K) -> Bool =
+        let never: Key(Nat) = Key { same(a, b) => false };
+        let holds(@K: Type, use Key(K), @V: Type, at: Slot(K, V), key: K) -> Bool =>
             Key/same(at.key, key);
-        let holds_at(K: Type, use Key(K), @V: Type, at: Slot(K, V), key: K) -> Bool =
+        let holds_at(K: Type, use Key(K), @V: Type, at: Slot(K, V), key: K) -> Bool =>
             Key/same(at.key, key);
-        let holds_after(@K: Type, key: K, use Key(K), @V: Type, at: Slot(K, V)) -> Bool =
+        let holds_after(@K: Type, key: K, use Key(K), @V: Type, at: Slot(K, V)) -> Bool =>
             Key/same(at.key, key);
-        let heads(@K: Type, use Key(K), @V: Type, chain: Chain(K, V), key: K) -> Bool =
+        let heads(@K: Type, use Key(K), @V: Type, chain: Chain(K, V), key: K) -> Bool =>
             match chain | done() => false | link(at, _, _) => Key/same(at, key) end;
         let plain: Slot(Nat, Str) = Slot { key = 2, value = "two" };
         let bare: Slot(Nat, use never, Str) = Slot { key = 2, value = "two" };
@@ -424,9 +424,9 @@ fn a_superclass_is_the_registered_dictionary_whatever_a_field_names() {
             code(K) -> Nat
         }
         satisfy Hashy(Nat) {
-            code(n) = n
+            code(n) => n
         }
-        let other: Hashy(Nat) = Hashy { code(n) = 0 };
+        let other: Hashy(Nat) = Hashy { code(n) => 0 };
         pub struct Slot(K: Type, use Hashy(K), V: Type): pub Type {
             key: K,
             value: V

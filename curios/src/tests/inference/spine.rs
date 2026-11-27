@@ -9,12 +9,12 @@ fn program(body: &str) -> String {
     fill!(
         r#"
         use /std/{Nat, Bool, Str, List, print};
-        let rest(xs: List(Nat)) -> List(Nat) = match xs | [] => [] | [_, ..t] => t end;
-        let head(xs: List(Nat)) -> Nat = match xs | [] => 0 | [h, ..t] => h end;
+        let rest(xs: List(Nat)) -> List(Nat) => match xs | [] => [] | [_, ..t] => t end;
+        let head(xs: List(Nat)) -> Nat => match xs | [] => 0 | [h, ..t] => h end;
         induct Tagged: (List(Nat)) -> Type | tag(xs: List(Nat)): (xs) end
         let first: Tagged(rest([1, 2])) = Tagged/tag([2]);
         let second: Tagged(rest([9, 2])) = Tagged/tag([2]);
-        let and(s: Str, t: Str) -> Str = Str/concat(s, Str/concat(" ", t));
+        let and(s: Str, t: Str) -> Str => Str/concat(s, Str/concat(" ", t));
         ${body}
         "#,
         body
@@ -26,8 +26,8 @@ fn program(body: &str) -> String {
 fn an_implicit_an_argument_states_is_not_taken_from_another_arguments_spine() {
     let source = program(
         r#"
-        let before(@xs: List(Nat), a: Tagged(rest(xs)), b: Tagged(xs)) -> Nat = head(xs);
-        let after(@xs: List(Nat), b: Tagged(xs), a: Tagged(rest(xs))) -> Nat = head(xs);
+        let before(@xs: List(Nat), a: Tagged(rest(xs)), b: Tagged(xs)) -> Nat => head(xs);
+        let after(@xs: List(Nat), b: Tagged(xs), a: Tagged(rest(xs))) -> Nat => head(xs);
         print(and(Nat/to_str(before(first, Tagged/tag([9, 2]))), Nat/to_str(after(Tagged/tag([9, 2]), first))))
         "#,
     );
@@ -40,13 +40,13 @@ fn an_implicit_an_argument_states_is_not_taken_from_another_arguments_spine() {
 fn an_implicit_only_a_spine_gives_is_taken_where_the_call_completes() {
     let source = program(
         r#"
-        let Wrap(c: Bool) -> Type = match c | true => List(Nat) | false => Nat end;
-        let Wide(c: Bool) -> Type = match c | true => List(Type) | false => Nat end;
-        let Listed(c: Bool) -> Type = List(Wrap(c));
-        let wrapped(@c: Bool, h: Wrap(c)) -> Bool = c;
-        let wide(@c: Bool, h: Wide(c)) -> Bool = c;
-        let listed(@c: Bool, h: Listed(c)) -> Bool = c;
-        let lone(@xs: List(Nat), a: Tagged(rest(xs))) -> Nat = head(xs);
+        let Wrap(c: Bool) -> Type => match c | true => List(Nat) | false => Nat end;
+        let Wide(c: Bool) -> Type => match c | true => List(Type) | false => Nat end;
+        let Listed(c: Bool) -> Type => List(Wrap(c));
+        let wrapped(@c: Bool, h: Wrap(c)) -> Bool => c;
+        let wide(@c: Bool, h: Wide(c)) -> Bool => c;
+        let listed(@c: Bool, h: Listed(c)) -> Bool => c;
+        let lone(@xs: List(Nat), a: Tagged(rest(xs))) -> Nat => head(xs);
         let given: Wrap(true) = [1];
         let types: Wide(true) = [Nat];
         let many: Listed(true) = [[1]];
@@ -67,7 +67,7 @@ fn an_implicit_only_a_spine_gives_is_taken_where_the_call_completes() {
 fn two_spines_that_give_an_implicit_one_value_agree() {
     let source = program(
         r#"
-        let pair(@xs: List(Nat), a: Tagged(rest(xs)), b: Tagged(rest(xs))) -> Nat = head(xs);
+        let pair(@xs: List(Nat), a: Tagged(rest(xs)), b: Tagged(rest(xs))) -> Nat => head(xs);
         print(and(Nat/to_str(pair(first, first)), Nat/to_str(pair(@[9, 2], first, second))))
         "#,
     );
@@ -84,7 +84,7 @@ fn two_spines_that_give_an_implicit_two_values_refuse_the_call() {
     ] {
         let report = error(&program(&format!(
             r#"
-            let pair(@xs: List(Nat), a: Tagged(rest(xs)), b: Tagged(rest(xs))) -> Nat = head(xs);
+            let pair(@xs: List(Nat), a: Tagged(rest(xs)), b: Tagged(rest(xs))) -> Nat => head(xs);
             print(Nat/to_str(pair({arguments})))
             "#
         )));
@@ -102,7 +102,7 @@ fn two_spines_that_give_an_implicit_two_values_refuse_the_call() {
 fn recursive(body: &str) -> String {
     program(&fill!(
         r#"
-        let ending(xs: List(Nat)) -> List(Nat) =
+        let ending(xs: List(Nat)) -> List(Nat) =>
             match xs | [] => [] | [h, ..t] => match t | [] => [h] | _ => ending(t) end end;
         let near: Tagged(ending([1, 2])) = Tagged/tag([2]);
         let far: Tagged(ending([9, 2])) = Tagged/tag([2]);
@@ -117,8 +117,8 @@ fn recursive(body: &str) -> String {
 fn a_recursions_spine_gives_no_implicit_another_argument_states() {
     let source = recursive(
         r#"
-        let before(@xs: List(Nat), a: Tagged(ending(xs)), b: Tagged(xs)) -> Nat = head(xs);
-        let after(@xs: List(Nat), b: Tagged(xs), a: Tagged(ending(xs))) -> Nat = head(xs);
+        let before(@xs: List(Nat), a: Tagged(ending(xs)), b: Tagged(xs)) -> Nat => head(xs);
+        let after(@xs: List(Nat), b: Tagged(xs), a: Tagged(ending(xs))) -> Nat => head(xs);
         print(and(Nat/to_str(before(near, Tagged/tag([9, 2]))), Nat/to_str(after(Tagged/tag([9, 2]), near))))
         "#,
     );
@@ -131,7 +131,7 @@ fn a_recursions_spine_gives_no_implicit_another_argument_states() {
 fn an_implicit_only_a_recursions_spine_gives_is_taken_where_the_call_completes() {
     let source = recursive(
         r#"
-        let lone(@xs: List(Nat), a: Tagged(ending(xs))) -> Nat = head(xs);
+        let lone(@xs: List(Nat), a: Tagged(ending(xs))) -> Nat => head(xs);
         print(Nat/to_str(lone(near)))
         "#,
     );
@@ -148,7 +148,7 @@ fn two_recursions_spines_that_give_an_implicit_two_values_refuse_the_call() {
     ] {
         let report = error(&recursive(&format!(
             r#"
-            let pair(@xs: List(Nat), a: Tagged(ending(xs)), b: Tagged(ending(xs))) -> Nat = head(xs);
+            let pair(@xs: List(Nat), a: Tagged(ending(xs)), b: Tagged(ending(xs))) -> Nat => head(xs);
             print(Nat/to_str(pair({arguments})))
             "#
         )));
@@ -167,7 +167,7 @@ fn two_recursions_spines_that_give_an_implicit_two_values_refuse_the_call() {
 fn a_constructors_index_is_not_taken_from_a_recursions_spine_at_a_cons() {
     let source = r#"
         use /std/{List, Nat, Option, Eq, print};
-        let flat(l: List(Option(Nat))) -> List(Nat) =
+        let flat(l: List(Option(Nat))) -> List(Nat) =>
             match l | [] => [] | [o, ..rest] => [..flat(rest), ..match o | none() => [] | some(n) => [n] end] end;
         induct Lay: (List(Option(Nat))) -> Prop
         | bottom(): ([])
@@ -177,7 +177,7 @@ fn a_constructors_index_is_not_taken_from_a_recursions_spine_at_a_cons() {
             rest: List(Option(Nat)),
             e: Eq()(flat([Option/none(), ..rest]), flat([Option/none(), ..rest])),
             below: Lay(rest),
-        ) -> Lay([Option/some(1), ..rest]) =
+        ) -> Lay([Option/some(1), ..rest]) =>
             Lay/level(e, below);
         print("ok")
         "#;

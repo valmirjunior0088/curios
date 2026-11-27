@@ -8,7 +8,7 @@ fn sqrt_stays_folded_in_a_type_and_log2_and_gcd_are_accepted() {
     let refused = r#"
         use /std/{Nat, Str};
         use /std/Bool/{True, Holds};
-        let claim(h: Holds(Nat/sqrt(16) <= 4)) -> Nat = 0;
+        let claim(h: Holds(Nat/sqrt(16) <= 4)) -> Nat => 0;
         /std/print(Nat/to_str(claim(True/qed())))
         "#;
     let refusal = error(refused);

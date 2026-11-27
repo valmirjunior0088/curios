@@ -2,19 +2,19 @@
 use /std/{Nat, Int, Option, Ordering, Test};
 
 -- Carry and borrow across the edge of the i31 a small value rides in, of a 32-bit limb, and of two.
-test nat_add_and_sub_cross_every_word_edge =
+test nat_add_and_sub_cross_every_word_edge =>
     Test/equal(
         [1073741823 + 1, 1073741824 - 1, 4294967295 + 1, 4294967296 - 1, 18446744073709551615 + 1],
         [1073741824, 1073741823, 4294967296, 4294967295, 18446744073709551616]);
 
 -- A product past 64 bits lives in the number itself, never in a fixed-width intermediate.
-test nat_mul_crosses_every_word_width =
+test nat_mul_crosses_every_word_width =>
     Test/equal(
         [123456789 * 987654321, 4294967296 * 4294967296, Nat/pow(2, 100)],
         [121932631112635269, 18446744073709551616, 1267650600228229401496703205376]);
 
 -- Division by a divisor of more than one limb, where the quotient digit is estimated and corrected.
-test nat_div_and_rem_by_a_multi_limb_divisor =
+test nat_div_and_rem_by_a_multi_limb_divisor =>
     Test/equal(
         [
             1267650600228229401496703205376 / 18446744073709551617,
@@ -22,7 +22,7 @@ test nat_div_and_rem_by_a_multi_limb_divisor =
         [68719476735, 18446744004990074881]);
 
 -- The library's arithmetic beyond the operators answers at any width: a root, a logarithm and a divisor of numbers past 128 bits. The root is the row that once ran for hours, when `Nat/sqrt` counted up to its answer.
-test nat_roots_logarithms_and_divisors_past_every_width =
+test nat_roots_logarithms_and_divisors_past_every_width =>
     Test/equal(
         [
             Nat/sqrt(340282366920938463463374607431768223801),
@@ -31,7 +31,7 @@ test nat_roots_logarithms_and_divisors_past_every_width =
         [18446744073709551616, 200, 3833759992447475122176]);
 
 -- The decimal renderer and parser are inverses at any width.
-test nat_renders_and_parses_past_every_width =
+test nat_renders_and_parses_past_every_width =>
     let big = Nat/pow(3, 200);
     Test/all([
         Test/equal(
@@ -40,7 +40,7 @@ test nat_renders_and_parses_past_every_width =
         Test/equal(Nat/of_str(Nat/to_str(big)), Option/some(big))]);
 
 -- The most negative value the machine word held has an absolute value, and subtraction past zero is the genuine negative difference at any width.
-test int_crosses_zero_past_every_width =
+test int_crosses_zero_past_every_width =>
     Test/all([
         Test/equal(Int/abs(-1073741824), 1073741824),
         Test/equal(
@@ -48,7 +48,7 @@ test int_crosses_zero_past_every_width =
             [-1073741825, -99999999999999999999])]);
 
 -- The sign of a product is the product of the signs, and division is Euclid's, its remainder from zero to below the divisor's magnitude whatever the dividend's sign.
-test int_signs_multiply_and_divide_past_every_width =
+test int_signs_multiply_and_divide_past_every_width =>
     Test/equal(
         [
             -99999 * -99999,
@@ -59,7 +59,7 @@ test int_signs_multiply_and_divide_past_every_width =
         [+9999800001, -9999800001, -18446744073709551616, -4294967297, +4294967295]);
 
 -- Order decides by sign first and only then by magnitude, reversed below zero.
-test int_orders_across_signs_past_every_width =
+test int_orders_across_signs_past_every_width =>
     Test/equal(
         [
             Int/ord(-18446744073709551616, -1),
@@ -68,6 +68,6 @@ test int_orders_across_signs_past_every_width =
         [Ordering/lt(), Ordering/lt(), Ordering/gt()]);
 
 -- The signed renderer and parser are inverses at any width.
-test int_renders_and_parses_past_every_width =
+test int_renders_and_parses_past_every_width =>
     let big = +0 - Nat/to_int(Nat/pow(7, 60));
     Test/equal(Int/of_str(Int/to_str(big)), Option/some(big));

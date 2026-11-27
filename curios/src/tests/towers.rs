@@ -71,7 +71,7 @@ fn a_towers_elaborated_rung_prints() {
 /// A mismatch over a tower reports: the type a sixty-line tower of pairs has is shown elided, where its print whole is one no report survives writing.
 #[test]
 fn a_mismatch_over_a_tower_reports() {
-    let mut source = String::from("use /std/{Nat};\n\nlet tower(n: Nat) -> Nat =\n");
+    let mut source = String::from("use /std/{Nat};\n\nlet tower(n: Nat) -> Nat =>\n");
     chain(&mut source, "    ", "x", 60, "(n, n)", |before| {
         format!("({before}, {before})")
     });

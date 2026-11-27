@@ -4,9 +4,9 @@ use {crate::test_support::*, curios_common::fill};
 
 const TWO: &str = r#"
     use /std/{Nat, Bool, Str, Show, print};
-    let first: Show(Nat) = Show { show(n) = "a" };
-    let other: Show(Bool) = Show { show(b) = "b" };
-    let two(@A: Type, use Show(A), @B: Type, use Show(B), a: A, b: B) -> Str =
+    let first: Show(Nat) = Show { show(n) => "a" };
+    let other: Show(Bool) = Show { show(b) => "b" };
+    let two(@A: Type, use Show(A), @B: Type, use Show(B), a: A, b: B) -> Str =>
         Str/concat(Show/show(a), Show/show(b));
 "#;
 
@@ -109,7 +109,7 @@ const BOTH: &str = r#"
     satisfy F(Nat) { f = 2 }
     let e9: E(Nat) = E { e = 9 };
     let f9: F(Nat) = F { f = 9 };
-    let edges(use Both(Nat)) -> Nat = E/e(@Nat) * 10 + F/f(@Nat);
+    let edges(use Both(Nat)) -> Nat => E/e(@Nat) * 10 + F/f(@Nat);
 "#;
 
 // A concept literal's entries follow its declaration: the superclass edges before a field are written from the first, an edge left out or written `use _` is resolved, and `use _` is how the second is written alone.

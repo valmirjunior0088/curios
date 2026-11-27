@@ -5,7 +5,7 @@ use /std/Bool/{True, Holds};
 --- `b` with each zero byte written `0x00 0xFF` and closed by `0x00 0x01`: a run that parts at a byte from any other run so written, in the order of the runs themselves.
 ---
 --- What a derived encoding writes for every part but the last, so a part's encoding orders as the part does whatever follows it, and a text that begins a longer one encodes below it. CockroachDB's ordered keys close a byte string this way, and FoundationDB's tuple layer escapes a zero in one the same way.
-pub let delimited(b: Bytes) -> Bytes =
+pub let delimited(b: Bytes) -> Bytes =>
     match b
     | 0x[] => 0x[0x0, 0x1]
     | 0x[0, ..t] => 0x[0x0, 0xFF, ..delimited(t)]
@@ -17,7 +17,7 @@ let apart(
     x: Bytes,
     y: Bytes,
     under: Eq()(Bytes/ord(x, y), Ordering/lt()),
-) -> Holds(Bytes/ord/below(delimited(x), delimited(y))) =
+) -> Holds(Bytes/ord/below(delimited(x), delimited(y))) =>
     match x
     | 0x[] =>
         match y
@@ -68,7 +68,7 @@ pub let ord(
     u: Bytes,
 ) -> Eq()(
     Bytes/ord(0x[..delimited(x), ..s], 0x[..delimited(y), ..u]),
-    Ordering/then(Bytes/ord(x, y), Bytes/ord(s, u))) =
+    Ordering/then(Bytes/ord(x, y), Bytes/ord(s, u))) =>
     match Bytes/ord(x, y)
     | lt() =>
         Bytes/ord/below/lt(

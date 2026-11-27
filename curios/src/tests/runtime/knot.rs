@@ -8,14 +8,14 @@ fn a_closure_built_by_a_call_inside_a_knot_reaches_a_later_member() {
     assert_eq!(
         run(r#"
         use /std/{Nat, Str, Bytes, Byte, Io, rand, print};
-        let wrap(f: (Nat) -> Nat) -> (Nat) -> Nat = (n) => f(n);
-        let main() -> Io({}) =
+        let wrap(f: (Nat) -> Nat) -> (Nat) -> Nat => (n) => f(n);
+        let main() -> Io({}) =>
             let bs = rand/bytes(1)!;
             let first: (Nat) -> Nat =
                 wrap((n) => match n | 0 => 0 | p + 1 => second(p) end)
             and second: (Nat) -> Nat =
                 wrap((n) => helper(n))
-            and helper(n: Nat) -> Nat = first(n);
+            and helper(n: Nat) -> Nat => first(n);
             let f =
                 match bs
                 | 0x[b, ..rest] => match Byte/to_nat(b) % 2 | 0 => first | _ => second end
@@ -45,11 +45,11 @@ fn an_initializer_calling_a_function_that_reads_a_later_member_forces_it_first()
             run(&fill!(
                 r#"
                 use /std/{Nat, Str, Bytes, Byte, Io, rand, print};
-                let main() -> Io({}) =
+                let main() -> Io({}) =>
                     let bs = rand/bytes(1)!;
                     let base: Nat = Bytes/length(bs) + 40
                     and ${first}
-                    and build(n: Nat) -> Nat = n + size
+                    and build(n: Nat) -> Nat => n + size
                     and ${second};
                     print(Nat/to_str(table));
                 main()
@@ -69,7 +69,7 @@ fn a_member_an_arm_not_taken_reads_is_not_computed() {
         fill!(
             r#"
             use /std/{Bool, Nat, Bytes, Io, rand, print};
-            let main() -> Io({}) =
+            let main() -> Io({}) =>
                 let bs = rand/bytes(1)!;
                 let h: (Bool) -> Nat = (b) => match b | true => d | false => 7 end
                 and d: Nat = Nat/shl(1, Bytes/length(bs) * 200000000000);
@@ -105,7 +105,7 @@ fn a_stepper_a_fold_applies_inside_an_initializer_forces_what_it_reads() {
             run(&fill!(
                 r#"
                 use /std/{Nat, Str, Bytes, Byte, List, Io, rand, print};
-                let main() -> Io({}) =
+                let main() -> Io({}) =>
                     let bs = rand/bytes(1)!;
                     let ${first}
                     and ${second};
@@ -126,7 +126,7 @@ fn a_member_read_through_a_closure_the_verifier_cannot_see_is_forced() {
     assert_eq!(
         run(r#"
         use /std/{Nat, Str, Bytes, Byte, Io, Result, Parse, rand, print};
-        let main() -> Io({}) =
+        let main() -> Io({}) =>
             let bs = rand/bytes(1)!;
             let p: Parse(Bytes, Nat) = Parse/map(Parse/bytes/byte(), (b) => Byte/to_nat(b) + size)
             and n: Nat =
@@ -148,7 +148,7 @@ fn a_cycle_hidden_behind_a_closure_traps_at_the_member_being_forced() {
     let error = error(
         r#"
         use /std/{Nat, Str, Bytes, Byte, Io, Result, Parse, rand, print};
-        let main() -> Io({}) =
+        let main() -> Io({}) =>
             let bs = rand/bytes(1)!;
             let p: Parse(Bytes, Nat) = Parse/map(Parse/bytes/byte(), (b) => Byte/to_nat(b) + n)
             and n: Nat =
@@ -175,7 +175,7 @@ fn a_member_reading_itself_is_refused_before_it_can_trap() {
     let error = error(
         r#"
         use /std/{Nat, Str, Bytes, Io, Result, Parse, rand, print};
-        let main() -> Io({}) =
+        let main() -> Io({}) =>
             let bs = rand/bytes(1)!;
             let p: Parse(Bytes, Nat) = Parse/or(Parse/map(Parse/bytes/byte(), (_) => 1), Parse/map(p, (n) => n));
             match Parse/run(p, bs)
@@ -204,7 +204,7 @@ fn an_initializer_is_read_through_the_arm_its_constructed_scrutinee_takes() {
             concept Same(A: Type): Type { same(A, A) -> Bool, n: Nat }
 
             satisfy Same(Tree) {
-                same(a, b) =
+                same(a, b) =>
                     match a
                     | leaf() => match b | leaf() => true | node(_, _) => false end
                     | node(l, r) => match b | leaf() => false | node(p, q) => Same/same(l, p) && Same/same(r, q) end

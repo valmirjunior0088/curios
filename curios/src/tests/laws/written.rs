@@ -1409,10 +1409,10 @@ fn every_atom_row_and_its_control_is_on_the_side_stated() {
 /// What the rows over calls apart in a universe instance are stated under: a family whose level only sizes its parameter, and three recursive definitions over it. Every written call of one takes a level of its own, which nothing ties to another call's and no unfolding settles, a member reproducing its levels at every step.
 const INSTANCES: &str = "use /std/Bool/{True};
 induct Tree(K: Type): Type | tip(K) | join(Tree(K), Tree(K)) end
-let even(@K: Type, t: Tree(K)) -> Bool = match t | tip(_) => true | join(l, r) => even(l) && even(r) end;
-let size(@K: Type, t: Tree(K)) -> Nat = match t | tip(_) => 1 | join(l, r) => size(l) + size(r) end;
-let heft(@K: Type, t: Tree(K)) -> Flt = match t | tip(_) => 1.0 | join(l, r) => heft(l) + heft(r) end;
-let span(@K: Type, t: Tree(K)) -> Nat = match t | tip(_) => 2 | join(l, r) => span(l) + span(r) end;";
+let even(@K: Type, t: Tree(K)) -> Bool => match t | tip(_) => true | join(l, r) => even(l) && even(r) end;
+let size(@K: Type, t: Tree(K)) -> Nat => match t | tip(_) => 1 | join(l, r) => size(l) + size(r) end;
+let heft(@K: Type, t: Tree(K)) -> Flt => match t | tip(_) => 1.0 | join(l, r) => heft(l) + heft(r) end;
+let span(@K: Type, t: Tree(K)) -> Nat => match t | tip(_) => 2 | join(l, r) => span(l) + span(r) end;";
 
 /// The binders every instance row is stated under.
 const INSTANCE_BINDERS: &str = "@K: Type, l: Tree(K), r: Tree(K), t: Tree(K)";
@@ -1524,7 +1524,7 @@ fn a_hypothesis_over_two_calls_is_handed_on_at_arguments_that_convert() {
     let held = "held: Eq()(size(f(x + y)) + size(f(z + w)), n)";
     let source = |stepped: &str| {
         format!(
-            "{IMPORTS}\n{INSTANCES}\nlet stepped({ARGUMENT_BINDERS}, n: Nat, {held}) -> {stepped} = held;\nIo/pure(())"
+            "{IMPORTS}\n{INSTANCES}\nlet stepped({ARGUMENT_BINDERS}, n: Nat, {held}) -> {stepped} => held;\nIo/pure(())"
         )
     };
     let handed = source("Eq()(size(f(w + z)) + size(f(y + x)), n)");
@@ -1537,7 +1537,7 @@ fn a_guard_over_two_calls_states_its_fact_in_either_order() {
     // An arm's equation answers the terms the readers hold equal to its scrutinee, and they hold a conjunction of two calls one with its commutation written apart.
     for fact in ["even(l) && even(r)", "even(r) && even(l)"] {
         let source = format!(
-            "{IMPORTS}\n{INSTANCES}\nlet guarded({INSTANCE_BINDERS}) -> Nat =\n    match even(l) && even(r)\n    | true =>\n        let fact: Holds({fact}) = True/qed();\n        0\n    | false => 1\n    end;\nIo/pure(())"
+            "{IMPORTS}\n{INSTANCES}\nlet guarded({INSTANCE_BINDERS}) -> Nat =>\n    match even(l) && even(r)\n    | true =>\n        let fact: Holds({fact}) = True/qed();\n        0\n    | false => 1\n    end;\nIo/pure(())"
         );
         typecheck(&source).unwrap_or_else(|error| panic!("`{fact}`: {error}"));
     }
@@ -1671,11 +1671,11 @@ fn a_float_law_carried_to_where_it_is_most_fragile_carries_only_true() {
             use /std/{Flt, Bytes, Eq, Io};
             use /std/Bool/{True, False, Holds};
 
-            let left(a: Flt, b: Flt, c: Flt) -> Flt = ${left};
-            let right(a: Flt, b: Flt, c: Flt) -> Flt = ${right};
-            let law(a: Flt, b: Flt, c: Flt) -> Eq()(left(a, b, c), right(a, b, c)) = Eq/refl();
+            let left(a: Flt, b: Flt, c: Flt) -> Flt => ${left};
+            let right(a: Flt, b: Flt, c: Flt) -> Flt => ${right};
+            let law(a: Flt, b: Flt, c: Flt) -> Eq()(left(a, b, c), right(a, b, c)) => Eq/refl();
 
-            let at(f: Flt) -> Prop = Holds(Bytes/eql(Flt/to_le_bytes(f), Flt/to_le_bytes(left(${a}, ${b}, ${c}))));
+            let at(f: Flt) -> Prop => Holds(Bytes/eql(Flt/to_le_bytes(f), Flt/to_le_bytes(left(${a}, ${b}, ${c}))));
             let _forged: False = Eq/subst(at, law(${a}, ${b}, ${c}), True/qed());
 
             Io/pure(())
@@ -1695,7 +1695,7 @@ fn a_float_law_carried_to_where_it_is_most_fragile_carries_only_true() {
 }
 
 /// What the rows over a recursive function are stated under: one whose body multiplies two of its own calls, so two calls that differ unfold to products nothing pairs, whose atoms are the same two calls one step on.
-const RECURSIVE: &str = "use /std/{Nat, Eq, Io};\nlet twice(c: Nat, n: Nat) -> Nat = match n == 0 | true => c | false => twice(c, n / 2) * twice(c, n / 2) end;";
+const RECURSIVE: &str = "use /std/{Nat, Eq, Io};\nlet twice(c: Nat, n: Nat) -> Nat => match n == 0 | true => c | false => twice(c, n / 2) * twice(c, n / 2) end;";
 
 #[test]
 fn two_calls_of_a_recursive_function_that_differ_are_refused() {
@@ -1714,7 +1714,7 @@ fn two_calls_of_a_recursive_function_that_differ_are_refused() {
 
     // The same comparison where the second call's argument is an implicit to solve.
     let solved = format!(
-        "{RECURSIVE}\nlet solved(x: Nat, y: Nat, lemma: (@b: Nat, n: Nat, e: Eq()(n, twice(2, b))) -> Nat) -> Nat = lemma(twice(x, y), Eq/refl());\nIo/pure(())"
+        "{RECURSIVE}\nlet solved(x: Nat, y: Nat, lemma: (@b: Nat, n: Nat, e: Eq()(n, twice(2, b))) -> Nat) -> Nat => lemma(twice(x, y), Eq/refl());\nIo/pure(())"
     );
     assert!(typecheck(&solved).is_err());
 }
@@ -1723,14 +1723,14 @@ fn two_calls_of_a_recursive_function_that_differ_are_refused() {
 const UNFOLDED: &str = "use /std/{Nat, Int, Bool, List, Eq, Io};
 induct T: Type | b(n: Nat) end
 induct Mode: Type | near() | far() end
-let g(n: Nat) -> Nat = match n == 3 | true => 7 | false => n end;
-let k(n: Nat, s: Bool) -> Nat = match s | true => n + 1 | false => 0 end;
-let weigh(ts: List(T)) -> Nat = List/fold(ts, 0, (t, acc) => match t | b(n) => acc + n end);
-let step(m: Nat, mode: Mode) -> Int = let up = match mode | near() => m * m > 5 | far() => false end; Nat/to_int(match up | true => 1 | false => 0 end);
-let summed(a: Nat, c: Nat, mode: Mode) -> Int = step(g(a + c), mode);
-let commuted(a: Nat, c: Nat, mode: Mode) -> Int = step(g(c + a), mode);
-let given(ps: List(Nat), mode: Mode) -> Int = step(weigh(List/map(@_, @T, ps, (n) => T/b(n))), mode);
-let solved(ps: List(Nat), mode: Mode) -> Int = step(weigh(List/map(ps, (n) => T/b(n))), mode);";
+let g(n: Nat) -> Nat => match n == 3 | true => 7 | false => n end;
+let k(n: Nat, s: Bool) -> Nat => match s | true => n + 1 | false => 0 end;
+let weigh(ts: List(T)) -> Nat => List/fold(ts, 0, (t, acc) => match t | b(n) => acc + n end);
+let step(m: Nat, mode: Mode) -> Int => let up = match mode | near() => m * m > 5 | far() => false end; Nat/to_int(match up | true => 1 | false => 0 end);
+let summed(a: Nat, c: Nat, mode: Mode) -> Int => step(g(a + c), mode);
+let commuted(a: Nat, c: Nat, mode: Mode) -> Int => step(g(c + a), mode);
+let given(ps: List(Nat), mode: Mode) -> Int => step(weigh(List/map(@_, @T, ps, (n) => T/b(n))), mode);
+let solved(ps: List(Nat), mode: Mode) -> Int => step(weigh(List/map(ps, (n) => T/b(n))), mode);";
 
 /// The binders the rows over calls met unfolded are stated over, swept.
 const UNFOLDED_BINDERS: &[Binder] = &[
@@ -1842,7 +1842,7 @@ fn a_goal_under_binders_of_another_type_is_compared() {
 }
 
 /// What the rows over two recursions are stated under: one recursion written with its step's sum both ways; the second spelling again from another base case, by another step, and in a group with a member more; one recursion over two orders of its arguments; and one whose first argument every call hands on.
-const TWO_RECURSIONS: &str = "use /std/{Nat, Eq, Io};\nlet f(n: Nat) -> Nat = match n | 0 => 0 | k + 1 => f(k) + 2 end;\nlet h(n: Nat) -> Nat = match n | 0 => 0 | k + 1 => 2 + h(k) end;\nlet based(n: Nat) -> Nat = match n | 0 => 1 | k + 1 => 2 + based(k) end;\nlet stepped(n: Nat) -> Nat = match n | 0 => 0 | k + 1 => 3 + stepped(k) end;\nlet paired(n: Nat) -> Nat = match n | 0 => _spare(0) | k + 1 => 2 + paired(k) end\nand _spare(n: Nat) -> Nat = match n | 0 => 0 | k + 1 => paired(k) end;\nlet over(n: Nat, x: Nat) -> Nat = match n | 0 => x | k + 1 => over(k, x) + 1 end;\nlet flipped(x: Nat, n: Nat) -> Nat = match n | 0 => x | k + 1 => 1 + flipped(x, k) end;\nlet halving(c: Nat, n: Nat) -> Nat = match n == 0 | true => 0 | false => halving(c, n / 2) end;";
+const TWO_RECURSIONS: &str = "use /std/{Nat, Eq, Io};\nlet f(n: Nat) -> Nat => match n | 0 => 0 | k + 1 => f(k) + 2 end;\nlet h(n: Nat) -> Nat => match n | 0 => 0 | k + 1 => 2 + h(k) end;\nlet based(n: Nat) -> Nat => match n | 0 => 1 | k + 1 => 2 + based(k) end;\nlet stepped(n: Nat) -> Nat => match n | 0 => 0 | k + 1 => 3 + stepped(k) end;\nlet paired(n: Nat) -> Nat => match n | 0 => _spare(0) | k + 1 => 2 + paired(k) end\nand _spare(n: Nat) -> Nat => match n | 0 => 0 | k + 1 => paired(k) end;\nlet over(n: Nat, x: Nat) -> Nat => match n | 0 => x | k + 1 => over(k, x) + 1 end;\nlet flipped(x: Nat, n: Nat) -> Nat => match n | 0 => x | k + 1 => 1 + flipped(x, k) end;\nlet halving(c: Nat, n: Nat) -> Nat => match n == 0 | true => 0 | false => halving(c, n / 2) end;";
 
 #[test]
 fn two_recursive_functions_whose_bodies_convert_are_one() {
@@ -1916,7 +1916,7 @@ fn a_step_taken_through_an_annotation_is_one_the_certifier_takes_in_one() {
     ];
     for binders in orders(&binders, ATOM_ORDERS) {
         let source = fill!(
-            "use /std/{Nat, Vec, Io}; use /std/Bool/{Holds};\npub let stepped(${binders}) -> Vec(Nat, w(b, q2) * w(a, p2)) =\n    let through: Vec(Nat, w(a, p2) * w(b, q1)) = v;\n    through;\nIo/pure(())",
+            "use /std/{Nat, Vec, Io}; use /std/Bool/{Holds};\npub let stepped(${binders}) -> Vec(Nat, w(b, q2) * w(a, p2)) =>\n    let through: Vec(Nat, w(a, p2) * w(b, q1)) = v;\n    through;\nIo/pure(())",
             binders
         );
         if let Err(error) = typecheck(&source) {
@@ -1938,9 +1938,9 @@ fn a_fact_over_an_operation_is_one_over_its_other_spelling() {
     for binders in orders(&binders, ATOM_ORDERS) {
         let source = fill!(
             "${IMPORTS} use /std/Bool/{True};\n\
-             let direct(${binders}, ${held}) -> ${stepped} = held;\n\
-             let through(${binders}, ${held}) -> ${stepped} =\n    let step: Holds(Nat/or(y, x) + Nat/xor(z, w) == 7) = held;\n    step;\n\
-             let armed(${binders}) -> Nat =\n    match Nat/and(x, y) + n == 3\n    | true =>\n        let fact: Holds(n + Nat/and(y, x) == 3) = True/qed();\n        0\n    | false => 1\n    end;\n\
+             let direct(${binders}, ${held}) -> ${stepped} => held;\n\
+             let through(${binders}, ${held}) -> ${stepped} =>\n    let step: Holds(Nat/or(y, x) + Nat/xor(z, w) == 7) = held;\n    step;\n\
+             let armed(${binders}) -> Nat =>\n    match Nat/and(x, y) + n == 3\n    | true =>\n        let fact: Holds(n + Nat/and(y, x) == 3) = True/qed();\n        0\n    | false => 1\n    end;\n\
              Io/pure(())",
             IMPORTS,
             binders,
@@ -1958,7 +1958,7 @@ fn implicit_under(operation: &str, result: &str, body: &str) -> Vec<String> {
     ["a: Nat, b: Nat", "b: Nat, a: Nat"]
         .iter()
         .map(|declared| {
-            fill!("use /std/{Nat, Vec, Io};\npub let item(${declared}, g: (@x: Nat, @y: Nat, v: Vec(Nat, x ${operation} y)) -> Vec(Nat, x), w: Vec(Nat, a ${operation} b)) -> ${result} =\n    ${body};\nIo/pure(())", declared, operation, result, body)
+            fill!("use /std/{Nat, Vec, Io};\npub let item(${declared}, g: (@x: Nat, @y: Nat, v: Vec(Nat, x ${operation} y)) -> Vec(Nat, x), w: Vec(Nat, a ${operation} b)) -> ${result} =>\n    ${body};\nIo/pure(())", declared, operation, result, body)
         })
         .collect()
 }
@@ -1993,7 +1993,7 @@ fn an_implicit_with_one_solution_is_solved_through_a_commutative_operation() {
 /// A function whose one implicit stands under `pattern`, applied to a vector of `actual` elements where nothing but that equation says what the implicit is: no type is expected of the call, and the item's own result does not mention it. `body` is what follows the call's binding to `r`.
 fn linear_in(pattern: &str, actual: &str, body: &str) -> String {
     fill!(
-        "use /std/{Nat, Vec, Io};\npub let item(x: Nat, y: Nat, z: Nat, g: (@w: Nat, v: Vec(Nat, ${pattern})) -> Vec(Nat, w), v: Vec(Nat, ${actual})) -> {} =\n    let r = g(v);\n    ${body};\nIo/pure(())",
+        "use /std/{Nat, Vec, Io};\npub let item(x: Nat, y: Nat, z: Nat, g: (@w: Nat, v: Vec(Nat, ${pattern})) -> Vec(Nat, w), v: Vec(Nat, ${actual})) -> {} =>\n    let r = g(v);\n    ${body};\nIo/pure(())",
         pattern,
         actual,
         body
@@ -2048,7 +2048,7 @@ fn a_metavariable_no_division_solves_is_left_undecided() {
 fn a_mismatch_nothing_compared_says_so() {
     let refusal = |binders: &str, claim: &str| {
         typecheck(&format!(
-            "{IMPORTS}\nlet law({binders}) -> {claim} = Eq/refl();\nIo/pure(())"
+            "{IMPORTS}\nlet law({binders}) -> {claim} => Eq/refl();\nIo/pure(())"
         ))
         .expect_err("the claim is no law conversion decides")
     };
@@ -2080,7 +2080,7 @@ fn a_promoted_operation_under_a_guard_reads_no_arm_and_a_lemma_converts_it() {
     let header = "use /std/{Nat, Int, Eq, Io, proved}; use /std/Bool/{Holds};";
     let under = |carrier: &str, operation: &str, kept: &str, proof: &str| {
         format!(
-            "{header}\npub let row(a: {carrier}, b: {carrier}) -> Nat = match a <= b | true => let _: Eq()({carrier}/{operation}(a, b), {kept}) = {proof}; 0 | false => 1 end;\nIo/pure(())"
+            "{header}\npub let row(a: {carrier}, b: {carrier}) -> Nat => match a <= b | true => let _: Eq()({carrier}/{operation}(a, b), {kept}) = {proof}; 0 | false => 1 end;\nIo/pure(())"
         )
     };
     for (carrier, operation, kept, lemma) in [
@@ -2100,7 +2100,7 @@ fn a_promoted_operation_under_a_guard_reads_no_arm_and_a_lemma_converts_it() {
     // An `abs` widened back and a `sign` read no arm either: under a guard on `+0 <= a` each is the node it was, and `Int/abs/of_non_neg` and `Int/sign/of_not_neg` over the arm's fact are the step.
     let widened = |proof: &str| {
         format!(
-            "{header}\npub let row(a: Int) -> Nat = match +0 <= a | true => let _: Eq()(Nat/to_int(Int/abs(a)), a) = {proof}; 0 | false => 1 end;\nIo/pure(())"
+            "{header}\npub let row(a: Int) -> Nat => match +0 <= a | true => let _: Eq()(Nat/to_int(Int/abs(a)), a) = {proof}; 0 | false => 1 end;\nIo/pure(())"
         )
     };
     assert!(typecheck(&widened("Eq/refl()")).is_err());
@@ -2109,7 +2109,7 @@ fn a_promoted_operation_under_a_guard_reads_no_arm_and_a_lemma_converts_it() {
     }
     let signed = |proof: &str| {
         format!(
-            "{header}\npub let row(a: Int) -> Nat = match +0 < a | true => let _: Eq()(Int/sign(a), +1) = {proof}; 0 | false => 1 end;\nIo/pure(())"
+            "{header}\npub let row(a: Int) -> Nat => match +0 < a | true => let _: Eq()(Int/sign(a), +1) = {proof}; 0 | false => 1 end;\nIo/pure(())"
         )
     };
     assert!(typecheck(&signed("Eq/refl()")).is_err());
@@ -2119,11 +2119,11 @@ fn a_promoted_operation_under_a_guard_reads_no_arm_and_a_lemma_converts_it() {
 
     // Under a hypothesis as under a guard, and commuted there as anywhere.
     let stated = format!(
-        "{header}\npub let row(a: Nat, b: Nat, p: Holds(a <= b)) -> Eq()(Nat/min(a, b), a) = Eq/refl();\nIo/pure(())"
+        "{header}\npub let row(a: Nat, b: Nat, p: Holds(a <= b)) -> Eq()(Nat/min(a, b), a) => Eq/refl();\nIo/pure(())"
     );
     assert!(typecheck(&stated).is_err());
     let commuted = format!(
-        "{header}\npub let row(a: Nat, b: Nat, p: Holds(a <= b)) -> Eq()(Nat/min(a, b), Nat/min(b, a)) = Eq/refl();\nIo/pure(())"
+        "{header}\npub let row(a: Nat, b: Nat, p: Holds(a <= b)) -> Eq()(Nat/min(a, b), Nat/min(b, a)) => Eq/refl();\nIo/pure(())"
     );
     if let Err(error) = typecheck(&commuted) {
         panic!("a `min` does not commute under a hypothesis:\n{error}");

@@ -10,13 +10,13 @@ use {
 
 const STATING: &str = r#"
     use /std/{Flt, Bool, Nat, Option, List, Proc, Str};
-    let scale(stated_flt : Flt, stated_flag : Bool) -> Flt =
+    let scale(stated_flt : Flt, stated_flag : Bool) -> Flt =>
         match stated_flag | true => stated_flt * +2.0 | false => stated_flt end;
-    let poly(A : Type, poly_value : A) -> A = poly_value;
-    let Held(b : Bool) -> Type = match b | true => Flt | false => Str end;
-    let held(b : Bool, held_value : Held(b)) -> Held(b) = held_value;
-    let pick(o : Option(Flt)) -> Flt = match o | some(payload_flt) => payload_flt | none() => +0.0 end;
-    let entry() -> /std/Io({}) =
+    let poly(A : Type, poly_value : A) -> A => poly_value;
+    let Held(b : Bool) -> Type => match b | true => Flt | false => Str end;
+    let held(b : Bool, held_value : Held(b)) -> Held(b) => held_value;
+    let pick(o : Option(Flt)) -> Flt => match o | some(payload_flt) => payload_flt | none() => +0.0 end;
+    let entry() -> /std/Io({}) =>
         let counted_nat = List/length(Proc/args()!);
         let called_flt = scale(Nat/to_flt(counted_nat), counted_nat % 2 == 0);
         let instantiated_flt = poly(Flt, called_flt);

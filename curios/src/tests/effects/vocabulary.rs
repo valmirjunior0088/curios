@@ -23,7 +23,7 @@ fn bang_sequences_a_description_like_an_explicit_bind() {
         use /std/{Io, print};
         let a : Io({}) = print("a");
         let b : Io({}) = print("b");
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let _ = a!;
             b;
         entry()
@@ -51,7 +51,7 @@ fn bind_passes_the_action_result_to_its_continuation() {
 fn a_description_bound_once_and_forced_twice_performs_twice() {
     let source = r#"
         use /std/{Io, print};
-        let step(_ : {}) -> Io({}) = print("x");
+        let step(_ : {}) -> Io({}) => print("x");
         let a : Io({}) = Io/bind(Io/pure(()), step);
         Io/bind(a, (_) => a)
         "#;
@@ -106,8 +106,8 @@ fn a_program_cannot_register_a_second_monad_witness_for_io() {
         use /std/{Io, Monad};
 
         satisfy Monad(Io) {
-            pure(x) = /sys/Io/pure(x),
-            bind(m, f) = /sys/Io/bind(m, f),
+            pure(x) => /sys/Io/pure(x),
+            bind(m, f) => /sys/Io/bind(m, f),
         }
 
         Io/pure(())
@@ -129,16 +129,16 @@ fn state_threads_through_a_bang_region() {
     let source = r#"
         use /std/{Nat, State, print};
         use /std/State/{change, get, set, update};
-        pub let fresh() -> State(Nat, Nat) =
+        pub let fresh() -> State(Nat, Nat) =>
             let n = get()!;
             let _ = set(n + 1)!;
             State/pure(n);
-        pub let steps() -> State(Nat, {Nat, Nat}) =
+        pub let steps() -> State(Nat, {Nat, Nat}) =>
             let a = fresh()!;
             let _ = update((n) => n * 2)!;
             let b = change((s) => (s + 1, s))!;
             State/pure((a, b));
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let out = State/run(steps(), 3);
             let _ = print(Nat/to_str(out.1.0))!;
             let _ = print(Nat/to_str(out.1.1))!;
@@ -155,7 +155,7 @@ fn state_threads_through_a_bang_region() {
 fn a_state_region_cannot_perform_io() {
     let source = r#"
         use /std/{Nat, State, print};
-        pub let leak() -> State(Nat, {}) =
+        pub let leak() -> State(Nat, {}) =>
             let _ = print("effect")!;
             State/pure(());
         let out = State/run(leak(), 0);
@@ -177,15 +177,15 @@ fn a_raise_short_circuits_the_region() {
     let source = r#"
         use /std/{Nat, Str, Result, print};
         use /std/Result/{raise, rescue};
-        pub let checked_div(a: Nat, b: Nat) -> Result(Str, Nat) =
+        pub let checked_div(a: Nat, b: Nat) -> Result(Str, Nat) =>
             match 0 < b
             | false => raise("division by zero")
             | true => Result/pure(a / b)
             end;
-        pub let compute(a: Nat, b: Nat) -> Result(Str, Nat) =
+        pub let compute(a: Nat, b: Nat) -> Result(Str, Nat) =>
             let q = checked_div(a, b)!;
             Result/pure(q + 1);
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let ok =
                 match compute(10, 2)
                 | success(n) => Nat/to_str(n)
@@ -210,7 +210,7 @@ fn a_raise_short_circuits_the_region() {
 fn a_result_value_sequences_in_a_result_region() {
     let source = r#"
         use /std/{Nat, Str, Result, print};
-        pub let add_pair(a: Result(Str, Nat), b: Result(Str, Nat)) -> Result(Str, Nat) =
+        pub let add_pair(a: Result(Str, Nat), b: Result(Str, Nat)) -> Result(Str, Nat) =>
             let x = a!;
             let y = b!;
             Result/success(x + y);
@@ -232,11 +232,11 @@ fn a_result_computed_from_a_settled_argument_is_read() {
         fill!(
             r#"
             use /std/{Str, Nat, Bool, Try, Io, Monad, print};
-            let Shape(b: ${argument}) -> Type =
+            let Shape(b: ${argument}) -> Type =>
                 match b | ${first} => Io({}) | ${rest} => Nat end;
-            let say(b: ${argument}) -> Shape(b) =
+            let say(b: ${argument}) -> Shape(b) =>
                 match b | ${first} => print("said\n") | ${rest} => 0 end;
-            let execute() -> Try(Io, Str, {}) =
+            let execute() -> Try(Io, Str, {}) =>
                 ${tail};
             execute()
             "#,

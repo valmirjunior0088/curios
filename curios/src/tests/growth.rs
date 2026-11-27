@@ -47,7 +47,7 @@ fn elaborates(source: &str) -> Result<(), String> {
 
 /// `f(n)`, `size` calls of `step` in its body, each at the answer of the one before it, ending in the sum of every answer: each stays live to the end.
 fn kept_calls(size: usize) -> String {
-    let mut body = "let step(n: Nat) -> Nat =\n    match n | 0 => 1 | m + 1 => (step(m) * 3 + 1) % 1000003 end;\n\nlet f(n: Nat) -> Nat =\n    let x0 = n;\n".to_string();
+    let mut body = "let step(n: Nat) -> Nat =>\n    match n | 0 => 1 | m + 1 => (step(m) * 3 + 1) % 1000003 end;\n\nlet f(n: Nat) -> Nat =>\n    let x0 = n;\n".to_string();
     for index in 1..=size {
         writeln!(body, "    let x{index} = step(x{});", index - 1).expect("a string takes a line");
     }
@@ -197,7 +197,7 @@ fn a_struct_past_the_engine_s_fields_spills_into_a_trailing_struct() {
     let last = width - 1;
     let structure = program(
         &fill!(
-            "struct Wide: Type { ${fields} }\n\nlet f(a: Nat) -> Nat =\n    let w = Wide { ${named} };\n    w.x${last};\n",
+            "struct Wide: Type { ${fields} }\n\nlet f(a: Nat) -> Nat =>\n    let w = Wide { ${named} };\n    w.x${last};\n",
             fields,
             named,
             last,
@@ -210,7 +210,7 @@ fn a_struct_past_the_engine_s_fields_spills_into_a_trailing_struct() {
     let binders = joined((0..width).map(|index| format!("x{index}")), ", ");
     let constructor = program(
         &fill!(
-            "induct Wide: Type\n| make(${payload})\nend\n\nlet f(a: Nat) -> Nat = match Wide/make(${values}) | make(${binders}) => x${last} end;\n",
+            "induct Wide: Type\n| make(${payload})\nend\n\nlet f(a: Nat) -> Nat => match Wide/make(${values}) | make(${binders}) => x${last} end;\n",
             payload,
             values,
             binders,
@@ -223,7 +223,7 @@ fn a_struct_past_the_engine_s_fields_spills_into_a_trailing_struct() {
     let wide = repeated("Nat", width, ", ");
     let tuple = program(
         &fill!(
-            "let pick(n: Nat, t: {${wide}}) -> Nat = match n | 0 => t.${last} | _ => pick(n - 1, t) end;\n\nlet f(a: Nat) -> Nat =\n    let t = (${values});\n    pick(a, t) + pick(a + 1, t);\n",
+            "let pick(n: Nat, t: {${wide}}) -> Nat => match n | 0 => t.${last} | _ => pick(n - 1, t) end;\n\nlet f(a: Nat) -> Nat =>\n    let t = (${values});\n    pick(a, t) + pick(a + 1, t);\n",
             wide,
             last,
             values,
@@ -243,7 +243,7 @@ fn a_closure_capturing_past_the_engine_s_fields_spills_its_environment() {
     let captured = joined((0..width).map(|index| format!("x{index}")), " + ");
     let source = program(
         &fill!(
-            "use /std/{List};\n\nlet apply(gs: List((Nat) -> Nat), n: Nat) -> Nat = match gs | [g, .._] => g(n) | [] => n end;\n\nlet f(a: Nat) -> Nat =\n${lets}    apply([(n: Nat) => n + ${captured}, (n: Nat) => n], a);\n",
+            "use /std/{List};\n\nlet apply(gs: List((Nat) -> Nat), n: Nat) -> Nat => match gs | [g, .._] => g(n) | [] => n end;\n\nlet f(a: Nat) -> Nat =>\n${lets}    apply([(n: Nat) => n + ${captured}, (n: Nat) => n], a);\n",
             lets,
             captured,
         ),
@@ -262,7 +262,7 @@ fn a_signature_past_the_engine_s_parameters_or_results_spills_into_a_struct() {
     let arguments = joined((0..width).map(|index| format!("n + {index}")), ", ");
     let parameters = program(
         &fill!(
-            "use /std/{List};\n\nlet apply(gs: List((${arrow}) -> Nat), n: Nat) -> Nat = match gs | [g, .._] => g(${arguments}) | [] => n end;\n\nlet f(a: Nat) -> Nat = apply([(${typed}) => x0 + x${last}, (${typed}) => x1], a);\n",
+            "use /std/{List};\n\nlet apply(gs: List((${arrow}) -> Nat), n: Nat) -> Nat => match gs | [g, .._] => g(${arguments}) | [] => n end;\n\nlet f(a: Nat) -> Nat => apply([(${typed}) => x0 + x${last}, (${typed}) => x1], a);\n",
             arrow,
             arguments,
             typed,
@@ -275,7 +275,7 @@ fn a_signature_past_the_engine_s_parameters_or_results_spills_into_a_struct() {
     let elements = joined((0..width).map(|index| format!("a + {index}")), ", ");
     let results = program(
         &fill!(
-            "let g(n: Nat, a: Nat) -> {${arrow}} = match n | 0 => (${elements}) | _ => g(n - 1, a + 1) end;\n\nlet f(a: Nat) -> Nat = g(a, a).${last} + g(a + 1, a).0;\n",
+            "let g(n: Nat, a: Nat) -> {${arrow}} => match n | 0 => (${elements}) | _ => g(n - 1, a + 1) end;\n\nlet f(a: Nat) -> Nat => g(a, a).${last} + g(a + 1, a).0;\n",
             arrow,
             elements,
             last,

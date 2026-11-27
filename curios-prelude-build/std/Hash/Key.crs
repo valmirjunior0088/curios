@@ -24,7 +24,7 @@ pub let inj(
     a: K,
     b: K,
     same: Eq()(Hash/hash(a), Hash/hash(b)),
-) -> Eq()(a, b) =
+) -> Eq()(a, b) =>
     Ord/eq(
         a,
         b,
@@ -42,7 +42,7 @@ pub let same(
     a: K,
     b: K,
     h: Holds(Hash/hash(a) == Hash/hash(b)),
-) -> Eq()(a, b) =
+) -> Eq()(a, b) =>
     inj(a, b, proved());
 
 --- Two keys whose encodings compare unequal are two keys: one key encodes as itself.
@@ -52,7 +52,7 @@ pub let apart(
     a: K,
     b: K,
     h: Holds(Bool/not(Hash/hash(a) == Hash/hash(b))),
-) -> (Eq()(b, a)) -> False =
+) -> (Eq()(b, a)) -> False =>
     (same) => Eq/subst((y: K) => Holds(Bool/not(Hash/hash(a) == Hash/hash(y))), same, h);
 
 -- The part's answer read off its encodings, the encodings' delimited order read as their step, and the two steps taken in turn.
@@ -69,7 +69,7 @@ pub let then(
     later: Eq()(whole, Ordering/then(Ordering/then(acc, o), Bytes/ord(s, u))),
 ) -> Eq()(
     whole,
-    Ordering/then(acc, Bytes/ord(0x[..Hash/delimited(x), ..s], 0x[..Hash/delimited(y), ..u]))) =
+    Ordering/then(acc, Bytes/ord(0x[..Hash/delimited(x), ..s], 0x[..Hash/delimited(y), ..u]))) =>
     Eq/trans(
         later,
         Eq/trans(
@@ -87,5 +87,5 @@ pub let last(
     x: Bytes,
     y: Bytes,
     part: Eq()(o, Bytes/ord(x, y)),
-) -> Eq()(Ordering/then(acc, o), Ordering/then(acc, Bytes/ord(x, y))) =
+) -> Eq()(Ordering/then(acc, o), Ordering/then(acc, Bytes/ord(x, y))) =>
     Eq/cong((p: Ordering) => Ordering/then(acc, p), part);

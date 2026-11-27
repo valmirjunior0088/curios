@@ -135,7 +135,7 @@ fn lints_are_reported_after_a_goal_and_after_an_error() {
 /// A binder only a proof the elaborator wrote reads is used: `p` is read by the proof `proved` stands for and `q` by nothing, and that holds beside an error elsewhere as beside none.
 #[test]
 fn a_binder_only_a_proof_the_elaborator_wrote_reads_is_not_reported() {
-    let credited = "use /std/{Nat, proved}; use /std/Bool/{Holds};\nlet _f(i: Nat, n: Nat, p: Holds(i < n), q: Holds(i < 3)) -> Holds(i <= n) = proved();\n";
+    let credited = "use /std/{Nat, proved}; use /std/Bool/{Holds};\nlet _f(i: Nat, n: Nat, p: Holds(i < n), q: Holds(i < 3)) -> Holds(i <= n) => proved();\n";
     let lints = |source: &str| {
         of(source)
             .into_iter()
@@ -155,7 +155,7 @@ fn a_binder_only_a_proof_the_elaborator_wrote_reads_is_not_reported() {
 /// A telescope's binder nothing reads is no unused binder, though it is kept where it stands: a family's parameter, a payload's binder and a function type's parameter.
 #[test]
 fn a_telescopes_binder_nothing_reads_is_not_reported() {
-    let telescopes = "induct _Shape(A: Type, Spare: Type): Type\n| dot(size: /std/Nat)\nend\nlet _apply(f: (x: /std/Nat) -> /std/Nat) -> /std/Nat = f(1);\n/std/print(\"\")";
+    let telescopes = "induct _Shape(A: Type, Spare: Type): Type\n| dot(size: /std/Nat)\nend\nlet _apply(f: (x: /std/Nat) -> /std/Nat) -> /std/Nat => f(1);\n/std/print(\"\")";
 
     let reports = of(telescopes);
     assert!(reports.is_empty(), "{reports:?}");
@@ -242,7 +242,7 @@ fn a_library_reports_an_ill_typed_test_without_compiling_a_tail() {
     write(
         &root,
         "b/lib.crs",
-        "use /std/{Test};\n\ntest broken =\n    Test/assert(\"it holds\", \"no\");\n",
+        "use /std/{Test};\n\ntest broken =>\n    Test/assert(\"it holds\", \"no\");\n",
     );
     let diagnostics = diagnostics(
         DEFAULT_BUDGET,
@@ -303,9 +303,9 @@ fn a_withheld_witness_leaves_its_consumers_silent() {
     let reports = of(concat!(
         "use /std/{Nat, Show, Str};\n\n",
         "pub struct Meters: pub Type { Nat }\n\n",
-        "pub let label(m: Meters) -> Str = ;\n\n",
-        "satisfy Show(Meters) {\n    show(m) = label(m),\n}\n\n",
-        "pub let render(m: Meters) -> Str = Show/show(m);\n\n",
+        "pub let label(m: Meters) -> Str => ;\n\n",
+        "satisfy Show(Meters) {\n    show(m) => label(m),\n}\n\n",
+        "pub let render(m: Meters) -> Str => Show/show(m);\n\n",
         "/std/print(\"\")\n",
     ));
 

@@ -10,7 +10,7 @@ fn a_type_under_a_local_witness_reads_back() {
     let source = r#"
         use /std/{Nat, Show};
         pub struct Box(A: Type, use Show(A)): pub Type { value: A }
-        pub let v(@A: Type, use Show(A), x: Box(A)) -> Nat = 0;
+        pub let v(@A: Type, use Show(A), x: Box(A)) -> Nat => 0;
         pub let t: ? = v;
         /std/print("")
     "#;
@@ -24,7 +24,7 @@ fn a_type_under_a_global_witness_reads_back() {
     let source = r#"
         use /std/{Nat, Show};
         pub struct Box(A: Type, use Show(A)): pub Type { value: A }
-        pub let u(x: Box(Nat)) -> Nat = 0;
+        pub let u(x: Box(Nat)) -> Nat => 0;
         pub let t: ? = u;
         /std/print("")
     "#;
@@ -38,7 +38,7 @@ fn a_table_witness_reads_back_past_a_binder_at_another_argument() {
     let source = r#"
         use /std/{Nat, Show};
         pub struct Box(A: Type, use Show(A)): pub Type { value: A }
-        pub let v(@A: Type, use Show(A), x: Box(Nat)) -> Nat = 0;
+        pub let v(@A: Type, use Show(A), x: Box(Nat)) -> Nat => 0;
         pub let t: ? = v;
         /std/print("")
     "#;
@@ -55,7 +55,7 @@ fn a_table_witness_reads_back_past_a_superclass_at_another_argument() {
             use /std/{Nat};
             use /std/ops/{Eql, Ord};
             pub struct Box(A: Type, use Eql(A)): pub Type { value: A }
-            pub let v(@A: Type, use Ord(A), x: Box(${wrapped})) -> Nat = 0;
+            pub let v(@A: Type, use Ord(A), x: Box(${wrapped})) -> Nat => 0;
             pub let t: ? = v;
             /std/print("")
         "#,
@@ -74,7 +74,7 @@ fn a_table_witness_reads_back_past_a_binder_of_a_type_constructor() {
             r#"
             use /std/{Nat, Monad, Io};
             pub struct Box(M: (Type) -> Type, use Monad(M)): pub Type { value: M(Nat) }
-            pub let v(@M: (Type) -> Type, ${binders}, x: Box(${wrapped})) -> Nat = 0;
+            pub let v(@M: (Type) -> Type, ${binders}, x: Box(${wrapped})) -> Nat => 0;
             pub let t: ? = v;
             /std/print("")
         "#,
@@ -93,7 +93,7 @@ fn an_edge_at_a_type_constructor_is_passed_over_for_the_one_at_the_binder() {
         use /std/{Nat, Monad, Io};
         use /std/Monad/{Lift};
         pub struct Box(M: (Type) -> Type, use Monad(M)): pub Type { value: M(Nat) }
-        pub let v(@M: (Type) -> Type, use Lift(Io, M), x: Box(M)) -> Nat = 0;
+        pub let v(@M: (Type) -> Type, use Lift(Io, M), x: Box(M)) -> Nat => 0;
         pub let t: ? = v;
         /std/print("")
     "#;
@@ -108,7 +108,7 @@ fn a_binder_at_an_alias_of_a_type_is_read_by_what_the_alias_names() {
         use /std/{Nat, Str, Show};
         pub let Text: Type = Str;
         pub struct Box(A: Type, use Show(A)): pub Type { value: A }
-        pub let v(use Show(Text), x: Box(Nat)) -> Nat = 0;
+        pub let v(use Show(Text), x: Box(Nat)) -> Nat => 0;
         pub let t: ? = v;
         /std/print("")
     "#;
@@ -121,9 +121,9 @@ fn a_binder_at_an_argument_that_computes_is_passed_over() {
     // `Same(A)` is `A` once it is reduced, which resolution does where the goal stands: the binder is a `Show` of `A` and answers no goal at `Nat`, so the table's witness is left out.
     let source = r#"
         use /std/{Nat, Show};
-        pub let Same(A: Type) -> Type = A;
+        pub let Same(A: Type) -> Type => A;
         pub struct Box(A: Type, use Show(A)): pub Type { value: A }
-        pub let v(@A: Type, use Show(Same(A)), x: Box(Nat)) -> Nat = 0;
+        pub let v(@A: Type, use Show(Same(A)), x: Box(Nat)) -> Nat => 0;
         pub let t: ? = v;
         /std/print("")
     "#;
@@ -137,7 +137,7 @@ fn a_binder_at_another_application_of_one_former_is_passed_over() {
     let source = r#"
         use /std/{Nat, Show, Option};
         pub struct Box(A: Type, use Show(A)): pub Type { value: A }
-        pub let v(@A: Type, use Show(Option(A)), x: Box(Option(Nat))) -> Nat = 0;
+        pub let v(@A: Type, use Show(Option(A)), x: Box(Option(Nat))) -> Nat => 0;
         pub let t: ? = v;
         /std/print("")
     "#;
@@ -150,9 +150,9 @@ fn a_binder_through_an_alias_of_a_concept_is_the_one_resolution_finds() {
     // `MyShow(Nat)` reduces to `Show(Nat)`, so the binder answers the goal at `Nat`, and the literal's dictionary, which is that binder, is left out.
     let source = r#"
         use /std/{Nat, Show};
-        pub let MyShow(A: Type) -> Type = Show(A);
+        pub let MyShow(A: Type) -> Type => Show(A);
         pub struct Box(A: Type, use Show(A)): pub Type { value: A }
-        pub let w(use MyShow(Nat)) -> Nat = let y: ? = Box { value = 0 }; 0;
+        pub let w(use MyShow(Nat)) -> Nat => let y: ? = Box { value = 0 }; 0;
         /std/print("")
     "#;
 
@@ -165,7 +165,7 @@ fn a_table_witness_where_an_arm_solves_the_binders_argument_is_declined() {
     let source = r#"
         use /std/{Nat, Show, Eq};
         pub struct Box(A: Type, use Show(A)): pub Type { value: A }
-        pub let f(@A: Type, use Show(A), e: Eq()(A, Nat), x: Box(Nat)) -> Nat =
+        pub let f(@A: Type, use Show(A), e: Eq()(A, Nat), x: Box(Nat)) -> Nat =>
             match e | refl() => let y: ? = x; 0 end;
         /std/print("")
     "#;
@@ -178,10 +178,10 @@ fn a_table_witness_under_a_binder_through_an_alias_of_its_concept_is_declined() 
     // `MyShow(Nat)` reduces to `Show(Nat)`, so resolution answers a goal at `Nat` with that binder, where `u`'s type holds the table's witness.
     let source = r#"
         use /std/{Nat, Show};
-        pub let MyShow(A: Type) -> Type = Show(A);
+        pub let MyShow(A: Type) -> Type => Show(A);
         pub struct Box(A: Type, use Show(A)): pub Type { value: A }
-        pub let u(x: Box(Nat)) -> Nat = 0;
-        pub let w(use MyShow(Nat)) -> Nat = let y: ? = u; 0;
+        pub let u(x: Box(Nat)) -> Nat => 0;
+        pub let w(use MyShow(Nat)) -> Nat => let y: ? = u; 0;
         /std/print("")
     "#;
 
@@ -194,9 +194,9 @@ fn a_readers_binder_resolution_passes_over_is_declined() {
     let source = r#"
         use /std/{Nat, Show};
         pub struct Box(A: Type, use Show(A)): pub Type { value: A }
-        pub let w(use Show(Nat)) -> Nat =
+        pub let w(use Show(Nat)) -> Nat =>
             let b = Box { value = 0 };
-            let g(use Show(Nat)) -> Nat = let y: ? = b; 0;
+            let g(use Show(Nat)) -> Nat => let y: ? = b; 0;
             0;
         /std/print("")
     "#;
@@ -216,7 +216,7 @@ fn two_edges_of_one_binder_to_one_concept_are_told_by_what_each_reaches() {
                 use Show(B),
             }
             pub struct Box(A: Type, use Show(A)): pub Type { value: A }
-            pub let v(@A: Type, @B: Type, use Both(A, B), x: Box(${wrapped})) -> Nat = 0;
+            pub let v(@A: Type, @B: Type, use Both(A, B), x: Box(${wrapped})) -> Nat => 0;
             pub let t: ? = v;
             /std/print("")
         "#,
@@ -236,7 +236,7 @@ fn an_edge_of_the_programs_own_concept_reads_back() {
             use Show(A),
         }
         pub struct Box(A: Type, use Show(A)): pub Type { value: A }
-        pub let v(@A: Type, use One(A), x: Box(A)) -> Nat = 0;
+        pub let v(@A: Type, use One(A), x: Box(A)) -> Nat => 0;
         pub let t: ? = v;
         /std/print("")
     "#;
@@ -250,8 +250,8 @@ fn a_method_reached_through_the_inner_of_two_binders_is_written_as_its_call() {
     let error = compile(
         r#"
         use /std/{Nat, Bytes, Hash, Eq, Io};
-        pub let outer(@K: Type, use Hash/Key(K), k: K) -> Nat =
-            let inner(@J: Type, use Hash/Key(J), j: J) -> Nat =
+        pub let outer(@K: Type, use Hash/Key(K), k: K) -> Nat =>
+            let inner(@J: Type, use Hash/Key(J), j: J) -> Nat =>
                 let p: Eq()(Hash/hash(j), 0x[]) = Eq/refl();
                 0;
             0;

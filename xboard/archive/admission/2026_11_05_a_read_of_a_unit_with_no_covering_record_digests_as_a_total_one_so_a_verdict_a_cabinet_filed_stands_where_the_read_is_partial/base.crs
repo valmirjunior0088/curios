@@ -3,5 +3,5 @@ pub induct Box(P: Prop): pub Type
 | box(p: P)
 end
 
-pub let unbox(@P: Prop, b: Box(P)) -> P =
+pub let unbox(@P: Prop, b: Box(P)) -> P =>
     match b | box(p) => p end;

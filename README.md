@@ -21,7 +21,7 @@ Curios is a dependently typed programming language that compiles to WebAssembly.
 Here is the standard library's vector, which carries its own length around in its type:
 
 ```crs
-pub let Counted(@T: Type, l: List(T), n: Nat) -> Prop =
+pub let Counted(@T: Type, l: List(T), n: Nat) -> Prop =>
     Eq()(List/length(l), n);
 
 pub struct Vec(T: Type, n: Nat): pub Type {

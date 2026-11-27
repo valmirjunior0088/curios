@@ -167,10 +167,10 @@ fn a_lint_stores_no_copy_of_its_source() {
             String::from("use /std/{Nat, Str};\n\npub let message: Str =\n    \"first\";\n");
         for index in 0..200 {
             text.push_str(
-                &("\npub let padding_".to_owned() + &index.to_string() + "(n: Nat) -> Nat = n;\n"),
+                &("\npub let padding_".to_owned() + &index.to_string() + "(n: Nat) -> Nat => n;\n"),
             );
         }
-        text.push_str(&("\npub let dropped(".to_owned() + binders + ") -> Nat = n;\n"));
+        text.push_str(&("\npub let dropped(".to_owned() + binders + ") -> Nat => n;\n"));
         text
     };
     let filed = |name: &str, library: &str| {
@@ -195,7 +195,7 @@ fn a_lint_stores_no_copy_of_its_source() {
 #[test]
 fn a_unit_held_for_one_kind_is_the_baseline_of_the_other() {
     let tested = fill!(
-        "${library}\nuse /std/{Test};\n\ntest the_message_holds =\n    Test/assert(\"it holds\", true);\n",
+        "${library}\nuse /std/{Test};\n\ntest the_message_holds =>\n    Test/assert(\"it holds\", true);\n",
         library = library("first")
     );
 

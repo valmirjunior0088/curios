@@ -9,13 +9,13 @@ fn list_spread_concats_segments() {
         use /std/{Str, Nat, List, Io};
         let xs : List(Nat) = [2, 3];
         let ys : List(Nat) = [1, ..xs, 4];
-        let digits_of(l : List(Nat)) -> Nat =
+        let digits_of(l : List(Nat)) -> Nat =>
             match l
             | [] => 0
             | [h, ..t] => Nat/add(Nat/mul(digits_of(t), 10), h)
             end;
         let digits : Nat = digits_of(ys);
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let _ = /std/print(Nat/to_str(digits))!;
             /std/Io/pure(());
         entry()
@@ -31,13 +31,13 @@ fn list_spread_identity_and_multi() {
         let xs : List(Nat) = [2, 3];
         let ys : List(Nat) = [..xs];
         let zs : List(Nat) = [..ys, ..ys];
-        let digits_of(l : List(Nat)) -> Nat =
+        let digits_of(l : List(Nat)) -> Nat =>
             match l
             | [] => 0
             | [h, ..t] => Nat/add(Nat/mul(digits_of(t), 10), h)
             end;
         let digits : Nat = digits_of(zs);
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let _ = /std/print(Nat/to_str(digits))!;
             /std/Io/pure(());
         entry()
@@ -52,7 +52,7 @@ fn list_spread_borrows_expected_element_type() {
         use /std/{Str, Nat, Int, List, Io};
         let xs : List(Int) = [-1, +2];
         let ys : List(Int) = [1, ..xs];
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let _ = /std/print(Nat/to_str(List/length(ys)))!;
             /std/Io/pure(());
         entry()
@@ -66,7 +66,7 @@ fn list_spread_of_non_list_is_rejected() {
     let source = r#"
         use /std/{Str, Nat, List, Io};
         let bad : List(Nat) = [1, ..2];
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let _ = /std/print("unreachable")!;
             /std/Io/pure(());
         entry()
@@ -80,7 +80,7 @@ fn list_spread_element_type_clash_is_rejected() {
         use /std/{Str, Nat, List, Io};
         let ss : List(Str) = ["a"];
         let bad : List(Nat) = [..ss];
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let _ = /std/print("unreachable")!;
             /std/Io/pure(());
         entry()
@@ -94,9 +94,9 @@ fn list_spread_operand_hoists_bangs() {
     assert_eq!(
         run(r#"
         use /std/{Str, Nat, List, Io};
-        let prog() -> Io({}) =
+        let prog() -> Io({}) =>
             let ys : List(Nat) = [1, ..Io/pure([2, 3])!, 4];
-            let digits_of(l : List(Nat)) -> Nat =
+            let digits_of(l : List(Nat)) -> Nat =>
                 match l
                 | [] => 0
                 | [h, ..t] => Nat/add(Nat/mul(digits_of(t), 10), h)
@@ -116,7 +116,7 @@ fn bytes_spread_concats_segments() {
     let source = r#"
         use /std/{Nat, Bytes, Io, Try, Proc};
         let b : Bytes = 0x[0x02, 0x03];
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let _ = Try/run(Io/write(Proc/stdout, 0x[0x01, ..b, 0x04, ..Bytes/slice(b, 1, 1)]))!;
             /std/Io/pure(());
         entry()
@@ -130,7 +130,7 @@ fn bytes_spread_identity_and_multi() {
         use /std/{Bytes, Io, Try, Proc};
         let b : Bytes = 0x[0x48, 0x65];
         let c : Bytes = 0x[..b];
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let _ = Try/run(Io/write(Proc/stdout, 0x[..c, ..c]))!;
             /std/Io/pure(());
         entry()
@@ -145,7 +145,7 @@ fn bytes_spread_of_non_bytes_is_rejected() {
         use /std/{Str, Nat, List, Bytes, Io};
         let xs : List(Nat) = [1, 2];
         let bad : Bytes = 0x[0x00, ..xs];
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let _ = /std/print("unreachable")!;
             /std/Io/pure(());
         entry()
@@ -159,7 +159,7 @@ fn bytes_spread_operand_hoists_bangs() {
     assert_eq!(
         run(r#"
         use /std/{Bytes, Io, Try, Proc};
-        let prog() -> Io({}) =
+        let prog() -> Io({}) =>
             let out : Bytes = 0x[0x3e, ..Io/pure(0x[0x68, 0x69])!, 0x3c];
             let wrote = Try/run(Io/write(Proc/stdout, out))!;
             Io/pure(());

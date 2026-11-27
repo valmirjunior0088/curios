@@ -13,9 +13,9 @@ fn prop_irrelevance_equates_distinct_proofs() {
         | s(@a : Nat, @b : Nat, prev : Le(a, b)): (a + 1, b + 1)
         end
         let irrelevant(a : Nat, b : Nat, p : Le(a, b), q : Le(a, b))
-            -> Same()(p, q) =
+            -> Same()(p, q) =>
             Same/same();
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let _ = /std/print("ok")!;
             /std/Io/pure(());
         entry()
@@ -28,8 +28,8 @@ fn data_is_not_proof_irrelevant() {
     // The bound on irrelevance: `Nat` is data, not a proposition, so distinct values are never equated — `refl` at `Eq()(x, y)` for unequal `x`, `y` is rejected. Guards the `Prop` short-circuit against over-firing on non-props.
     let source = r#"
         use /std/{Str, Eq, Nat, Io};
-        let bad(x : Nat, y : Nat) -> Eq()(x, y) = Eq/refl();
-        let entry() -> /std/Io({}) =
+        let bad(x : Nat, y : Nat) -> Eq()(x, y) => Eq/refl();
+        let entry() -> /std/Io({}) =>
             let _ = /std/print("ok")!;
             /std/Io/pure(());
         entry()
@@ -46,12 +46,12 @@ fn large_elimination_of_a_prop_is_rejected() {
         | z(@n : Nat): (0, n)
         | s(@a : Nat, @b : Nat, prev : Le(a, b)): (a + 1, b + 1)
         end
-        let bad(a : Nat, b : Nat, p : Le(a, b)) -> Nat =
+        let bad(a : Nat, b : Nat, p : Le(a, b)) -> Nat =>
             match p
             | z(@_) => 0
             | s(@_, @_, _) => 1
             end;
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let _ = /std/print("ok")!;
             /std/Io/pure(());
         entry()

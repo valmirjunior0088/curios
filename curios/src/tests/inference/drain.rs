@@ -7,7 +7,7 @@ use crate::test_support::*;
 fn a_domain_nothing_pins_is_reported_as_its_parameter() {
     let source = r#"
         use /std/{Nat, Str};
-        let use_it(@A : Type, a : A) -> Nat = 0;
+        let use_it(@A : Type, a : A) -> Nat => 0;
         let z : Nat = use_it((x) => x);
         /std/print(Nat/to_str(z))
         "#;
@@ -44,10 +44,10 @@ fn a_postponement_reports_the_bound_its_blocker_never_discharged() {
         | cons(@n: Nat, head: T, tail: Vec(T)(n)): (n + 1)
         end
 
-        let of_list(@T: Type, l: List(T)) -> {n: Nat, Vec(T)(n)} =
+        let of_list(@T: Type, l: List(T)) -> {n: Nat, Vec(T)(n)} =>
             match l | [] => (0, Vec/nil()) | [x, ..t] => let (m, v) = of_list(t); (m + 1, Vec/cons(x, v)) end;
 
-        let resize(@T: Type, fill: T, m: Nat, @n: Nat, v: Vec(T)(n)) -> Vec(T)(m) =
+        let resize(@T: Type, fill: T, m: Nat, @n: Nat, v: Vec(T)(n)) -> Vec(T)(m) =>
             match m
             | 0 => Vec/nil()
             | p + 1 =>
@@ -57,8 +57,8 @@ fn a_postponement_reports_the_bound_its_blocker_never_discharged() {
                 end
             end;
 
-        let cascade(l: List(Nat), k: Nat, w: Nat) -> Vec(Nat)(w) =
-            let bad(u: List(Nat)) -> List(Nat) = List/slice(u, k, 3);
+        let cascade(l: List(Nat), k: Nat, w: Nat) -> Vec(Nat)(w) =>
+            let bad(u: List(Nat)) -> List(Nat) => List/slice(u, k, 3);
             let paired = of_list(bad(l));
             resize(0, w, paired.1);
 
@@ -82,7 +82,7 @@ fn two_holes_held_to_one_another_report_only_the_implicit_left() {
     let report = error(
         r#"
         use /std/{Nat, Eq, Result};
-        pub let probe(f: (Nat) -> Nat, x: Nat) -> Eq()(Result/map(Result/success(x), f), Result/success(f(x))) = Eq/refl();
+        pub let probe(f: (Nat) -> Nat, x: Nat) -> Eq()(Result/map(Result/success(x), f), Result/success(f(x))) => Eq/refl();
         /std/print("ok")
         "#,
     );
@@ -99,7 +99,7 @@ fn a_destructuring_nothing_types_is_refused_at_its_pattern() {
     let report = error(
         r#"
         use /std/{Nat};
-        let g(n: Nat) -> Nat =
+        let g(n: Nat) -> Nat =>
             let p = ?;
             let (a, b) = p;
             a;
@@ -120,7 +120,7 @@ fn reflexivity_at_two_lambdas_that_differ_is_a_mismatch() {
     let report = error(
         r#"
         use /std/{Eq, Nat};
-        let differ(g : (Nat) -> Nat) -> Eq()((x : Nat) => g(0), (x : Nat) => g(1)) = Eq/refl();
+        let differ(g : (Nat) -> Nat) -> Eq()((x : Nat) => g(0), (x : Nat) => g(1)) => Eq/refl();
         /std/print("unreachable")
         "#,
     );
@@ -171,7 +171,7 @@ fn a_refusal_at_the_entrys_drain_is_reported_once() {
     let report = error(
         r#"
         use /std/{Proc};
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let _ = Proc/exit(1)!;
             /std/print("unreachable");
         entry()
@@ -204,7 +204,7 @@ fn a_hidden_argument_is_held_to_the_value_its_calls_type_states() {
     let reflexive = error(
         r#"
         use /std/{Eq, List, Nat};
-        let also(x : Nat, y : Nat) -> Eq()((x, x), (x, x)) = Eq/refl(@_, @(y, y));
+        let also(x : Nat, y : Nat) -> Eq()((x, x), (x, x)) => Eq/refl(@_, @(y, y));
         /std/print("unreachable")
         "#,
     );

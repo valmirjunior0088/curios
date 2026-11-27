@@ -197,8 +197,8 @@ fn a_call_past_its_edge_under_a_hypothesis_stating_the_impossible_compiles() {
     let source = r#"
         use /std/{Nat, Byte};
         use /std/Bool/{Holds, True, False};
-        let below(b: Byte) -> Holds(Byte/to_nat(b) < 256) = True/qed();
-        pub let absurd(h: Holds(300 < 256)) -> False = below(Nat/to_byte(300));
+        let below(b: Byte) -> Holds(Byte/to_nat(b) < 256) => True/qed();
+        pub let absurd(h: Holds(300 < 256)) -> False => below(Nat/to_byte(300));
         /std/print("held")
         "#;
 

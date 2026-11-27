@@ -3,46 +3,46 @@ use /std/{Toml, Str, Map, Flt, Bool, Bytes, Byte, Char, Nat, Result, Spell, Test
 use /std/Bool/{True, Holds};
 
 -- `ch` repeated `k` times: a digit run too long for a reader to count.
-let run_of(ch: Str, k: Nat) -> Str =
+let run_of(ch: Str, k: Nat) -> Str =>
     match k | 0 => "" | j + 1 => Str/concat(ch, run_of(ch, j)) end;
 
 -- The document decoded and re-encoded, or the reason it was refused.
-let canon(input: Str) -> Str =
+let canon(input: Str) -> Str =>
     match Toml/decode(input)
     | failure(e) => Str/concat("reject:", Toml/Error/message(e))
     | success(root) => Toml/encode(root)
     end;
 
 -- The document decoded and re-encoded, or that it was refused.
-let decoded(input: Str) -> Str =
+let decoded(input: Str) -> Str =>
     match Toml/decode(input)
     | failure(_) => "reject"
     | success(root) => Toml/encode(root)
     end;
 
 -- Why the document was refused, or that it was accepted.
-let reason(input: Str) -> Str =
+let reason(input: Str) -> Str =>
     match Toml/decode(input)
     | failure(e) => Toml/Error/message(e)
     | success(_) => "accept"
     end;
 
 -- The document's refusal rendered whole, or that it was accepted.
-let located(input: Str) -> Str =
+let located(input: Str) -> Str =>
     match Toml/decode(input)
     | failure(e) => Toml/Error/to_str(e)
     | success(_) => "accept"
     end;
 
 -- Whether the document decodes.
-let verdict(input: Str) -> Str =
+let verdict(input: Str) -> Str =>
     match Toml/decode(input)
     | failure(_) => "reject"
     | success(_) => "accept"
     end;
 
 -- `b` as lowercase hexadecimal, two digits a byte.
-let hexs(b: Bytes) -> Str =
+let hexs(b: Bytes) -> Str =>
     Bytes/fold(b, "", (byte, acc) =>
         let n = Byte/to_nat(byte);
         let hi = Result/unwrap_or(Str/of_bytes(Char/to_utf8(Char/hex_digit(n / 16))), "");
@@ -50,7 +50,7 @@ let hexs(b: Bytes) -> Str =
         Str/flatten([acc, hi, lo]));
 
 -- The bits of the float the document's key `f` holds, or what stood in the way.
-let fbits(input: Str) -> Str =
+let fbits(input: Str) -> Str =>
     match Toml/decode(input)
     | failure(_) => "reject"
     | success(root) =>
@@ -62,7 +62,7 @@ let fbits(input: Str) -> Str =
     end;
 
 -- Scalar documents through `canon`: decoded, then encoded, and the encoder's output is the document's one spelling.
-test a_scalar_document_re_encodes_as_its_one_spelling =
+test a_scalar_document_re_encodes_as_its_one_spelling =>
     Test/equal(
         [
             canon("i = 42"),
@@ -83,7 +83,7 @@ test a_scalar_document_re_encodes_as_its_one_spelling =
             "[t]\nx = 1\n", "\"dot.ted\" = 3\n", ""]);
 
 -- Every string form and escape, re-encoded to the basic-string spelling.
-test every_string_form_re_encodes_as_a_basic_string =
+test every_string_form_re_encodes_as_a_basic_string =>
     Test/equal(
         [
             canon("s = \"é→𝄞\"\nl = 'ü–𝄞'\n\"ké\" = 1 # ñ\n"),
@@ -98,7 +98,7 @@ test every_string_form_re_encodes_as_a_basic_string =
             "q = \"a \\\"\\\"b\\\"\\\"\"\n"]);
 
 -- The RFC 3339 subset: offset, local and partial forms, a leap second, and nanosecond truncation.
-test a_date_time_reads_the_rfc_3339_subset =
+test a_date_time_reads_the_rfc_3339_subset =>
     Test/equal(
         [
             canon("d = 1979-05-27T07:32:00Z"),
@@ -119,7 +119,7 @@ test a_date_time_reads_the_rfc_3339_subset =
             "d = 00:00:00.5\n"]);
 
 -- The 64-bit signed range TOML 1.0 states, in every radix, and the first value past it on each side, refused.
-test an_integer_reads_the_64_bit_range_in_every_radix =
+test an_integer_reads_the_64_bit_range_in_every_radix =>
     Test/equal(
         [
             decoded("i = 9223372036854775807"),
@@ -143,7 +143,7 @@ test an_integer_reads_the_64_bit_range_in_every_radix =
             "reject"]);
 
 -- Float lexemes pinned to their binary64 bit patterns, little-endian hex: the zeros, the specials, overflow and underflow, and the seventeen-digit boundary where three consecutive integers share one value.
-test a_float_lexeme_reads_as_its_binary64_pattern =
+test a_float_lexeme_reads_as_its_binary64_pattern =>
     Test/equal(
         [
             fbits("f = 0.0"),
@@ -171,7 +171,7 @@ test a_float_lexeme_reads_as_its_binary64_pattern =
             "c4a5b52e2aee4543", "000000a2941a3d42"]);
 
 -- Each malformed input pinned to the *message* it is refused with, not merely to the fact that it is refused. The decoder hands these strings to its caller through `Result(Str, _)`, so they are contract rather than debug output, and a reformulation of the scanners into `/std/Parse` combinators can flatten a specific reason into whichever generic message the combinator that happened to fail carries. Accept-versus-reject cannot see that happen; this test can. Every refusal is the refusing parser's own reason: the date-time, fraction and exponent parsers commit once their prefix can be nothing else, so `digit_led_value`'s `or` reports `invalid date` rather than restoring the position, reading `2021` as an integer and failing on the line end.
-test a_malformed_document_is_refused_with_its_reason =
+test a_malformed_document_is_refused_with_its_reason =>
     Test/equal(
         [
             reason("i = 1__2"),
@@ -195,7 +195,7 @@ test a_malformed_document_is_refused_with_its_reason =
             "invalid time", "invalid offset", "expected end of line"]);
 
 -- Each refusal rendered whole by `Toml/Error/to_str`: a syntax refusal names the byte offset the parser stopped at, and a broken construction rule names the key path being applied. `message` is the reason alone, which the reasons test pins.
-test a_refusal_names_where_it_stopped =
+test a_refusal_names_where_it_stopped =>
     Test/equal(
         [
             located("i = 1__2"),
@@ -208,7 +208,7 @@ test a_refusal_names_where_it_stopped =
             "cannot extend a table defined elsewhere with dotted keys at key b.c"]);
 
 -- Table construction: a key or table defined twice, a table opened over a dotted key or an inline table, a table dotted keys made named again by a header, and arrays of tables against tables, against those allowed: a table or an array of tables a header opens below a table dotted keys made, as TOML 1.0's own example has it.
-test a_table_is_constructed_once =
+test a_table_is_constructed_once =>
     Test/equal(
         [
             verdict("dup = 1\ndup = 2"),
@@ -233,7 +233,7 @@ test a_table_is_constructed_once =
             "reject", "reject", "accept", "accept", "accept", "reject", "accept", "accept"]);
 
 -- Comments, CRLF and blank lines accepted; trailing junk after a value, a header or an empty key refused.
-test comments_and_line_endings_are_read_and_junk_is_refused =
+test comments_and_line_endings_are_read_and_junk_is_refused =>
     Test/equal(
         [
             verdict("a = 1 # note"),
@@ -247,7 +247,7 @@ test comments_and_line_endings_are_read_and_junk_is_refused =
         ["accept", "accept", "accept", "accept", "accept", "reject", "reject", "reject"]);
 
 -- Arrays and inline tables nest, and the encoder's output is a fixed point of decode-then-encode: the second row re-encodes the first row's output and compares.
-test nested_arrays_and_inline_tables_reach_a_fixed_point =
+test nested_arrays_and_inline_tables_reach_a_fixed_point =>
     let c1 = canon("[[a]]\nb = { c = 2 }\n[a.d]\ne = 1");
     Test/equal(
         [
@@ -257,7 +257,7 @@ test nested_arrays_and_inline_tables_reach_a_fixed_point =
         ["a = [{ b = { c = 2 }, d = { e = 1 } }]\n", "true", "b = [1, [2]]\n"]);
 
 -- The float lexemes a narrowing gets wrong: a mantissa past seventeen digits, large exponents, subnormals, and the overflow boundary, where `1.7976931348623159e308` is above the largest finite value and rounds to an infinity, each pinned to the bit pattern a correctly rounded parse gives.
-test a_float_lexeme_rounds_once_to_the_nearest_binary64 =
+test a_float_lexeme_rounds_once_to_the_nearest_binary64 =>
     Test/equal(
         [
             fbits("f = 1.2345678901234567e-5"),
@@ -281,13 +281,13 @@ test a_float_lexeme_rounds_once_to_the_nearest_binary64 =
             "010000000000f03f", "415929d19c1b0080", "000000a2941a3d42"]);
 
 -- The encoder on a map built by hand rather than decoded, which is the one path no test above reaches: a key is a string, so every table has a spelling, and a key that is no bare key is quoted.
-test encode_spells_a_map_built_by_hand =
+test encode_spells_a_map_built_by_hand =>
     Test/equal(Toml/encode(Map/insert(Map/empty(), "a key", Toml/int(+1))), "\"a key\" = 1\n");
 
 -- Two decodings of one document are one value, a float is told apart by its bits — a `nan` equals itself, and `+0.0` stands apart from `-0.0` — and an array by its length and a table by its keys.
-test a_value_is_equal_to_what_its_document_decodes_to_again =
+test a_value_is_equal_to_what_its_document_decodes_to_again =>
     let document = "a = 1\nb = [nan, 2.5, -0.0]\n[t]\nc = 1979-05-27T07:32:00Z\n";
-    let value(input: Str) -> Toml =
+    let value(input: Str) -> Toml =>
         match Toml/decode(input)
         | success(root) => Toml/table(root)
         | failure(_) => Toml/str("refused")

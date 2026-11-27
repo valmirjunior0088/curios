@@ -21,8 +21,8 @@ fn read(words: &[Option<&str>]) -> Vec<Option<String>> {
 const GROUPS: &str = r#"concept Sized(T: Type): Type { size: (T) -> Type }
 and Shown(T: Type): Type { show: (T) -> Type }
 
-satisfy Sized(Type) { size(t) = t }
-and Shown(Type) { show(t) = t }
+satisfy Sized(Type) { size(t) => t }
+and Shown(Type) { show(t) => t }
 
 let one: Type = Type
 and two: Type = Type;
@@ -36,7 +36,7 @@ end
 struct P: Type { x: Type }
 and Q: Type { y: Type }
 
-test holds = Type;
+test holds => Type;
 "#;
 
 /// Each member keeps where the contextual word that opened it was read, the word alone: `concept`, `satisfy` and `test` at an item's head and `and` before a later member, and none where a reserved word, `let`, `induct` or `struct`, opened the first.

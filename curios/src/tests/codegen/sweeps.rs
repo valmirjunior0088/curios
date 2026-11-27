@@ -56,12 +56,12 @@ fn a_returned_closure_and_aggregate_survive_a_suspension_between_calls() {
         r#"
         use /std/{Nat, List, Proc, Io};
         induct Side: Type | left(Nat) | right(Nat) end
-        let combine(n: Nat, pair: {Nat, Nat}) -> (Side) -> Nat =
+        let combine(n: Nat, pair: {Nat, Nat}) -> (Side) -> Nat =>
             match n
             | 0 => (side) => match side | left(x) => pair.0 + x | right(x) => pair.1 + x end
             | k + 1 => (side) => combine(k, (pair.1, pair.0 + 1))(side) + 1
             end;
-        let entry() -> Io({}) =
+        let entry() -> Io({}) =>
             let n = List/length(Proc/args()!);
             let f = combine(n, (n, 1));
             let _ = Io/yield()!;

@@ -4,7 +4,7 @@ use /std/Bool/{True, Holds};
 --- Whether `p` accepts every number below `k`.
 ---
 --- A decision, so at a literal `k`, `Holds(all_below(k, p))` is discharged by reduction, running `p` on each number. That is how a fact about every byte is proved where the logic cannot see inside the operation it concerns.
-pub let all_below(k: Nat, p: (Nat) -> Bool) -> Bool =
+pub let all_below(k: Nat, p: (Nat) -> Bool) -> Bool =>
     match k | 0 => true | j + 1 => p(j) && all_below(j, p) end;
 
 --- What the decision says of one number below the bound.
@@ -14,7 +14,7 @@ pub let at(
     n: Nat,
     all: Holds(all_below(k, p)),
     under: Holds(n < k),
-) -> Holds(p(n)) =
+) -> Holds(p(n)) =>
     match k
     | 0 => match under end
     | j + 1 =>

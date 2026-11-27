@@ -13,15 +13,15 @@ use /std/{Str, Option, Eq, Show, Spell, Ordering, Hash};
 use /std/ops/{Ord, Eql, Or, And};
 
 --- The other value.
-pub let not(b: Bool) -> Bool =
+pub let not(b: Bool) -> Bool =>
     xor(b, true);
 
 --- `true` or `false`, as written.
-pub let to_str(b: Bool) -> Str =
+pub let to_str(b: Bool) -> Str =>
     match b | true => "true" | false => "false" end;
 
 --- The value `to_str` writes, or `none` for any other text.
-pub let of_str(s: Str) -> Option(Bool) =
+pub let of_str(s: Str) -> Option(Bool) =>
     match s
     | "true" => Option/some(true)
     | "false" => Option/some(false)
@@ -29,27 +29,27 @@ pub let of_str(s: Str) -> Option(Bool) =
     end;
 
 --- `false` and `true` are distinct: the absurdity every decision procedure over a `Bool` discharges its impossible arm with.
-pub let false_neq_true(p: Eq()(false, true)) -> False =
+pub let false_neq_true(p: Eq()(false, true)) -> False =>
     Eq/subst((b: Bool) => match b | true => False | false => True end, p, True/qed());
 
 -- By cases on `b`, since `Holds` reduces at each.
 --- The decision as an equation: `Holds(b)` says `b` is `true`, and this says it the way `Eq/subst` rewrites with.
-pub let eq_of_holds(b: Bool, h: Holds(b)) -> Eq()(b, true) =
+pub let eq_of_holds(b: Bool, h: Holds(b)) -> Eq()(b, true) =>
     match b
     | true => Eq/refl()
     | false => match h end
     end;
 
 --- The equation as the decision, back: `True/qed()` carried along the equation read the other way.
-pub let holds_of_eq(b: Bool, p: Eq()(b, true)) -> Holds(b) =
+pub let holds_of_eq(b: Bool, p: Eq()(b, true)) -> Holds(b) =>
     Eq/subst((x: Bool) => Holds(x), Eq/sym(p), True/qed());
 
 --- The procedure that decides `Holds(b)`: `some` of the proof where `b` holds, `none` where it does not. What every procedure deciding a bound answers, `Int/non_neg` and `Date/try_of`'s among them.
-pub let holds(b: Bool) -> Option(Holds(b)) =
+pub let holds(b: Bool) -> Option(Holds(b)) =>
     match b | true => Option/some(True/qed()) | false => Option/none() end;
 
 -- By cases on both, `eql` reducing at each.
-let eq_of_eql(a: Bool, b: Bool, h: Holds(eql(a, b))) -> Eq()(a, b) =
+let eq_of_eql(a: Bool, b: Bool, h: Holds(eql(a, b))) -> Eq()(a, b) =>
     match a
     | true =>
         match b
@@ -66,7 +66,7 @@ let eq_of_eql(a: Bool, b: Bool, h: Holds(eql(a, b))) -> Eq()(a, b) =
 satisfy Eql(Bool) {
     eql = eql,
     eq = eq_of_eql,
-    refl(a) = match a | true | false => True/qed() end,
+    refl(a) => match a | true | false => True/qed() end,
 }
 
 satisfy Or(Bool) {
@@ -86,7 +86,7 @@ satisfy Spell(Bool) {
 }
 
 --- `false` below `true`.
-pub let ord(a: Bool, b: Bool) -> Ordering =
+pub let ord(a: Bool, b: Bool) -> Ordering =>
     match (a, b)
     | (false, false) | (true, true) => Ordering/eq()
     | (false, true) => Ordering/lt()
@@ -95,13 +95,13 @@ pub let ord(a: Bool, b: Bool) -> Ordering =
 
 satisfy Ord(Bool) {
     ord = ord,
-    lt(a, b) = Ordering/is_lt(ord(a, b)),
-    le(a, b) = Ordering/is_le(ord(a, b)),
-    flips(a, b) =
+    lt(a, b) => Ordering/is_lt(ord(a, b)),
+    le(a, b) => Ordering/is_le(ord(a, b)),
+    flips(a, b) =>
         match a
         | false | true => match b | false | true => Eq/refl() end
         end,
-    trans(a, b, c, p, q) =
+    trans(a, b, c, p, q) =>
         match a
         | false => match c | false | true => True/qed() end
         | true =>
@@ -114,7 +114,7 @@ satisfy Ord(Bool) {
                 end
             end
         end,
-    eq(a, b, h) =
+    eq(a, b, h) =>
         match a
         | false =>
             match b
@@ -127,17 +127,17 @@ satisfy Ord(Bool) {
             | true => Eq/refl()
             end
         end,
-    is_lt(_, _) = Eq/refl(),
-    is_le(_, _) = Eq/refl(),
+    is_lt(_, _) => Eq/refl(),
+    is_le(_, _) => Eq/refl(),
 }
 
 satisfy Hash(Bool) {
-    hash(b) = match b | true => 0x[0x1] | false => 0x[0x0] end,
+    hash(b) => match b | true => 0x[0x1] | false => 0x[0x0] end,
 }
 
 --- One byte per value, `false`'s below `true`'s.
 satisfy Hash/Key(Bool) {
-    mono(a, b) =
+    mono(a, b) =>
         match a
         | false | true => match b | false | true => Eq/refl() end
         end,

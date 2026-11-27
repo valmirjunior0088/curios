@@ -10,7 +10,7 @@ fn a_callback_a_field_lambda_hands_on_to_a_member_is_applied_where_the_field_is_
         use /std/{Nat};
         use /std/Bool/{True};
 
-        let def(n: Nat, f: (Nat) -> True) -> {Nat, (Nat) -> True} =
+        let def(n: Nat, f: (Nat) -> True) -> {Nat, (Nat) -> True} =>
             (
                 match n
                 | 0 => 0
@@ -19,7 +19,7 @@ fn a_callback_a_field_lambda_hands_on_to_a_member_is_applied_where_the_field_is_
                     0
                 end,
                 (m) => app(n, (_) => True/qed()))
-        and app(n: Nat, f: (Nat) -> True) -> True =
+        and app(n: Nat, f: (Nat) -> True) -> True =>
             match n
             | 0 => f(n)
             | k + 1 =>
@@ -27,10 +27,10 @@ fn a_callback_a_field_lambda_hands_on_to_a_member_is_applied_where_the_field_is_
                 f(n)
             end;
 
-        let h(r: {Nat, (Nat) -> True}, y: Nat) -> True =
+        let h(r: {Nat, (Nat) -> True}, y: Nat) -> True =>
             r.1(y);
 
-        let spin(n: Nat) -> True =
+        let spin(n: Nat) -> True =>
             h(def(n, (c) => spin(c)), n);
 
         /std/print("ok")
@@ -58,15 +58,15 @@ fn a_member_answering_another_members_record_states_what_its_fields_apply() {
         | node(Tree, Tree)
         end
 
-        let outer(t: Tree, f: (Tree) -> Nat) -> {Nat, (Nat) -> Nat} = inner(t, f)
-        and inner(t: Tree, f: (Tree) -> Nat) -> {Nat, (Nat) -> Nat} =
+        let outer(t: Tree, f: (Tree) -> Nat) -> {Nat, (Nat) -> Nat} => inner(t, f)
+        and inner(t: Tree, f: (Tree) -> Nat) -> {Nat, (Nat) -> Nat} =>
             (match t | leaf(n) => n | node(l, r) => let _ = outer(l, f); f(l) + f(r) end, (m) => m);
 
-        let call(r: {Nat, (Nat) -> Nat}, y: Nat) -> Nat = r.1(y);
+        let call(r: {Nat, (Nat) -> Nat}, y: Nat) -> Nat => r.1(y);
 
-        let size(t: Tree) -> Nat = call(outer(t, (c) => size(c)), 0);
+        let size(t: Tree) -> Nat => call(outer(t, (c) => size(c)), 0);
 
-        let Small(t: Tree) -> /std/Bool/True =
+        let Small(t: Tree) -> /std/Bool/True =>
             match size(t) == 0 | true => /std/Bool/True/qed() | false => /std/Bool/True/qed() end;
 
         /std/print("ok")
@@ -94,14 +94,14 @@ fn a_field_lambda_applying_a_parameters_field_states_it_as_its_own() {
         | node(Tree, Tree)
         end
 
-        let sizes(t: Tree, e: {(Tree) -> Nat}) -> {Nat, (Nat) -> Nat} =
+        let sizes(t: Tree, e: {(Tree) -> Nat}) -> {Nat, (Nat) -> Nat} =>
             (match t | leaf(n) => n | node(l, r) => e.0(l) + e.0(r) end, (m) => m);
 
-        let call(r: {Nat, (Nat) -> Nat}, y: Nat) -> Nat = r.1(y);
+        let call(r: {Nat, (Nat) -> Nat}, y: Nat) -> Nat => r.1(y);
 
-        let size(t: Tree) -> Nat = call(sizes(t, ((c) => size(c),)), 0);
+        let size(t: Tree) -> Nat => call(sizes(t, ((c) => size(c),)), 0);
 
-        let Small(t: Tree) -> /std/Bool/True =
+        let Small(t: Tree) -> /std/Bool/True =>
             match size(t) == 0 | true => /std/Bool/True/qed() | false => /std/Bool/True/qed() end;
 
         /std/print("ok")
@@ -129,14 +129,14 @@ fn a_field_lambda_in_a_nested_record_states_what_it_applies_as_its_own() {
         | node(Tree, Tree)
         end
 
-        let sizes(t: Tree, f: (Tree) -> Nat) -> {Nat, {(Nat) -> Nat}} =
+        let sizes(t: Tree, f: (Tree) -> Nat) -> {Nat, {(Nat) -> Nat}} =>
             (match t | leaf(n) => n | node(l, r) => f(l) + f(r) end, ((m) => m,));
 
-        let call(r: {Nat, {(Nat) -> Nat}}, y: Nat) -> Nat = r.1.0(y);
+        let call(r: {Nat, {(Nat) -> Nat}}, y: Nat) -> Nat => r.1.0(y);
 
-        let size(t: Tree) -> Nat = call(sizes(t, (c) => size(c)), 0);
+        let size(t: Tree) -> Nat => call(sizes(t, (c) => size(c)), 0);
 
-        let Small(t: Tree) -> /std/Bool/True =
+        let Small(t: Tree) -> /std/Bool/True =>
             match size(t) == 0 | true => /std/Bool/True/qed() | false => /std/Bool/True/qed() end;
 
         /std/print("ok")
@@ -164,14 +164,14 @@ fn a_field_lambdas_summary_closes_over_the_calls_its_group_hands_the_parameter_o
         | node(Tree, Tree)
         end
 
-        let sizes(t: Tree, f: (Tree) -> Nat) -> {Nat, (Nat) -> Nat} = (0, (_) => one(t, f))
-        and one(t: Tree, f: (Tree) -> Nat) -> Nat = two(t, f)
-        and two(t: Tree, f: (Tree) -> Nat) -> Nat =
+        let sizes(t: Tree, f: (Tree) -> Nat) -> {Nat, (Nat) -> Nat} => (0, (_) => one(t, f))
+        and one(t: Tree, f: (Tree) -> Nat) -> Nat => two(t, f)
+        and two(t: Tree, f: (Tree) -> Nat) -> Nat =>
             match t | leaf(n) => n | node(l, r) => let _ = sizes(l, f); f(l) + f(r) end;
 
-        let size(t: Tree) -> Nat = sizes(t, (c) => size(c)).1(0);
+        let size(t: Tree) -> Nat => sizes(t, (c) => size(c)).1(0);
 
-        let Small(t: Tree) -> /std/Bool/True =
+        let Small(t: Tree) -> /std/Bool/True =>
             match size(t) == 0 | true => /std/Bool/True/qed() | false => /std/Bool/True/qed() end;
 
         /std/print("ok")
@@ -199,12 +199,12 @@ fn a_field_called_by_its_path_states_what_its_record_applied_where_it_was_answer
             m: (Nat) -> Nat,
         }
 
-        let d(f: (Nat) -> Nat) -> Handlers =
+        let d(f: (Nat) -> Nat) -> Handlers =>
             Handlers { y = 0, m = (x) => match x | 0 => 0 | n + 1 => f(n) end };
 
-        let g(t: Nat) -> Nat = d(g).m(t);
+        let g(t: Nat) -> Nat => d(g).m(t);
 
-        let Small(t: Nat) -> /std/Bool/True =
+        let Small(t: Nat) -> /std/Bool/True =>
             match g(t) == 0 | true => /std/Bool/True/qed() | false => /std/Bool/True/qed() end;
 
         /std/print("ok")
@@ -234,11 +234,11 @@ fn a_members_field_handed_where_its_callee_applies_it_is_the_member_at_that_path
 
         struct Outer(A: Type): Type { inner: Inner(A) }
 
-        let all(@T: Type, e: Inner(T), s: List(T)) -> True =
+        let all(@T: Type, e: Inner(T), s: List(T)) -> True =>
             match s | [] => True/qed() | [x, ..rest] => match e.step(x) | qed() => all(e, rest) end end;
 
         let w: Outer(Doc) = Outer {
-            inner = Inner { step(d) = match d | leaf() => True/qed() | arr(s) => all(w.inner, s) end },
+            inner = Inner { step(d) => match d | leaf() => True/qed() | arr(s) => all(w.inner, s) end },
         };
 
         let _ = w.inner.step(Doc/arr([Doc/leaf()]));
@@ -268,14 +268,14 @@ fn a_premises_field_read_as_a_value_that_holds_no_function_is_no_use() {
 
         satisfy Mark(Doc) { mark = 0 }
 
-        satisfy (@T: Type, use Mark(T)) => Mark(List(T)) { mark = Mark/mark(@T) + 1 }
+        satisfy (@T: Type, use Mark(T)) -> Mark(List(T)) { mark = Mark/mark(@T) + 1 }
 
-        let all_big(@T: Type, use Big(T), xs: List(T)) -> True =
+        let all_big(@T: Type, use Big(T), xs: List(T)) -> True =>
             match xs | [] => True/qed() | [x, ..rest] => match Big/big(x) | qed() => all_big(rest) end end;
 
-        satisfy (@T: Type, use Big(T)) => Big(List(T)) { big = all_big }
+        satisfy (@T: Type, use Big(T)) -> Big(List(T)) { big = all_big }
 
-        satisfy Big(Doc) { big(d) = match d | leaf() => True/qed() | arr(xs) => Big/big(xs) end }
+        satisfy Big(Doc) { big(d) => match d | leaf() => True/qed() | arr(xs) => Big/big(xs) end }
 
         let _ = Big/big(Doc/arr([Doc/leaf()]));
         /std/print(Nat/to_str(Mark/mark(@List(Doc))))
@@ -284,7 +284,7 @@ fn a_premises_field_read_as_a_value_that_holds_no_function_is_no_use() {
     )
     .refused(&[
         ("concept Mark(A: Type): pub Type { mark: Nat }", "struct Box: Type { f: (Nat) -> Nat }\n\n        concept Mark(A: Type): pub Type { mark: Box }"),
-        ("satisfy Mark(Doc) { mark = 0 }", "satisfy Mark(Doc) { mark = Box { f(n) = n } }"),
+        ("satisfy Mark(Doc) { mark = 0 }", "satisfy Mark(Doc) { mark = Box { f(n) => n } }"),
         ("{ mark = Mark/mark(@T) + 1 }", "{ mark = Mark/mark(@T) }"),
         ("/std/print(Nat/to_str(Mark/mark(@List(Doc))))", "/std/print(Nat/to_str(Mark/mark(@List(Doc)).f(1)))"),
     ])
@@ -309,14 +309,14 @@ fn a_definition_that_applies_nothing_of_its_parameter_states_so_to_its_callers()
 
         satisfy Mark(Doc) { mark = 0 }
 
-        satisfy (@T: Type, use Mark(T)) => Mark(List(T)) { mark = 1 }
+        satisfy (@T: Type, use Mark(T)) -> Mark(List(T)) { mark = 1 }
 
-        let all_big(@T: Type, use Big(T), xs: List(T)) -> True =
+        let all_big(@T: Type, use Big(T), xs: List(T)) -> True =>
             match xs | [] => True/qed() | [x, ..rest] => match Big/big(x) | qed() => all_big(rest) end end;
 
-        satisfy (@T: Type, use Big(T)) => Big(List(T)) { big = all_big }
+        satisfy (@T: Type, use Big(T)) -> Big(List(T)) { big = all_big }
 
-        satisfy Big(Doc) { big(d) = match d | leaf() => True/qed() | arr(xs) => Big/big(xs) end }
+        satisfy Big(Doc) { big(d) => match d | leaf() => True/qed() | arr(xs) => Big/big(xs) end }
 
         let _ = Big/big(Doc/arr([Doc/leaf()]));
         /std/print(Nat/to_str(Mark/mark(@List(Doc))))
@@ -325,7 +325,7 @@ fn a_definition_that_applies_nothing_of_its_parameter_states_so_to_its_callers()
     )
     .refused(&[
         ("concept Mark(A: Type): pub Type { mark: Nat }", "struct Box: Type { f: (Nat) -> Nat }\n\n        concept Mark(A: Type): pub Type { mark: Box }"),
-        ("satisfy Mark(Doc) { mark = 0 }", "satisfy Mark(Doc) { mark = Box { f(n) = n } }"),
+        ("satisfy Mark(Doc) { mark = 0 }", "satisfy Mark(Doc) { mark = Box { f(n) => n } }"),
         ("{ mark = 1 }", "{ mark = Mark/mark(@T) }"),
         ("/std/print(Nat/to_str(Mark/mark(@List(Doc))))", "/std/print(Nat/to_str(Mark/mark(@List(Doc)).f(1)))"),
     ])
@@ -342,11 +342,11 @@ fn a_member_handed_where_its_callee_applies_it_nowhere_makes_no_call() {
         use /std/{Nat};
         use /std/Bool/{True};
 
-        let ignore(f: (Nat) -> True, n: Nat) -> True = True/qed();
+        let ignore(f: (Nat) -> True, n: Nat) -> True => True/qed();
 
-        let go(n: Nat) -> True = match n | 0 => True/qed() | k + 1 => ignore(go, n) end;
+        let go(n: Nat) -> True => match n | 0 => True/qed() | k + 1 => ignore(go, n) end;
 
-        let wrapped(n: Nat) -> True = match n | 0 => True/qed() | k + 1 => ignore((m) => wrapped(m), n) end;
+        let wrapped(n: Nat) -> True => match n | 0 => True/qed() | k + 1 => ignore((m) => wrapped(m), n) end;
 
         let _ = go(3);
         let _ = wrapped(3);
@@ -354,7 +354,7 @@ fn a_member_handed_where_its_callee_applies_it_nowhere_makes_no_call() {
         "#,
         b"ok",
     )
-    .refused(&[("= True/qed();\n", "= f(n);\n")])
+    .refused(&[("=> True/qed();\n", "=> f(n);\n")])
     .by_elaborator_in("/go", |error| {
         matches!(error, curios_elab::Error::PartialInErasedPosition { .. })
     });

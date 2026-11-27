@@ -32,7 +32,7 @@ fn against(body: &str) -> String {
 #[test]
 fn a_misspelled_name_is_refused_rather_than_answered() {
     let refused = against(
-        r#"pub let read(p: Cli/Parsed(deps.command)) -> Io({}) =
+        r#"pub let read(p: Cli/Parsed(deps.command)) -> Io({}) =>
             Cli/dispatch(p, [Cli/on("add", (a) => let _port = Cli/get(a, "prot"); Io/pure(()))]);"#,
     );
 
@@ -49,7 +49,7 @@ fn a_misspelled_name_is_refused_rather_than_answered() {
 #[test]
 fn a_misspelled_command_is_refused_rather_than_answered() {
     let refused = against(
-        r#"pub let read(p: Cli/Parsed(deps.command)) -> Io({}) =
+        r#"pub let read(p: Cli/Parsed(deps.command)) -> Io({}) =>
             Cli/dispatch(p, [Cli/on("ad", (_) => Io/pure(())), Cli/on("add", (_) => Io/pure(()))]);"#,
     );
 
@@ -65,7 +65,7 @@ fn a_misspelled_command_is_refused_rather_than_answered() {
 #[test]
 fn a_dispatch_that_leaves_a_command_out_is_refused_naming_it() {
     let refused =
-        against(r#"pub let read(p: Cli/Parsed(deps.command)) -> Io({}) = Cli/dispatch(p, []);"#);
+        against(r#"pub let read(p: Cli/Parsed(deps.command)) -> Io({}) => Cli/dispatch(p, []);"#);
 
     assert!(
         refused.contains("Cli/Covered(")

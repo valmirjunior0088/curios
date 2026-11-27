@@ -831,7 +831,7 @@ fn coded(index: &str) -> String {
 | big(): ({index})
 end
 
-let f(X: Type, c: Code(X), x: X) -> X =
+let f(X: Type, c: Code(X), x: X) -> X =>
     match c
     | big() => x + 0
     end;

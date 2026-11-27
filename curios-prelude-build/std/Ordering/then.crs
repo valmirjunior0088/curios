@@ -2,7 +2,7 @@ use /std/{Eq, Ordering};
 
 -- An arm for each answer, where a default would do: a walk that compares its heads and goes on to its tails only where they tie, as `List/ord` does, is this match written out, so the laws below are that walk's.
 --- The first answer, and the second where the first is `eq`: how two comparisons decide in turn.
-pub let then(first: Ordering, second: Ordering) -> Ordering =
+pub let then(first: Ordering, second: Ordering) -> Ordering =>
     match first
     | lt() => Ordering/lt()
     | eq() => second
@@ -20,7 +20,7 @@ pub let flips(
     @fy: Ordering,
     head: Eq()(fx, Ordering/flip(x)),
     rest: (Eq()(x, Ordering/eq())) -> Eq()(fy, Ordering/flip(y)),
-) -> Eq()(then(fx, fy), Ordering/flip(then(x, y))) =
+) -> Eq()(then(fx, fy), Ordering/flip(then(x, y))) =>
     let refl() = head;
     match x
     | lt() => Eq/refl()
@@ -35,7 +35,7 @@ pub let first(
     x: Ordering,
     y: Ordering,
     h: Eq()(then(x, y), Ordering/eq()),
-) -> Eq()(x, Ordering/eq()) =
+) -> Eq()(x, Ordering/eq()) =>
     match x
     | lt() => match h end
     | eq() => Eq/refl()
@@ -47,7 +47,7 @@ pub let second(
     x: Ordering,
     y: Ordering,
     h: Eq()(then(x, y), Ordering/eq()),
-) -> Eq()(y, Ordering/eq()) =
+) -> Eq()(y, Ordering/eq()) =>
     match x
     | lt() => match h end
     | eq() => h
@@ -59,5 +59,5 @@ pub let assoc(
     x: Ordering,
     y: Ordering,
     z: Ordering,
-) -> Eq()(then(then(x, y), z), then(x, then(y, z))) =
+) -> Eq()(then(then(x, y), z), then(x, then(y, z))) =>
     match x | lt() | eq() | gt() => Eq/refl() end;

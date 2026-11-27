@@ -1,5 +1,5 @@
 use /std/{Str, Bytes, Ordering};
 
 --- Code-point order.
-pub let ord(a: Str, b: Str) -> Ordering =
+pub let ord(a: Str, b: Str) -> Ordering =>
     Bytes/ord(Str/to_bytes(a), Str/to_bytes(b));

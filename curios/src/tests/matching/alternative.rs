@@ -11,12 +11,12 @@ fn an_arm_is_taken_by_a_value_any_of_its_alternatives_matches() {
         | square(Nat)
         | point()
         end
-        let size(s: Shape) -> Nat =
+        let size(s: Shape) -> Nat =>
             match s
             | circle(n) | square(n) => n
             | point() => 0
             end;
-        let blank(c: Nat) -> Nat =
+        let blank(c: Nat) -> Nat =>
             match c
             | ' ' | '\t' | '\n' => 1
             | _ => 0
@@ -36,7 +36,7 @@ fn a_name_stands_where_each_alternative_writes_it_at_the_type_it_has_there() {
         | left(Nat)
         | right(Str, Nat)
         end
-        let shown(e: Either) -> Str =
+        let shown(e: Either) -> Str =>
             match e
             | left(x) | right(x, _) => Show/show(x)
             end;
@@ -53,8 +53,8 @@ fn a_proof_that_holds_case_by_case_is_written_once_for_its_alternatives() {
         format!(
             r#"
             use /std/{{Bool, Eq, print}};
-            let flip(b: Bool) -> Bool = match b | true => false | false => true end;
-            let twice(b: Bool) -> Eq()(flip(flip(b)), b) = {body};
+            let flip(b: Bool) -> Bool => match b | true => false | false => true end;
+            let twice(b: Bool) -> Eq()(flip(flip(b)), b) => {body};
             print("ok")
             "#
         )
@@ -75,7 +75,7 @@ fn an_alternative_that_is_a_case_of_another_is_refused() {
         let source = format!(
             r#"
             use /std/{{Nat, Option, print}};
-            let f(o: Option(Nat)) -> Nat = match o | {arm} => 1 | none() => 0 end;
+            let f(o: Option(Nat)) -> Nat => match o | {arm} => 1 | none() => 0 end;
             print(Nat/to_str(f(Option/none())))
             "#
         );
@@ -93,7 +93,7 @@ fn an_alternative_that_is_a_case_of_another_is_refused() {
 fn alternatives_that_meet_are_refused_with_the_value_they_share() {
     let source = r#"
         use /std/{Nat, Bool, print};
-        let f(p: {Bool, Bool}) -> Nat =
+        let f(p: {Bool, Bool}) -> Nat =>
             match p
             | (true, _) | (_, true) => 1
             | (false, false) => 0
@@ -115,7 +115,7 @@ fn alternatives_that_meet_are_refused_with_the_value_they_share() {
 fn an_alternative_an_arm_before_it_covers_is_refused() {
     let source = r#"
         use /std/{Nat, Option, print};
-        let f(o: Option(Nat)) -> Nat =
+        let f(o: Option(Nat)) -> Nat =>
             match o
             | some(_) => 1
             | some(0) | none() => 2
@@ -141,7 +141,7 @@ fn a_refusal_under_one_alternative_names_it() {
         | left(Nat)
         | right(Str)
         end
-        let next(e: Either) -> Nat =
+        let next(e: Either) -> Nat =>
             match e
             | left(x) | right(x) => x + 1
             end;

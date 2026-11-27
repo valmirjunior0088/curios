@@ -3,5 +3,5 @@ use /std/Io/{Future};
 use /std/Io/Scope/{Task};
 
 --- The task's answer, waiting until it has one.
-pub let join(@A: Type, t: Task(A)) -> Io(A) =
+pub let join(@A: Type, t: Task(A)) -> Io(A) =>
     Future/wait(t.0);

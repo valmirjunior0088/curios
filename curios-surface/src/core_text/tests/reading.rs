@@ -455,7 +455,7 @@ fn a_form_only_a_program_writes_is_refused_by_name_where_it_stands() {
 /// A test's form and a foreign row's are made against the scope a reader is handed, and none is refused.
 #[test]
 fn a_form_that_implies_a_definition_needs_a_scope() {
-    for text in ["test /t = 1;\n", "foreign /f(Bytes) -> Bytes;\n"] {
+    for text in ["test /t => 1;\n", "foreign /f(Bytes) -> Bytes;\n"] {
         let file = text.parse::<CoreFile>().unwrap();
         assert!(matches!(
             to_core(&file, None).map(|_| ()),

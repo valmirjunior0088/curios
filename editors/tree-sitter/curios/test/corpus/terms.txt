@@ -415,8 +415,8 @@ Local let with destructuring binders and a recursive binding
 
 let (a, (_, b)) = pair;
 let Point { loc = (x, y), color } = point;
-let inc(n: Nat) -> Nat = n + 1;
-let loop(n: Nat) -> Nat = loop(n);
+let inc(n: Nat) -> Nat => n + 1;
+let loop(n: Nat) -> Nat => loop(n);
 loop(inc(a))
 
 --------------------------------------------------------------------------------
@@ -454,8 +454,8 @@ loop(inc(a))
       (let_term
         (let_binding
           (identifier)
-          (parameters
-            (parameter
+          (sugar_parameters
+            (sugar_parameter
               (identifier)
               (path
                 (identifier))))
@@ -468,8 +468,8 @@ loop(inc(a))
         (let_term
           (let_binding
             (identifier)
-            (parameters
-              (parameter
+            (sugar_parameters
+              (sugar_parameter
                 (identifier)
                 (path
                   (identifier))))
@@ -535,7 +535,7 @@ match u | () => f(()) end
 A goal, sorts, and a tuple type
 ================================================================================
 
-let compose(@A: Type, f: (A) -> Prop) -> {run(input: Bytes) -> Async(Nat), Nat} = ?;
+let compose(@A: Type, f: (A) -> Prop) -> {run(input: Bytes) -> Async(Nat), Nat} => ?;
 compose
 
 --------------------------------------------------------------------------------
@@ -585,7 +585,7 @@ A member written as its type alone, and a lambda holding a witness slot's place
 induct Positive: Type
 | at(n: Nat, @Holds(0 < n))
 end
-let f(n: Nat, @_: Holds(0 < n)) -> Nat = n;
+let f(n: Nat, @_: Holds(0 < n)) -> Nat => n;
 let g = (@A, use _, x) => x;
 f
 
@@ -707,7 +707,7 @@ Sized { ..base, @_, items = other }
 A sort left to a caller
 ================================================================================
 
-let keep(@A: Sort, a: A) -> A = a;
+let keep(@A: Sort, a: A) -> A => a;
 keep
 
 --------------------------------------------------------------------------------
@@ -814,7 +814,7 @@ A constructor holds a binder's value to its one case, and the arrow tells a loca
 
 let refl() = p;
 let cons(head, @_, (a, b)) = whole;
-let one() -> Nat = 1;
+let one() -> Nat => 1;
 (pair(x, _)) => x
 
 --------------------------------------------------------------------------------
@@ -845,7 +845,7 @@ let one() -> Nat = 1;
       (let_term
         (let_binding
           (identifier)
-          (parameters)
+          (sugar_parameters)
           (path
             (identifier))
           (number))

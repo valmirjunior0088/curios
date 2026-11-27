@@ -447,7 +447,7 @@ fn two_calls_of_one_definition_convert_by_their_spines_whatever_spells_them() {
         context.assume(&p, &family);
         context.assume(&q, &family);
 
-        // `h(e: F) -> Nat = match e end`, an elimination with no arm, stuck on a variable.
+        // `h(e: F) -> Nat => match e end`, an elimination with no arm, stuck on a variable.
         let eliminated = Term::from(Subterm::Match(Match {
             head: Term::free_var(&e),
             goal: nat_type(),

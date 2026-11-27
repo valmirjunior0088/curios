@@ -3,13 +3,13 @@
 -- `rng_manual.crs` computes the identical sum with the seed as an ordinary parameter. N is read from the command line; output is the sum mod 1000003.
 use /std/{Str, Nat, State, List, Option, Result, Try, Io, Proc, Fmt};
 
-let next() -> State(Nat, Nat) =
+let next() -> State(Nat, Nat) =>
     let s = State/get()!;
     let n = 75 * s % 65537;
     let () = State/set(n)!;
     State/pure(n);
 
-let run(k: Nat, acc: Nat) -> State(Nat, Nat) =
+let run(k: Nat, acc: Nat) -> State(Nat, Nat) =>
     match k
     | 0 => State/pure(acc)
     | m + 1 =>
@@ -17,10 +17,10 @@ let run(k: Nat, acc: Nat) -> State(Nat, Nat) =
         run(m, (acc + x) % 1000003)
     end;
 
-let total(n: Nat) -> Nat =
+let total(n: Nat) -> Nat =>
     State/run(run(n, 0), 1).1;
 
-let execute() -> Try(Io, Str, {}) =
+let execute() -> Try(Io, Str, {}) =>
     let arguments = Proc/args()!;
     let bytes = Option/to_result(List/try_get(arguments, 1), "no input")!;
     let s = Result/map_failure(Str/of_bytes(bytes), (_) => "invalid utf-8")!;

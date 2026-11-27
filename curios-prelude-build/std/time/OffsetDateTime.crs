@@ -14,7 +14,7 @@ satisfy Eql(OffsetDateTime) {
 
 --- The moment's encoding, then the local date-time's, then the offset's: the order's own sequence, which its key's law reads.
 satisfy Hash(OffsetDateTime) {
-    hash(odt) =
+    hash(odt) =>
         0x[
             ..Hash/delimited(Hash/hash(to_timestamp(odt))),
             ..Hash/delimited(Hash/hash(odt.date_time)),
@@ -26,7 +26,7 @@ satisfy Spell(OffsetDateTime) {
 }
 
 -- A function of its own, so the witness states `lt` and `le` over it and the laws read all three by reduction.
-let ord(a: OffsetDateTime, b: OffsetDateTime) -> Ordering =
+let ord(a: OffsetDateTime, b: OffsetDateTime) -> Ordering =>
     Ord/lexicographic([
         Ord/ord(to_timestamp(a), to_timestamp(b)),
         Ord/ord(a.date_time, b.date_time),
@@ -36,15 +36,15 @@ let ord(a: OffsetDateTime, b: OffsetDateTime) -> Ordering =
 --- By the moment first, as java.time compares, then the local date-time, then the offset, `unknown()` first: two compare equal exactly where they are one value.
 satisfy Ord(OffsetDateTime) {
     ord = ord,
-    lt(a, b) = Ordering/is_lt(ord(a, b)),
-    le(a, b) = Ordering/is_le(ord(a, b)),
-    flips(a, b) =
+    lt(a, b) => Ordering/is_lt(ord(a, b)),
+    le(a, b) => Ordering/is_le(ord(a, b)),
+    flips(a, b) =>
         Ordering/then/flips(
             Ordering/then/flips(
                 Ord/flips(to_timestamp(a), to_timestamp(b)),
                 (_) => Ord/flips(a.date_time, b.date_time)),
             (_) => Ord/flips(a.offset, b.offset)),
-    trans(a, b, c, p, q) =
+    trans(a, b, c, p, q) =>
         Ordering/chains/le(
             ord(a, b),
             ord(b, c),
@@ -56,7 +56,7 @@ satisfy Ord(OffsetDateTime) {
                 (_, _) => Ord/chains(a.offset, b.offset, c.offset)),
             p,
             q),
-    eq(a, b, h) =
+    eq(a, b, h) =>
         let fields(
             date_time1: DateTime,
             offset1: Offset,
@@ -66,7 +66,7 @@ satisfy Ord(OffsetDateTime) {
             offset: Eq()(offset1, offset2),
         ) -> Eq()(
             OffsetDateTime { date_time = date_time1, offset = offset1 },
-            OffsetDateTime { date_time = date_time2, offset = offset2 }) =
+            OffsetDateTime { date_time = date_time2, offset = offset2 }) =>
             let refl() = date_time;
             let refl() = offset;
             Eq/refl();
@@ -98,13 +98,13 @@ satisfy Ord(OffsetDateTime) {
                         Ord/ord(a.date_time, b.date_time)),
                     Ord/ord(a.offset, b.offset),
                     h))),
-    is_lt(_, _) = Eq/refl(),
-    is_le(_, _) = Eq/refl(),
+    is_lt(_, _) => Eq/refl(),
+    is_le(_, _) => Eq/refl(),
 }
 
 -- Its order folds the moment's, the date-time's and the offset's from the left, so its law is `Hash/Key/then` at the moment with the rest's below it, `Hash/Key/then` again at the date-time, and `Hash/Key/last` at the offset.
 satisfy Hash/Key(OffsetDateTime) {
-    mono(a, b) =
+    mono(a, b) =>
         Hash/Key/then(
             Ordering/eq(),
             Ord/ord(to_timestamp(a), to_timestamp(b)),
@@ -134,7 +134,7 @@ satisfy Hash/Key(OffsetDateTime) {
 }
 
 --- The moment the date-time names at its offset: its seconds counted as POSIX counts a date and a time, less how far ahead of UTC the offset is, so a second of `60` counts as the next minute's first.
-pub let to_timestamp(odt: OffsetDateTime) -> Timestamp =
+pub let to_timestamp(odt: OffsetDateTime) -> Timestamp =>
     let date = odt.date_time.date;
     let time = odt.date_time.time;
     let seconds =
@@ -143,7 +143,7 @@ pub let to_timestamp(odt: OffsetDateTime) -> Timestamp =
     Timestamp/of_unix_nanos(seconds * 1000000000 + Nat/to_int(time.nanosecond));
 
 --- The moment `t` as the calendar and the clock name it at `o`. It never answers a second of `60`.
-pub let of_timestamp(t: Timestamp, o: Offset) -> OffsetDateTime =
+pub let of_timestamp(t: Timestamp, o: Offset) -> OffsetDateTime =>
     let nanos = Timestamp/to_unix_nanos(t) + Offset/ahead(o) * 1000000000;
     let seconds = nanos / 1000000000;
     OffsetDateTime {
@@ -154,11 +154,11 @@ pub let of_timestamp(t: Timestamp, o: Offset) -> OffsetDateTime =
         offset = o };
 
 --- The moment as ISO 8601's extended format writes it, at the offset it holds: `2024-02-29T08:49:37+05:30`.
-pub let to_str(odt: OffsetDateTime) -> Str =
+pub let to_str(odt: OffsetDateTime) -> Str =>
     iso8601/write_offset_date_time(odt);
 
 --- The OffsetDateTime ISO 8601's extended format writes as `s`, or `none` for text that writes none.
-pub let of_str(s: Str) -> Option(OffsetDateTime) =
+pub let of_str(s: Str) -> Option(OffsetDateTime) =>
     iso8601/whole(iso8601/offset_date_time(), s);
 
 satisfy Show(OffsetDateTime) {

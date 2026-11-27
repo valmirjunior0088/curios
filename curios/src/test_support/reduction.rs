@@ -10,7 +10,7 @@ pub fn bytes_growing(n: usize) -> String {
     fill!(
         r#"
         use /std/{Bytes, Nat, Str};
-        let go(i : Nat, acc : Bytes) -> Bytes =
+        let go(i : Nat, acc : Bytes) -> Bytes =>
             match i | 0 => acc | k + 1 => go(k, 0x[..acc, ..Str/to_bytes("0123456789")]) end;
         let built = go(${n}, 0x[]);
         let head = Bytes/slice(built, 0, 10);
@@ -25,7 +25,7 @@ pub fn list_growing(n: usize) -> String {
     fill!(
         r#"
         use /std/{List, Nat, Str};
-        let go(i : Nat, acc : List(Nat)) -> List(Nat) =
+        let go(i : Nat, acc : List(Nat)) -> List(Nat) =>
             match i | 0 => acc | k + 1 => go(k, [..acc, ..[0, 1, 2, 3, 4, 5, 6, 7, 8, 9]]) end;
         let built = go(${n}, []);
         let head = List/slice(built, 0, 10);

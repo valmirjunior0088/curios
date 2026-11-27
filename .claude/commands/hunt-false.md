@@ -72,7 +72,7 @@ The snapshot's board, `<snapshot>/binaries/xboard probe <file>`, asks the board'
 use /std/{Nat};
 use /std/Bool/{True, False, Holds};
 
-let f(n: Nat, h: Holds(n == 2)) -> False =
+let f(n: Nat, h: Holds(n == 2)) -> False =>
     match n | 0 => h | k + 1 => f(k + 1, h) end;
 
 f(2, True/qed())

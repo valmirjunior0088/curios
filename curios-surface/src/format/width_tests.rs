@@ -59,7 +59,7 @@ fn an_indentation_is_one_of_the_two_the_laws_are_held_at() {
 /// At two columns a file is indented two columns a level and broken where the default breaks it: a source canonical at four, its leading spaces halved.
 #[test]
 fn a_two_column_indentation_indents_each_level_by_two() {
-    let source = "struct Pair: Type {\n    fst: /std/Nat,\n    snd: /std/Nat,\n}\n\nlet f(n: /std/Nat) -> /std/Nat =\n    match n\n    | 0 => 1\n    | 1 => 2\n    | 2 => 3\n    | _ =>\n        let m = n + 1;\n        m\n    end;\n";
+    let source = "struct Pair: Type {\n    fst: /std/Nat,\n    snd: /std/Nat,\n}\n\nlet f(n: /std/Nat) -> /std/Nat =>\n    match n\n    | 0 => 1\n    | 1 => 2\n    | 2 => 3\n    | _ =>\n        let m = n + 1;\n        m\n    end;\n";
     let halved = source
         .lines()
         .map(|line| {
@@ -146,7 +146,7 @@ fn every_source_in_the_tree_formats_at_every_width_and_holds_there() {
 /// A match is kept on one line within its format's flat match and broken past it: by its span, which `0` closes to every match, and by its arms.
 #[test]
 fn a_flat_match_keeps_or_breaks_a_match_by_its_span_and_its_arms() {
-    let source = "let f(n: /std/Nat) -> /std/Nat =\n    match n | 0 => 1 | 1 => 2 | _ => n end;\n";
+    let source = "let f(n: /std/Nat) -> /std/Nat =>\n    match n | 0 => 1 | 1 => 2 | _ => n end;\n";
     let within = |width, arms| {
         let line_width = Width::default();
         let flat_match = FlatMatch::within(line_width, Some(width), Some(arms))
@@ -179,7 +179,7 @@ fn a_flat_match_keeps_or_breaks_a_match_by_its_span_and_its_arms() {
         "three arms within three"
     );
     let four =
-        "let f(n: /std/Nat) -> /std/Nat =\n    match n | 0 => 1 | 1 => 2 | 2 => 3 | _ => n end;\n";
+        "let f(n: /std/Nat) -> /std/Nat =>\n    match n | 0 => 1 | 1 => 2 | 2 => 3 | _ => n end;\n";
     let wide = |arms| {
         let line_width = Width::default();
         formatted_within(

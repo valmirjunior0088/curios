@@ -17,10 +17,10 @@ fn a_witness_handed_on_inside_another_descends_where_each_applies_what_it_is_han
         end
 
         satisfy Spell(Doc) {
-            spell(a) = match a | num(n) => Spell/spell(n) | nest(cs) => Spell/spell(cs) end,
+            spell(a) => match a | num(n) => Spell/spell(n) | nest(cs) => Spell/spell(cs) end,
         }
 
-        let Spelled(a: Doc) -> /std/Bool/True =
+        let Spelled(a: Doc) -> /std/Bool/True =>
             match Str/length(Spell/spell(a)) == 0
             | true => /std/Bool/True/qed()
             | false => /std/Bool/True/qed()
@@ -52,10 +52,10 @@ fn a_witness_handed_on_through_a_pair_and_an_option_descends() {
         end
 
         satisfy Spell(Doc) {
-            spell(a) = match a | num(n) => Spell/spell(n) | nest(cs) => Spell/spell(cs) end,
+            spell(a) => match a | num(n) => Spell/spell(n) | nest(cs) => Spell/spell(cs) end,
         }
 
-        let Spelled(a: Doc) -> /std/Bool/True =
+        let Spelled(a: Doc) -> /std/Bool/True =>
             match Str/length(Spell/spell(a)) == 0
             | true => /std/Bool/True/qed()
             | false => /std/Bool/True/qed()
@@ -85,7 +85,7 @@ fn a_witness_that_hands_itself_on_publishes_how_it_applies_its_own_premise() {
         | rose(A, List(Rose(A)))
         end
 
-        satisfy (@A: Type, use Spell(A)) => Spell(Rose(A)) {
+        satisfy (@A: Type, use Spell(A)) -> Spell(Rose(A)) {
             ..
         }
 
@@ -95,10 +95,10 @@ fn a_witness_that_hands_itself_on_publishes_how_it_applies_its_own_premise() {
         end
 
         satisfy Spell(Doc) {
-            spell(a) = match a | num(n) => Spell/spell(n) | nest(c) => Spell/spell(c) end,
+            spell(a) => match a | num(n) => Spell/spell(n) | nest(c) => Spell/spell(c) end,
         }
 
-        let Spelled(a: Doc) -> /std/Bool/True =
+        let Spelled(a: Doc) -> /std/Bool/True =>
             match Str/length(Spell/spell(a)) == 0
             | true => /std/Bool/True/qed()
             | false => /std/Bool/True/qed()
@@ -129,8 +129,8 @@ fn a_witness_between_that_applies_its_premise_to_what_it_built_does_not_descend(
             make: ({}) -> A,
         }
 
-        satisfy (@A: Type, use Spell(A)) => Spell(Held(A)) {
-            spell(a) = Spell/spell(a.item),
+        satisfy (@A: Type, use Spell(A)) -> Spell(Held(A)) {
+            spell(a) => Spell/spell(a.item),
         }
 
         induct Doc: Type
@@ -139,10 +139,10 @@ fn a_witness_between_that_applies_its_premise_to_what_it_built_does_not_descend(
         end
 
         satisfy Spell(Doc) {
-            spell(a) = match a | num(n) => Spell/spell(n) | nest(cs) => Spell/spell(cs) end,
+            spell(a) => match a | num(n) => Spell/spell(n) | nest(cs) => Spell/spell(cs) end,
         }
 
-        let Spelled(a: Doc) -> /std/Bool/True =
+        let Spelled(a: Doc) -> /std/Bool/True =>
             match Str/length(Spell/spell(a)) == 0
             | true => /std/Bool/True/qed()
             | false => /std/Bool/True/qed()
@@ -173,14 +173,14 @@ fn a_record_handed_on_states_what_it_applied_where_it_was_answered() {
             m: (Nat) -> Nat,
         }
 
-        let d(f: (Nat) -> Nat) -> Handlers =
+        let d(f: (Nat) -> Nat) -> Handlers =>
             Handlers { y = 0, m = (x) => match x | 0 => 0 | n + 1 => f(n) end };
 
-        let call(r: Handlers, t: Nat) -> Nat = r.m(t);
+        let call(r: Handlers, t: Nat) -> Nat => r.m(t);
 
-        let g(t: Nat) -> Nat = call(d(g), t);
+        let g(t: Nat) -> Nat => call(d(g), t);
 
-        let Small(t: Nat) -> /std/Bool/True =
+        let Small(t: Nat) -> /std/Bool/True =>
             match g(t) == 0 | true => /std/Bool/True/qed() | false => /std/Bool/True/qed() end;
 
         /std/print("ok")
@@ -215,10 +215,10 @@ fn a_family_nested_through_a_law_that_infers_its_answers_descends() {
             @fy: Ordering,
             head: Eq()(fx, Ordering/flip(x)),
             rest: (Eq()(x, Ordering/eq())) -> Eq()(fy, Ordering/flip(y)),
-        ) -> Eq()(Ordering/then(fx, fy), Ordering/flip(Ordering/then(x, y))) =
+        ) -> Eq()(Ordering/then(fx, fy), Ordering/flip(Ordering/then(x, y))) =>
             Ordering/then/flips(head, rest);
 
-        let seq(@T: Type, use Order(T), a: List(T), b: List(T)) -> Ordering =
+        let seq(@T: Type, use Order(T), a: List(T), b: List(T)) -> Ordering =>
             match a
             | [] => match b | [] => Ordering/eq() | [_, .._] => Ordering/lt() end
             | [x, ..xs] =>
@@ -233,7 +233,7 @@ fn a_family_nested_through_a_law_that_infers_its_answers_descends() {
             use Order(T),
             a: List(T),
             b: List(T),
-        ) -> Eq()(seq(b, a), Ordering/flip(seq(a, b))) =
+        ) -> Eq()(seq(b, a), Ordering/flip(seq(a, b))) =>
             match a
             | [] => match b | [] => Eq/refl() | [_, .._] => Eq/refl() end
             | [x, ..xs] =>
@@ -243,7 +243,7 @@ fn a_family_nested_through_a_law_that_infers_its_answers_descends() {
                 end
             end;
 
-        satisfy (@T: Type, use Order(T)) => Order(List(T)) {
+        satisfy (@T: Type, use Order(T)) -> Order(List(T)) {
             cmp = seq,
             law = seq_law,
         }
@@ -254,12 +254,12 @@ fn a_family_nested_through_a_law_that_infers_its_answers_descends() {
         end
 
         satisfy Order(Doc) {
-            cmp(a, b) =
+            cmp(a, b) =>
                 match a
                 | num(n) => match b | num(m) => Ord/ord(n, m) | arr(_) => Ordering/lt() end
                 | arr(xs) => match b | num(_) => Ordering/gt() | arr(ys) => Order/cmp(xs, ys) end
                 end,
-            law(a, b) =
+            law(a, b) =>
                 match a
                 | num(n) => match b | num(m) => Ord/flips(n, m) | arr(_) => Eq/refl() end
                 | arr(xs) => match b | num(_) => Eq/refl() | arr(ys) => Order/law(xs, ys) end
@@ -284,13 +284,13 @@ fn a_law_taking_its_containers_law_apart_descends() {
             law(a: A, b: A) -> Eq()(ord(a, b), ord(a, b)),
         }
 
-        let seq_ord(@T: Type, use Order(T), a: List(T), b: List(T)) -> Bool =
+        let seq_ord(@T: Type, use Order(T), a: List(T), b: List(T)) -> Bool =>
             match a
             | [] => match b | [] => true | [_, .._] => false end
             | [x, ..xs] => match b | [] => false | [y, ..ys] => Bool/and(Order/ord(x, y), seq_ord(xs, ys)) end
             end;
 
-        let seq_law(@T: Type, use Order(T), a: List(T), b: List(T)) -> Eq()(seq_ord(a, b), seq_ord(a, b)) =
+        let seq_law(@T: Type, use Order(T), a: List(T), b: List(T)) -> Eq()(seq_ord(a, b), seq_ord(a, b)) =>
             match a
             | [] => Eq/refl()
             | [x, ..xs] =>
@@ -300,7 +300,7 @@ fn a_law_taking_its_containers_law_apart_descends() {
                 end
             end;
 
-        satisfy (@T: Type, use Order(T)) => Order(List(T)) {
+        satisfy (@T: Type, use Order(T)) -> Order(List(T)) {
             ord = seq_ord,
             law = seq_law,
         }
@@ -308,12 +308,12 @@ fn a_law_taking_its_containers_law_apart_descends() {
         induct Doc: Type | num(Nat) | arr(List(Doc)) end
 
         satisfy Order(Doc) {
-            ord(a, b) =
+            ord(a, b) =>
                 match a
                 | num(n) => match b | num(m) => n == m | arr(_) => false end
                 | arr(xs) => match b | num(_) => false | arr(ys) => Order/ord(xs, ys) end
                 end,
-            law(a, b) =
+            law(a, b) =>
                 match a
                 | num(_) => Eq/refl()
                 | arr(xs) => match b | num(_) => Eq/refl() | arr(ys) => match Order/law(xs, ys) | refl() => Eq/refl() end end
@@ -345,8 +345,8 @@ fn a_witness_that_recurses_through_its_own_method_publishes_how_it_applies_its_p
         | link(A, Chain(A))
         end
 
-        satisfy (@A: Type, use Spell(A)) => Spell(Chain(A)) {
-            spell(a) =
+        satisfy (@A: Type, use Spell(A)) -> Spell(Chain(A)) {
+            spell(a) =>
                 match a
                 | end_() => ""
                 | link(x, xs) => Str/concat(Spell/spell(x), Spell/spell(xs))
@@ -359,10 +359,10 @@ fn a_witness_that_recurses_through_its_own_method_publishes_how_it_applies_its_p
         end
 
         satisfy Spell(Doc) {
-            spell(a) = match a | num(n) => Spell/spell(n) | nest(c) => Spell/spell(c) end,
+            spell(a) => match a | num(n) => Spell/spell(n) | nest(c) => Spell/spell(c) end,
         }
 
-        let Spelled(a: Doc) -> /std/Bool/True =
+        let Spelled(a: Doc) -> /std/Bool/True =>
             match Str/length(Spell/spell(a)) == 0
             | true => /std/Bool/True/qed()
             | false => /std/Bool/True/qed()
@@ -393,7 +393,7 @@ fn a_family_nested_through_a_recursive_family_derives_a_lawful_witness() {
         | link(A, Chain(A))
         end
 
-        satisfy (@A: Type, use Eql(A)) => Eql(Chain(A)) {
+        satisfy (@A: Type, use Eql(A)) -> Eql(Chain(A)) {
             ..
         }
 
@@ -424,8 +424,8 @@ fn a_witness_that_hands_its_premise_on_at_another_place_publishes_nothing_of_it(
         | go(A, B, Alt(A, B))
         end
 
-        satisfy (@A: Type, @B: Type, use Spell(A), use Spell(B)) => Spell(Alt(A, B)) {
-            spell(a) =
+        satisfy (@A: Type, @B: Type, use Spell(A), use Spell(B)) -> Spell(Alt(A, B)) {
+            spell(a) =>
                 match a
                 | stop() => ""
                 | go(x, y, rest) =>
@@ -439,10 +439,10 @@ fn a_witness_that_hands_its_premise_on_at_another_place_publishes_nothing_of_it(
         end
 
         satisfy Spell(Doc) {
-            spell(a) = match a | num(n) => Spell/spell(n) | nest(c) => Spell/spell(c) end,
+            spell(a) => match a | num(n) => Spell/spell(n) | nest(c) => Spell/spell(c) end,
         }
 
-        let Spelled(a: Doc) -> /std/Bool/True =
+        let Spelled(a: Doc) -> /std/Bool/True =>
             match Str/length(Spell/spell(a)) == 0
             | true => /std/Bool/True/qed()
             | false => /std/Bool/True/qed()
@@ -474,16 +474,16 @@ fn a_field_of_a_parameter_handed_on_is_applied_where_its_callee_applies_it() {
 
         induct Doc: Type | leaf() | arr(List(Doc)) end
 
-        let all(@T: Type, e: Inner(T), s: List(T)) -> True =
+        let all(@T: Type, e: Inner(T), s: List(T)) -> True =>
             match s
             | [] => True/qed()
             | [x, ..xs] => match e.step(x) | qed() => all(e, xs) end
             end;
 
-        let through(@T: Type, o: Outer(T), s: List(T)) -> True = all(o.inner, s);
+        let through(@T: Type, o: Outer(T), s: List(T)) -> True => all(o.inner, s);
 
         let w: Outer(Doc) =
-            Outer { inner = Inner { step(d) = match d | leaf() => True/qed() | arr(s) => through(w, s) end } };
+            Outer { inner = Inner { step(d) => match d | leaf() => True/qed() | arr(s) => through(w, s) end } };
 
         /std/print("ok")
         "#,
@@ -512,13 +512,13 @@ fn a_witness_whose_superclass_is_built_from_its_premise_publishes_how_it_applies
             law(a: A, b: A) -> Eq()(ord(a, b), ord(a, b)),
         }
 
-        let seq_ord(@T: Type, use Order(T), a: List(T), b: List(T)) -> Bool =
+        let seq_ord(@T: Type, use Order(T), a: List(T), b: List(T)) -> Bool =>
             match a
             | [] => match b | [] => true | [_, .._] => false end
             | [x, ..xs] => match b | [] => false | [y, ..ys] => Bool/and(Order/ord(x, y), seq_ord(xs, ys)) end
             end;
 
-        let seq_law(@T: Type, use Order(T), a: List(T), b: List(T)) -> Eq()(seq_ord(a, b), seq_ord(a, b)) =
+        let seq_law(@T: Type, use Order(T), a: List(T), b: List(T)) -> Eq()(seq_ord(a, b), seq_ord(a, b)) =>
             match a
             | [] => Eq/refl()
             | [x, ..xs] =>
@@ -528,7 +528,7 @@ fn a_witness_whose_superclass_is_built_from_its_premise_publishes_how_it_applies
                 end
             end;
 
-        satisfy (@T: Type, use Order(T)) => Order(List(T)) {
+        satisfy (@T: Type, use Order(T)) -> Order(List(T)) {
             ord = seq_ord,
             law = seq_law,
         }
@@ -538,12 +538,12 @@ fn a_witness_whose_superclass_is_built_from_its_premise_publishes_how_it_applies
         satisfy Eql(Doc) { .. }
 
         satisfy Order(Doc) {
-            ord(a, b) =
+            ord(a, b) =>
                 match a
                 | num(n) => match b | num(m) => n == m | arr(_) => false end
                 | arr(xs) => match b | num(_) => false | arr(ys) => Order/ord(xs, ys) end
                 end,
-            law(a, b) =
+            law(a, b) =>
                 match a
                 | num(_) => Eq/refl()
                 | arr(xs) => match b | num(_) => Eq/refl() | arr(ys) => Order/law(xs, ys) end
@@ -580,13 +580,13 @@ fn a_definition_held_at_a_field_is_called_through_its_parts() {
             law(a: A, b: A) -> Eq()(ord(a, b), ord(a, b)),
         }
 
-        let seq_ord(@T: Type, use Order(T), a: List(T), b: List(T)) -> Bool =
+        let seq_ord(@T: Type, use Order(T), a: List(T), b: List(T)) -> Bool =>
             match a
             | [] => match b | [] => true | [_, .._] => false end
             | [x, ..xs] => match b | [] => false | [y, ..ys] => Bool/and(Order/ord(x, y), seq_ord(xs, ys)) end
             end;
 
-        let seq_law(@T: Type, use Order(T), a: List(T), b: List(T)) -> Eq()(seq_ord(a, b), seq_ord(a, b)) =
+        let seq_law(@T: Type, use Order(T), a: List(T), b: List(T)) -> Eq()(seq_ord(a, b), seq_ord(a, b)) =>
             match a
             | [] => Eq/refl()
             | [x, ..xs] =>
@@ -596,19 +596,19 @@ fn a_definition_held_at_a_field_is_called_through_its_parts() {
                 end
             end;
 
-        satisfy (@T: Type, use Order(T)) => Order(List(T)) {
+        satisfy (@T: Type, use Order(T)) -> Order(List(T)) {
             ord = seq_ord,
             law = seq_law,
         }
 
         satisfy Order(Str) {
-            ord(a, b) = a == b,
-            law(_, _) = Eq/refl(),
+            ord(a, b) => a == b,
+            law(_, _) => Eq/refl(),
         }
 
-        satisfy (@A: Type, @B: Type, use Order(A), use Order(B)) => Order({A, B}) {
-            ord(a, b) = Bool/and(Order/ord(a.0, b.0), Order/ord(a.1, b.1)),
-            law(a, b) = match Order/law(a.0, b.0) | refl() => match Order/law(a.1, b.1) | refl() => Eq/refl() end end,
+        satisfy (@A: Type, @B: Type, use Order(A), use Order(B)) -> Order({A, B}) {
+            ord(a, b) => Bool/and(Order/ord(a.0, b.0), Order/ord(a.1, b.1)),
+            law(a, b) => match Order/law(a.0, b.0) | refl() => match Order/law(a.1, b.1) | refl() => Eq/refl() end end,
         }
 
         induct D: Type | num(Nat) | obj(List({Str, D})) end
@@ -616,12 +616,12 @@ fn a_definition_held_at_a_field_is_called_through_its_parts() {
         satisfy Eql(D) { .. }
 
         satisfy Order(D) {
-            ord(a, b) =
+            ord(a, b) =>
                 match a
                 | num(n) => match b | num(m) => n == m | obj(_) => false end
                 | obj(xs) => match b | num(_) => false | obj(ys) => Order/ord(xs, ys) end
                 end,
-            law(a, b) =
+            law(a, b) =>
                 match a
                 | num(_) => Eq/refl()
                 | obj(xs) => match b | num(_) => Eq/refl() | obj(ys) => Order/law(xs, ys) end
@@ -657,21 +657,21 @@ fn a_record_recursing_through_a_slot_that_holds_an_applied_definition_descends()
 
         induct Doc: Type | leaf() | arr(List(Doc)) end
 
-        let all(@T: Type, e: Inner(T), s: List(T)) -> True =
+        let all(@T: Type, e: Inner(T), s: List(T)) -> True =>
             match s
             | [] => True/qed()
             | [x, ..xs] => match e.step(x) | qed() => all(e, xs) end
             end;
 
-        let each(@T: Type, e: Inner(T)) -> Inner(List(T)) = Inner { step(s) = all(e, s) };
+        let each(@T: Type, e: Inner(T)) -> Inner(List(T)) => Inner { step(s) => all(e, s) };
 
-        let lift(@T: Type, o: Outer(T)) -> Outer(List(T)) =
-            Outer { inner = each(o.inner), go(_) = True/qed() };
+        let lift(@T: Type, o: Outer(T)) -> Outer(List(T)) =>
+            Outer { inner = each(o.inner), go(_) => True/qed() };
 
         let w: Outer(Doc) =
             Outer {
-                inner = Inner { step(d) = match d | leaf() => True/qed() | arr(s) => lift(w).inner.step(s) end },
-                go(_) = True/qed(),
+                inner = Inner { step(d) => match d | leaf() => True/qed() | arr(s) => lift(w).inner.step(s) end },
+                go(_) => True/qed(),
             };
 
         /std/print("ok")
@@ -700,21 +700,21 @@ fn a_definition_held_at_a_slot_and_called_beside_it_is_graded_by_each_call() {
 
         induct Doc: Type | leaf() | arr(List(Doc)) end
 
-        let same(@T: Type, e: Inner(T)) -> Inner(T) = Inner { step(a) = e.step(a) };
+        let same(@T: Type, e: Inner(T)) -> Inner(T) => Inner { step(a) => e.step(a) };
 
-        let lift(@T: Type, o: Outer(T)) -> Outer(T) =
-            Outer { inner = same(o.inner), go(a) = same(o.inner).step(a) };
+        let lift(@T: Type, o: Outer(T)) -> Outer(T) =>
+            Outer { inner = same(o.inner), go(a) => same(o.inner).step(a) };
 
         let w: Outer(Doc) =
             Outer {
                 inner = Inner {
-                    step(d) =
+                    step(d) =>
                         match d
                         | leaf() => True/qed()
                         | arr(s) => match s | [] => True/qed() | [x, .._] => lift(w).go(x) end
                         end,
                 },
-                go(_) = True/qed(),
+                go(_) => True/qed(),
             };
 
         /std/print("ok")
@@ -742,11 +742,11 @@ fn a_member_handed_to_a_definition_held_at_its_field_is_a_call_of_each_of_its_pa
 
         struct Outer: Type { a: Inner }
 
-        let hold(g: (Nat) -> Outer) -> Inner = Inner { step(k) = g(k).a.step(k) };
+        let hold(g: (Nat) -> Outer) -> Inner => Inner { step(k) => g(k).a.step(k) };
 
-        let leaf(n: Nat) -> Outer = Outer { a = Inner { step(_) = True/qed() } };
+        let leaf(n: Nat) -> Outer => Outer { a = Inner { step(_) => True/qed() } };
 
-        let m(n: Nat) -> Outer = Outer { a = hold(leaf) };
+        let m(n: Nat) -> Outer => Outer { a = hold(leaf) };
 
         let _ = m(0).a.step(0);
         /std/print("ok")
@@ -777,11 +777,11 @@ fn a_lambda_handed_to_a_definition_held_at_a_field_is_walked_as_it_stands() {
 
         struct Outer: Type { a: Inner }
 
-        let hold(g: (Nat) -> True) -> Inner = Inner { step(k) = g(k) };
+        let hold(g: (Nat) -> True) -> Inner => Inner { step(k) => g(k) };
 
-        let m(n: Nat, f: (Nat) -> True) -> Outer = Outer { a = hold((j) => f(j)) };
+        let m(n: Nat, f: (Nat) -> True) -> Outer => Outer { a = hold((j) => f(j)) };
 
-        let spin(k: Nat) -> True = match k | 0 => True/qed() | p + 1 => m(k, (x) => spin(p)).a.step(k) end;
+        let spin(k: Nat) -> True => match k | 0 => True/qed() | p + 1 => m(k, (x) => spin(p)).a.step(k) end;
 
         let _ = spin(3);
         /std/print("ok")

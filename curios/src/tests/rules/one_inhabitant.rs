@@ -17,7 +17,7 @@ fn two_neutrals_at_a_record_with_a_relevant_field_stay_apart() {
         r#"
         use /std/{Eq, Nat};
 
-        let apart(r : {{}, {}}, s : {{}, {}}) -> Eq(@({{}, {}}))(r, s) = Eq/refl();
+        let apart(r : {{}, {}}, s : {{}, {}}) -> Eq(@({{}, {}}))(r, s) => Eq/refl();
 
         /std/print("ok")
         "#,
@@ -54,7 +54,7 @@ fn two_neutrals_at_a_struct_with_a_relevant_field_stay_apart() {
 
         struct V: pub Type { n: {}, u: {} }
 
-        let apart(r : V, s : V) -> Eq(@(V))(r, s) = Eq/refl();
+        let apart(r : V, s : V) -> Eq(@(V))(r, s) => Eq/refl();
 
         /std/print("ok")
         "#,
@@ -74,7 +74,7 @@ fn two_neutrals_at_a_struct_that_reaches_itself_stay_apart() {
 
         struct R: pub Type { next: (Nat) -> {} }
 
-        let apart(r : R, s : R) -> Eq(@(R))(r, s) = Eq/refl();
+        let apart(r : R, s : R) -> Eq(@(R))(r, s) => Eq/refl();
 
         /std/print("ok")
         "#,
@@ -96,7 +96,7 @@ fn two_neutrals_at_a_struct_nested_over_a_relevant_field_stay_apart() {
 
         let apart(r : Pair(Pair({})), s : Pair(Pair({})))
             -> Eq(@(Pair(Pair({}))))(r, s)
-            = Eq/refl();
+            => Eq/refl();
 
         /std/print("ok")
         "#,
@@ -119,7 +119,7 @@ fn two_neutrals_at_structs_that_reach_each_other_stay_apart() {
         struct Left: pub Prop { right: (Nat) -> Right }
         and Right: pub Prop { left: (Nat) -> Left }
 
-        let apart(r : Left, s : Left) -> Eq(@(Left))(r, s) = Eq/refl();
+        let apart(r : Left, s : Left) -> Eq(@(Left))(r, s) => Eq/refl();
 
         /std/print("ok")
         "#,
@@ -172,7 +172,7 @@ fn two_neutrals_at_a_groups_member_with_a_relevant_field_stay_apart() {
         struct Outer: pub Prop { inner: Inner, u: Eq()(0, 0) }
         and Inner: pub Prop { n: Eq()(0, 0), outer: () -> Outer }
 
-        let apart(r : Outer, s : Outer) -> Eq(@(Outer))(r, s) = Eq/refl();
+        let apart(r : Outer, s : Outer) -> Eq(@(Outer))(r, s) => Eq/refl();
 
         /std/print("ok")
         "#,
@@ -214,7 +214,7 @@ fn two_neutrals_stay_apart_where_a_lookup_gives_them_a_type_with_a_relevant_fiel
         let apart(b : Bool, r : {{}, {}}, s : {{}, {}})
             -> Eq(@(Nat))((match b | true => (r, 1) | false => (r, 2) end).1,
                           (match b | true => (s, 1) | false => (s, 2) end).1)
-            = Eq/refl();
+            => Eq/refl();
 
         /std/print("ok")
         "#,
@@ -246,7 +246,7 @@ fn a_stuck_elimination_at_a_relevant_type_stays_apart_from_a_variable() {
                            | true => (match b | true => m | false => n end, 1)
                            | false => (m, 2) end).1,
                           (match c | true => (m, 1) | false => (m, 2) end).1)
-            = Eq/refl();
+            => Eq/refl();
 
         /std/print("ok")
         "#,
@@ -272,7 +272,7 @@ fn a_constructors_value_at_a_relevant_family_stays_apart_from_a_variable() {
         let apart(b : Bool, o : Eq()(0, 0))
             -> Eq(@(Nat))((match b | true => (o, 1) | false => (o, 2) end).1,
                           (match b | true => (Eq/refl(@Nat, @0), 1) | false => (Eq/refl(@Nat, @0), 2) end).1)
-            = Eq/refl();
+            => Eq/refl();
 
         /std/print("ok")
         "#,
@@ -311,7 +311,7 @@ fn two_binders_of_an_arm_at_a_relevant_type_stay_apart() {
         let apart(t : Two)
             -> Eq(@(Nat))((match t | two(m, n) => (m, 1) end).1,
                           (match t | two(m, n) => (n, 1) end).1)
-            = Eq/refl();
+            => Eq/refl();
 
         /std/print("ok")
         "#,
@@ -336,9 +336,9 @@ fn two_neutrals_at_a_struct_whose_relevant_field_is_hidden_stay_apart() {
 
         struct S: pub Type { @k: {}, u: {} }
 
-        let F(t: S) -> Prop = Holds(true);
+        let F(t: S) -> Prop => Holds(true);
 
-        let cast(r: S, s: S, G: (S) -> Prop, y: G(r)) -> G(s) = y;
+        let cast(r: S, s: S, G: (S) -> Prop, y: G(r)) -> G(s) => y;
 
         let _held: F(S { @k = (), u = () }) = cast(S { @k = (), u = () }, S { @k = (), u = () }, F, True/qed());
 

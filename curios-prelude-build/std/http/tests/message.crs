@@ -4,7 +4,7 @@ use /std/time/{Timestamp};
 use /std/http/{Method, Url, Field, Status, Request, Response, Limits};
 
 -- A method spells as the wire does and reads back, each of the seven, and a token that is none of them is no method.
-test a_method_spells_and_reads =
+test a_method_spells_and_reads =>
     let methods =
         [
             Method/get(),
@@ -24,11 +24,11 @@ test a_method_spells_and_reads =
         Test/equal(Show/show(Method/post()), "POST"),
         Test/equal(Method/of_str("BREW"), Option/none())]);
 
-let wire(b: Bytes) -> Option(Str) =
+let wire(b: Bytes) -> Option(Str) =>
     Result/to_option(Str/of_bytes(b));
 
 -- A request is written with its target, `host`, `connection: close`, and a length only where it has a body or its method always states one; what is written reads back as the request, the fields its renderer wrote beside its own.
-test a_request_is_written_and_reads_back =
+test a_request_is_written_and_reads_back =>
     let r =
         Request/with_header(
             Request/get(Url/lit("http://example.com/x?y=1")),
@@ -74,7 +74,7 @@ test a_request_is_written_and_reads_back =
                 "POST / HTTP/1.1\r\nhost: h\r\nconnection: close\r\ncontent-length: 2\r\n\r\nhi"))]);
 
 -- A reply is written as HTTP/1.1 and says `close`; it states its length unless its status is 1xx, 204 or 304, a 205's being zero; and a caller's own framing field is not sent.
-test a_reply_is_written_with_its_own_framing =
+test a_reply_is_written_with_its_own_framing =>
     Test/all([
         Test/equal(
             wire(Response/render(Response/of_text(200, "hello"))),
@@ -111,7 +111,7 @@ test a_reply_is_written_with_its_own_framing =
                 "HTTP/1.1 200 OK\r\nconnection: close\r\ncontent-length: 5\r\ncontent-type: text/plain; charset=utf-8\r\n\r\n"))]);
 
 -- A made reply reads back as itself, and its readers find a header without regard to case, its body as text, and whether its status is a success.
-test a_made_reply_reads_back =
+test a_made_reply_reads_back =>
     let r = Response/of_text(200, "hello");
     Test/all([
         Test/equal(
@@ -138,8 +138,8 @@ test a_made_reply_reads_back =
             Option/some(Field/Value/lit("http://h/next")))]);
 
 -- A body that is not UTF-8 is no JSON text, and `Response/json` refuses it where it stops being text: the four `n_number_*` cases of JSONTestSuite whose bytes are not UTF-8, each at the offset its ill-formed byte stands at, beside a body that reads.
-test a_json_body_that_is_not_text_is_refused_where_it_stops =
-    let answer(body: Bytes) -> Str =
+test a_json_body_that_is_not_text_is_refused_where_it_stops =>
+    let answer(body: Bytes) -> Str =>
         match Response/json(Response/of(200, "application/json", body))
         | success(_) => "read"
         | failure(why) => Parse/Error/to_str(why)
@@ -155,7 +155,7 @@ test a_json_body_that_is_not_text_is_refused_where_it_stops =
             "a JSON body is text at byte 2|a JSON body is text at byte 3|read"]));
 
 -- A name is a token and a value holds no control octet but the tab: text met at run time is read as one or refused, octets past ASCII are a value's to hold, and a name is read lowercased, one name whatever its case, decided a token as written, so the Kelvin sign, which lowers to `k`, is none.
-test a_field_met_at_run_time_is_read_or_refused =
+test a_field_met_at_run_time_is_read_or_refused =>
     Test/all([
         Test/equal(
             Field/Name/of_str("X-Run-Time"),
@@ -177,7 +177,7 @@ test a_field_met_at_run_time_is_read_or_refused =
         Test/equal(Field/read("X-A", Str/to_bytes("one\ntwo")), Option/none())]);
 
 -- A list's members are read across every line of its name, each without the whitespace around it and the empty ones left out, and a comma inside a quoted string is its member's.
-test a_lists_members_are_read_across_its_lines =
+test a_lists_members_are_read_across_its_lines =>
     let fields =
         [
             Field/of("accept", "a, b"),
@@ -192,7 +192,7 @@ test a_lists_members_are_read_across_its_lines =
         Test/equal(Field/members(fields, "Expect"), [])]);
 
 -- A `Url` built by hand is written percent-encoded wherever the wire cannot carry an octet of it, in a request line and in a `Location` alike, and text `Url/of_str` read is written as it is.
-test a_url_reaches_the_wire_percent_encoded =
+test a_url_reaches_the_wire_percent_encoded =>
     let built =
         Url {
             ..Url/lit("http://h/"),
@@ -209,7 +209,7 @@ test a_url_reaches_the_wire_percent_encoded =
         Test/equal(Url/escaped("/x?y=1%20z"), Field/Value/lit("/x?y=1%20z"))]);
 
 -- The moment `secs` seconds after the epoch as HTTP's `Date` writes it, or why it has none.
-let spelled(secs: Int) -> Str =
+let spelled(secs: Int) -> Str =>
     match Field/Value/of_timestamp(Timestamp/of_unix_secs(secs))
     | some(value) =>
         match Field/Value/to_str(value)
@@ -220,7 +220,7 @@ let spelled(secs: Int) -> Str =
     end;
 
 -- A date is written as HTTP writes one: the weekday and the month by three letters, the day, the hour, the minute and the second in two digits, the year in four, each month spelled by its fifteenth at noon, and a moment before 1970 among them.
-test a_date_is_spelled_as_http_spells_one =
+test a_date_is_spelled_as_http_spells_one =>
     Test/all([
         Test/equal(spelled(+784111777), "Sun, 06 Nov 1994 08:49:37 GMT"),
         Test/equal(spelled(+0), "Thu, 01 Jan 1970 00:00:00 GMT"),
@@ -239,7 +239,7 @@ test a_date_is_spelled_as_http_spells_one =
                 "Wed, 15 Nov 2023 12:00:00 GMT", "Fri, 15 Dec 2023 12:00:00 GMT"])]);
 
 -- A leap day is dated where the calendar puts it, in a year four divides and in a century four hundred divides; a century it does not has none.
-test a_leap_day_is_dated_where_the_calendar_puts_it =
+test a_leap_day_is_dated_where_the_calendar_puts_it =>
     Test/all([
         Test/equal(spelled(+1709164800), "Thu, 29 Feb 2024 00:00:00 GMT"),
         Test/equal(spelled(+951782400), "Tue, 29 Feb 2000 00:00:00 GMT"),
@@ -249,13 +249,13 @@ test a_leap_day_is_dated_where_the_calendar_puts_it =
         Test/equal(spelled(+4107542400), "Mon, 01 Mar 2100 00:00:00 GMT")]);
 
 -- A moment whose year has more than four digits, or falls before year 0, has no date the fixed-length form can write, so a server that reads one dates no reply.
-test a_moment_past_four_digits_has_no_http_date =
+test a_moment_past_four_digits_has_no_http_date =>
     Test/all([
         Test/equal(spelled(+253402300800), "no year of four digits"),
         Test/equal(spelled(-62167219201), "no year of four digits")]);
 
 -- A status carries content unless it is 1xx, 204, 205 or 304, and a reply of all but the 205 among those ends at its head whatever its fields say.
-test a_status_says_whether_it_carries_content =
+test a_status_says_whether_it_carries_content =>
     let codes = [100, 200, 204, 205, 304, 404];
     Test/all([
         Test/equal(

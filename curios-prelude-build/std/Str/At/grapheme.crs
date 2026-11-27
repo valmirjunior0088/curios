@@ -14,7 +14,7 @@ pub struct Run: Type {
 }
 
 --- What a cluster's first character leaves, `next` being it, of class `class`.
-pub let opening(next: Char, class: GraphemeBreak) -> Run =
+pub let opening(next: Char, class: GraphemeBreak) -> Run =>
     after(
         Run {
             pictographic = false,
@@ -25,7 +25,7 @@ pub let opening(next: Char, class: GraphemeBreak) -> Run =
         class);
 
 --- The run once `next`, of class `class`, is the character before.
-pub let after(run: Run, next: Char, class: GraphemeBreak) -> Run =
+pub let after(run: Run, next: Char, class: GraphemeBreak) -> Run =>
     let conjunct = IndicConjunctBreak/of_char(next);
     Run {
         pictographic =
@@ -39,11 +39,11 @@ pub let after(run: Run, next: Char, class: GraphemeBreak) -> Run =
                 || run.linked && conjunct == IndicConjunctBreak/extend() };
 
 -- Whether a character of class `class` stands alone, as a control or a line break does.
-let alone(class: GraphemeBreak) -> Bool =
+let alone(class: GraphemeBreak) -> Bool =>
     match class | cr() | lf() | control() => true | _ => false end;
 
 --- Whether a cluster ends between a character of class `before` and `next`, of class `class`, the run up to `before` being `run`: the rules of UAX #29 in their order, the first that decides deciding.
-pub let breaks(before: GraphemeBreak, next: Char, class: GraphemeBreak, run: Run) -> Bool =
+pub let breaks(before: GraphemeBreak, next: Char, class: GraphemeBreak, run: Run) -> Bool =>
     match
     -- GB3.
     | before == GraphemeBreak/cr() && class == GraphemeBreak/lf() => false

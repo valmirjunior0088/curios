@@ -5,7 +5,7 @@ use /std/Bool/{True, Holds};
 
 -- By cases on `a`, since `&&` reduces at each.
 --- Two decisions that hold, as one: `a && b` holds where `a` does and `b` does.
-pub let both(a: Bool, b: Bool, p: Holds(a), q: Holds(b)) -> Holds(a && b) =
+pub let both(a: Bool, b: Bool, p: Holds(a), q: Holds(b)) -> Holds(a && b) =>
     match a
     | true => q
     | false => match p end
@@ -13,11 +13,11 @@ pub let both(a: Bool, b: Bool, p: Holds(a), q: Holds(b)) -> Holds(a && b) =
 
 -- By cases on `a`, as [`both`] is.
 --- The first of two decisions that hold as one: `a` holds where `a && b` does.
-pub let first(a: Bool, b: Bool, p: Holds(a && b)) -> Holds(a) =
+pub let first(a: Bool, b: Bool, p: Holds(a && b)) -> Holds(a) =>
     match a | true => True/qed() | false => p end;
 
 --- The second of them: `b` holds where `a && b` does.
-pub let second(a: Bool, b: Bool, p: Holds(a && b)) -> Holds(b) =
+pub let second(a: Bool, b: Bool, p: Holds(a && b)) -> Holds(b) =>
     match a
     | true => p
     | false => match p end

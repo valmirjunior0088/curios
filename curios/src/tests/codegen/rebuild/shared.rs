@@ -13,15 +13,15 @@ const ROPE: &str = r#"
     | red(value: Nat, rest: Rope)
     | blue(value: Nat, rest: Rope)
     end
-    let make(n: Nat, acc: Rope) -> Rope =
+    let make(n: Nat, acc: Rope) -> Rope =>
         match n | 0 => acc | k + 1 => make(k, Rope/red(k, acc)) end;
-    let flip(r: Rope, acc: Rope) -> Rope =
+    let flip(r: Rope, acc: Rope) -> Rope =>
         match r
         | tip(_) => acc
         | red(v, rest) => flip(rest, Rope/blue(v, acc))
         | blue(v, rest) => flip(rest, Rope/red(v + 1, acc))
         end;
-    let total(r: Rope, sum: Nat) -> Nat =
+    let total(r: Rope, sum: Nat) -> Nat =>
         match r
         | tip(v) => (sum + v) % 1000003
         | red(v, rest) => total(rest, (sum + v) % 1000003)
@@ -35,7 +35,7 @@ const ROPE_FLIPPED_TWICE: &str =
 
 /// A rope of [`ROPE`]'s links in alternating colors, built over a tip that is a literal.
 const MIXED_ROPE: &str = r#"
-    let mixed(n: Nat, acc: Rope) -> Rope =
+    let mixed(n: Nat, acc: Rope) -> Rope =>
         match n
         | 0 => acc
         | k + 1 =>
@@ -48,7 +48,7 @@ const MIXED_ROPE: &str = r#"
 
 /// A list of four counters, each round of a loop adding to the one its round names: read at an index, then updated there.
 const BUMPS: &str = r#"
-let bump(k: Nat, l: List(Nat)) -> List(Nat) =
+let bump(k: Nat, l: List(Nat)) -> List(Nat) =>
     match k
     | 0 => l
     | j + 1 =>
@@ -62,7 +62,7 @@ const BUMPS_SUM: &str = "List/fold(bump(n, [n, n, n, n]), 0, (x, acc) => (acc + 
 
 /// A list updated while a window of it, an append to it and the list itself are still read, and a constant list updated while it is read.
 const KEPT_LISTS: &str = r#"
-let kept(n: Nat) -> Nat =
+let kept(n: Nat) -> Nat =>
     let l = [n, n + 1, n + 2, n + 3];
     let w = List/slice(l, 1, 2);
     let c = [..l, n];
@@ -79,12 +79,12 @@ induct N: Type
 | leaf(key: Nat, value: Nat)
 | branch(twigs: List(N))
 end
-let fresh(k: Nat, v: Nat, d: Nat) -> N =
+let fresh(k: Nat, v: Nat, d: Nat) -> N =>
     match d
     | 0 => N/leaf(k, v)
     | e + 1 => N/branch([fresh(k, v, e), N/empty(), N/empty(), N/empty()])
     end;
-let put(t: N, k: Nat, v: Nat) -> N =
+let put(t: N, k: Nat, v: Nat) -> N =>
     match t
     | empty() => t
     | leaf(k0, _) => N/leaf(k0, v)
@@ -95,13 +95,13 @@ let put(t: N, k: Nat, v: Nat) -> N =
         | false => N/branch(tw)
         end
     end;
-let sum(t: N) -> Nat =
+let sum(t: N) -> Nat =>
     match t
     | empty() => 0
     | leaf(_, v) => v
     | branch(tw) => List/fold(tw, 0, (c, acc) => (acc + sum(c)) % 1000003)
     end;
-let walk(n: Nat, t: N) -> N =
+let walk(n: Nat, t: N) -> N =>
     match n
     | 0 => t
     | m + 1 => walk(m, put(t, m, m + 1))
@@ -135,7 +135,7 @@ fn a_constant_leaf_a_fork_holds_is_never_rebuilt() {
         | leaf()
         | node(left: Tree, key: Nat, right: Tree)
         end
-        let insert(t: Tree, k: Nat) -> Tree =
+        let insert(t: Tree, k: Nat) -> Tree =>
             match t
             | leaf() => Tree/node(Tree/leaf(), k, Tree/leaf())
             | node(l, x, r) =>
@@ -145,8 +145,8 @@ fn a_constant_leaf_a_fork_holds_is_never_rebuilt() {
                 | _ => Tree/node(l, x, r)
                 end
             end;
-        let size(t: Tree) -> Nat = match t | leaf() => 0 | node(l, _, r) => size(l) + 1 + size(r) end;
-        let walk(n: Nat, x: Nat, t: Tree) -> Tree =
+        let size(t: Tree) -> Nat => match t | leaf() => 0 | node(l, _, r) => size(l) + 1 + size(r) end;
+        let walk(n: Nat, x: Nat, t: Tree) -> Tree =>
             match n | 0 => t | k + 1 => let y = 75 * x % 65537; walk(k, y, insert(t, y)) end;
     "#;
     let (_, module) = modules(&program(
@@ -196,7 +196,7 @@ fn a_path_copy_keeps_the_branches_it_shares_out_of_a_rebuild() {
         &[
             SEARCH_TREE,
             r#"
-            let copied(n: Nat) -> Nat =
+            let copied(n: Nat) -> Nat =>
                 let t0 = walk(n, (n + 1) % 65537, Tree/node(Tree/leaf(), n + 30000, Tree/leaf()));
                 let t1 = insert(t0, 1);
                 let t2 = insert(insert(t1, 2), 65000);
@@ -220,8 +220,8 @@ fn a_branch_read_on_every_round_of_a_loop_is_inserted_into_by_a_copy() {
         &[
             SEARCH_TREE,
             r#"
-            let drip(n: Nat, t: Tree) -> Nat =
-                let go(k: Nat, acc: Nat) -> Nat =
+            let drip(n: Nat, t: Tree) -> Nat =>
+                let go(k: Nat, acc: Nat) -> Nat =>
                     match k
                     | 0 => acc
                     | j + 1 =>
@@ -249,7 +249,7 @@ fn a_branch_of_a_tree_a_loop_hands_on_as_it_took_it_is_inserted_into_by_a_copy()
         &[
             SEARCH_TREE,
             r#"
-            let drip(n: Nat, t: Tree, acc: Nat) -> Nat =
+            let drip(n: Nat, t: Tree, acc: Nat) -> Nat =>
                 match n
                 | 0 => acc + size(t)
                 | k + 1 =>
@@ -372,12 +372,12 @@ fn a_structure_the_program_only_rebuilds_compiles_and_answers() {
         | leaf(key: Nat, value: Nat)
         | branch(twigs: T(N))
         end
-        let get2(@X: Type, t: T(X), d: Nat) -> X = match d | 0 => t.c0 | _ => t.c1 end;
-        let set2(@X: Type, t: T(X), d: Nat, x: X) -> T(X) =
+        let get2(@X: Type, t: T(X), d: Nat) -> X => match d | 0 => t.c0 | _ => t.c1 end;
+        let set2(@X: Type, t: T(X), d: Nat, x: X) -> T(X) =>
             match d | 0 => T { ..t, c0 = x } | _ => T { ..t, c1 = x } end;
-        let take2(t: T(N), d: Nat) -> {N, T(N)} =
+        let take2(t: T(N), d: Nat) -> {N, T(N)} =>
             match d | 0 => (t.c0, T { ..t, c0 = N/empty() }) | _ => (t.c1, T { ..t, c1 = N/empty() }) end;
-        let replace(t: N, k: Nat, v: Nat) -> N =
+        let replace(t: N, k: Nat, v: Nat) -> N =>
             match t
             | empty() => t
             | leaf(k0, _) => N/leaf(k0, v)
@@ -386,14 +386,14 @@ fn a_structure_the_program_only_rebuilds_compiles_and_answers() {
                 let (s, rest) = take2(tw, d);
                 N/branch(set2(rest, d, replace(s, k / 2, v)))
             end;
-        let first(k: Nat, v: Nat) -> N = N/leaf(k, v);
-        let insert(m: Option(N), k: Nat, v: Nat) -> Option(N) =
+        let first(k: Nat, v: Nat) -> N => N/leaf(k, v);
+        let insert(m: Option(N), k: Nat, v: Nat) -> Option(N) =>
             match m | none() => Option/some(first(k, v)) | some(t) => Option/some(replace(t, k, v)) end;
-        let fold_twigs(tw: T(N), i: Nat, acc: Nat) -> Nat =
+        let fold_twigs(tw: T(N), i: Nat, acc: Nat) -> Nat =>
             match i < 2 | false => acc | true => fold_twigs(tw, i + 1, fold(get2(tw, i), acc)) end
-        and fold(t: N, acc: Nat) -> Nat =
+        and fold(t: N, acc: Nat) -> Nat =>
             match t | empty() => acc | leaf(_, v) => acc + v | branch(tw) => fold_twigs(tw, 0, acc) end;
-        let walk(n: Nat, m: Option(N)) -> Option(N) = match n | 0 => m | j + 1 => walk(j, insert(m, j, j + 1)) end;
+        let walk(n: Nat, m: Option(N)) -> Option(N) => match n | 0 => m | j + 1 => walk(j, insert(m, j, j + 1)) end;
     "#;
     let result = "match walk(n, Option/none()) | none() => 0 | some(t) => fold(t, 0) end";
     let (_, module) = modules(&program(twigs, result));
@@ -531,13 +531,13 @@ fn a_program_answers_alike_rebuilding_in_place_or_not() {
         | empty()
         | node(rank: Nat, key: Nat, left: Heap, right: Heap)
         end
-        let rank(h: Heap) -> Nat = match h | empty() => 0 | node(r, _, _, _) => r end;
-        let make(k: Nat, a: Heap, b: Heap) -> Heap =
+        let rank(h: Heap) -> Nat => match h | empty() => 0 | node(r, _, _, _) => r end;
+        let make(k: Nat, a: Heap, b: Heap) -> Heap =>
             match
             | rank(b) <= rank(a) => Heap/node(rank(b) + 1, k, a, b)
             | _ => Heap/node(rank(a) + 1, k, b, a)
             end;
-        let merge(a: Heap, b: Heap) -> Heap =
+        let merge(a: Heap, b: Heap) -> Heap =>
             match a
             | empty() => b
             | node(_, ka, la, ra) =>
@@ -550,8 +550,8 @@ fn a_program_answers_alike_rebuilding_in_place_or_not() {
                     end
                 end
             end;
-        let least(h: Heap) -> Nat = match h | empty() => 0 | node(_, k, _, _) => k end;
-        let walk(n: Nat, x: Nat, h: Heap) -> Heap =
+        let least(h: Heap) -> Nat => match h | empty() => 0 | node(_, k, _, _) => k end;
+        let walk(n: Nat, x: Nat, h: Heap) -> Heap =>
             match n
             | 0 => h
             | k + 1 =>

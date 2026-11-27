@@ -13,33 +13,33 @@ pub struct Focus(P: Type): pub Type {
 }
 
 --- `first` holding the keys, and `rest` after it in the ring.
-pub let new(@P: Type, first: P, rest: List(P)) -> Focus(P) =
+pub let new(@P: Type, first: P, rest: List(P)) -> Focus(P) =>
     Focus { labels = [first, ..rest], at = 0 };
 
 --- The label holding the keys.
-pub let current(@P: Type, f: Focus(P)) -> P =
+pub let current(@P: Type, f: Focus(P)) -> P =>
     List/get(f.labels, f.at);
 
 --- Whether `p` holds the keys.
-pub let holds(@P: Type, use Eql(P), f: Focus(P), p: P) -> Bool =
+pub let holds(@P: Type, use Eql(P), f: Focus(P), p: P) -> Bool =>
     current(f) == p;
 
 --- The keys on to the next label, and from the last to the first.
-pub let next(@P: Type, f: Focus(P)) -> Focus(P) =
+pub let next(@P: Type, f: Focus(P)) -> Focus(P) =>
     match f.at + 1 < List/length(f.labels)
     | true => Focus { labels = f.labels, at = f.at + 1 }
     | false => Focus { labels = f.labels, at = 0 }
     end;
 
 --- The keys back to the label before, and from the first to the last.
-pub let prev(@P: Type, f: Focus(P)) -> Focus(P) =
+pub let prev(@P: Type, f: Focus(P)) -> Focus(P) =>
     match f.at
     | 0 => Focus { labels = f.labels, at = List/length(f.labels) - 1 }
     | k + 1 => Focus { labels = f.labels, at = k }
     end;
 
 --- Tab moves the keys on and Shift with Tab back; any other key leaves them where they are.
-pub let handle(@P: Type, f: Focus(P), k: Key) -> Focus(P) =
+pub let handle(@P: Type, f: Focus(P), k: Key) -> Focus(P) =>
     match k.code
     | tab() => match k.shift | true => prev(f) | false => next(f) end
     | _ => f

@@ -13,7 +13,7 @@ fn derived_hash_writes_the_position_and_delimits_every_payload_but_the_last() {
         use /std/{Nat, Byte, Bytes, Str, Hash, print};
         induct Tree: pub Type | leaf(Nat) | node(Tree, Tree) end
         satisfy Hash(Tree) { .. }
-        let dots(b: Bytes) -> Str =
+        let dots(b: Bytes) -> Str =>
             Bytes/fold(b, "", (byte, acc) =>
                 Str/concat(Str/concat(acc, "."), Nat/to_str(Byte/to_nat(byte))));
         print(Str/join(" ", [
@@ -31,7 +31,7 @@ fn a_derived_hash_writes_no_position_for_a_struct() {
         use /std/{Nat, Byte, Bytes, Str, Hash, print};
         struct Point: pub Type { x: Nat, y: Nat }
         satisfy Hash(Point) { .. }
-        let dots(b: Bytes) -> Str =
+        let dots(b: Bytes) -> Str =>
             Bytes/fold(b, "", (byte, acc) =>
                 Str/concat(Str/concat(acc, "."), Nat/to_str(Byte/to_nat(byte))));
         print(dots(Hash/hash(Point { x = 1, y = 2 })))
@@ -50,8 +50,8 @@ fn a_derived_encoding_orders_as_the_derived_order_does() {
         satisfy Eql(Pair) { .. }
         satisfy Ord(Pair) { .. }
         satisfy Hash(Pair) { .. }
-        let shown(o: Ordering) -> Str = match o | lt() => "lt" | eq() => "eq" | gt() => "gt" end;
-        let both(a: Pair, b: Pair) -> Str =
+        let shown(o: Ordering) -> Str => match o | lt() => "lt" | eq() => "eq" | gt() => "gt" end;
+        let both(a: Pair, b: Pair) -> Str =>
             Str/concat(shown(Ord/ord(a, b)), shown(Bytes/ord(Hash/hash(a), Hash/hash(b))));
         print(Str/join(" ", [
             both(Pair { s = "b", n = 1 }, Pair { s = "ab", n = 1 }),
@@ -70,7 +70,7 @@ fn a_proof_payload_takes_no_part_in_an_encoding() {
         use /std/Bool/{True, Holds};
         struct Small: pub Type { value: Nat, ok: Holds(Nat/lt(value, 10)) }
         satisfy Hash(Small) { .. }
-        let dots(b: Bytes) -> Str =
+        let dots(b: Bytes) -> Str =>
             Bytes/fold(b, "", (byte, acc) =>
                 Str/concat(Str/concat(acc, "."), Nat/to_str(Byte/to_nat(byte))));
         print(dots(Hash/hash(Small { value = 3, ok = True/qed() })))
@@ -85,7 +85,7 @@ fn a_hash_derivation_needs_its_payloads_own_witness() {
     let source = r#"
         use /std/{Hash};
         induct Box(A: Type): pub Type | wrap(A) end
-        satisfy (@A: Type) => Hash(Box(A)) { .. }
+        satisfy (@A: Type) -> Hash(Box(A)) { .. }
         /std/print("")
         "#;
 

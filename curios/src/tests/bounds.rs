@@ -368,7 +368,7 @@ const ROWS: &[Row] = &[
     body(
         "i: Nat, m: Nat, n: Nat, p: Holds(i < m), q: Holds(m <= n)",
         "Nat",
-        "let f(r: Holds(i < n)) -> Nat = 0; let x = proved(); f(x)",
+        "let f(r: Holds(i < n)) -> Nat => 0; let x = proved(); f(x)",
     ),
     // Contradiction arms: facts that refute each other, from hypotheses and from a guard.
     body(
@@ -908,7 +908,7 @@ const CONTROLS: &[Row] = &[
 /// The programs stating what `ask` asks under `binders`: a claim at insertion and at retry, a body once.
 fn programs(binders: &str, ask: &Ask) -> Vec<String> {
     let item = |result: &str, body: &str| {
-        format!("{HEADER}\nlet row({binders}) -> {result} = {body};\nIo/pure(())")
+        format!("{HEADER}\nlet row({binders}) -> {result} => {body};\nIo/pure(())")
     };
     match *ask {
         Ask::Claim(claim) => vec![
@@ -1035,7 +1035,7 @@ fn guarded(unrelated: usize, innermost: bool) -> String {
             format!("match {guard} | true => {body} | false => 0 end")
         });
     format!(
-        "{HEADER}\nlet row(xs: List(Nat), i: Nat, within: Holds(i <= List/length(xs)){binders}) -> Nat = {body};\nIo/pure(())"
+        "{HEADER}\nlet row(xs: List(Nat), i: Nat, within: Holds(i <= List/length(xs)){binders}) -> Nat => {body};\nIo/pure(())"
     )
 }
 
@@ -1058,7 +1058,7 @@ fn a_split_opens_nearest_guard_first_and_the_cap_bounds_the_rest() {
 fn a_stage_that_runs_out_is_passed_over() {
     let goal = "Holds(b - (d + 1) + 1 <= b - d)";
     let program = |binders: &str| {
-        format!("{HEADER}\nlet row({binders}) -> {goal} = proved(@{goal});\nIo/pure(())")
+        format!("{HEADER}\nlet row({binders}) -> {goal} => proved(@{goal});\nIo/pure(())")
     };
     assert_eq!(
         typecheck(&program(
@@ -1077,7 +1077,7 @@ fn a_stage_that_runs_out_is_passed_over() {
 /// The byte row: two hex digits make a byte, a fact scaled by a literal summed with another.
 const BYTE: &str = "use /std/{Nat, Io};
 use /std/Bool/{Holds};
-let byte(a: Nat, b: Nat, p: Holds(a < 16), q: Holds(b < 16)) -> Holds(a * 16 + b < 256) = PROOF;
+let byte(a: Nat, b: Nat, p: Holds(a < 16), q: Holds(b < 16)) -> Holds(a * 16 + b < 256) => PROOF;
 Io/pure(())";
 
 #[test]
@@ -1085,7 +1085,7 @@ fn a_filled_row_files_the_same_proof_every_time() {
     // One program, one certificate, one proof: the search is deterministic, so the elaborated item is the same on every run. CI runs this on each platform it builds for.
     let omitted = "use /std/{Nat, Io, proved};
 use /std/Bool/{Holds};
-let byte(a: Nat, b: Nat, p: Holds(a < 16), q: Holds(b < 16)) -> Holds(a * 16 + b < 256) = proved(@Holds(a * 16 + b < 256));
+let byte(a: Nat, b: Nat, p: Holds(a < 16), q: Holds(b < 16)) -> Holds(a * 16 + b < 256) => proved(@Holds(a * 16 + b < 256));
 Io/pure(())";
     let first = core_elab(omitted);
     assert_eq!(core_elab(omitted), first);
@@ -1100,8 +1100,8 @@ fn a_row_filled_on_a_retry_files_the_same_proof_every_time() {
     // `proved()` learns its proposition from the parameter it is passed to, so the bound is filled on a retry, where the two guards it follows from are restored together into one frame. They are read back in the order they were met, whatever the run, which `curios-elab`'s `a_frames_guards_are_read_back_in_the_order_they_were_recorded` holds at the store; this holds the proof it gives.
     let pinned = "use /std/{Nat, Io, proved};
 use /std/Bool/{Holds};
-let above(n: Nat, p: Holds(128 <= n)) -> Nat = n;
-let within(n: Nat, lo: Nat, hi: Nat) -> Nat =
+let above(n: Nat, p: Holds(128 <= n)) -> Nat => n;
+let within(n: Nat, lo: Nat, hi: Nat) -> Nat =>
     match Nat/in_range(n, lo, hi)
     | false => 0
     | true =>
@@ -1141,7 +1141,7 @@ fn a_certificate_corrupted_by_one_multiplier_is_refused_by_both_checkers() {
 fn a_refused_bound_names_the_facts_it_considered_and_a_counterexample() {
     let refusal = |binders: &str, claim: &str| {
         let program =
-            format!("{HEADER}\nlet row({binders}) -> {claim} = proved(@{claim});\nIo/pure(())");
+            format!("{HEADER}\nlet row({binders}) -> {claim} => proved(@{claim});\nIo/pure(())");
         typecheck(&program).expect_err("the control is refused")
     };
 
@@ -1192,7 +1192,7 @@ fn a_refused_bound_names_the_facts_it_considered_and_a_counterexample() {
     // A contradiction goal the search does not refute, at a fraction: the search's assignment, as the search's.
     let absurd = {
         let program = format!(
-            "{HEADER}\nlet row(x: Nat, p: Holds(x * 2 <= 3), q: Holds(3 <= x * 2)) -> Nat = match proved(@False) end;\nIo/pure(())"
+            "{HEADER}\nlet row(x: Nat, p: Holds(x * 2 <= 3), q: Holds(3 <= x * 2)) -> Nat => match proved(@False) end;\nIo/pure(())"
         );
         typecheck(&program).expect_err("the control is refused")
     };
@@ -1207,7 +1207,7 @@ fn a_refused_bound_names_the_facts_it_considered_and_a_counterexample() {
     // An integer assignment no program takes: `Nat/pow(2, n)` reduces to 2 at `n = 1`, not to the 1 the search reads it as.
     let power = {
         let program = format!(
-            "{HEADER}\nlet row(n: Nat, p: Holds(Nat/pow(2, n) <= n)) -> Nat = match proved(@False) end;\nIo/pure(())"
+            "{HEADER}\nlet row(n: Nat, p: Holds(Nat/pow(2, n) <= n)) -> Nat => match proved(@False) end;\nIo/pure(())"
         );
         typecheck(&program).expect_err("the control is refused")
     };
@@ -1221,7 +1221,7 @@ fn a_refused_bound_names_the_facts_it_considered_and_a_counterexample() {
     // A guard written through `Ord` is recorded as written and as the dispatch resolves, and is one fact.
     let guarded = {
         let program = format!(
-            "{HEADER}\nlet row(n: Nat) -> Nat = match n <= 0x7F | true => match proved(@False) end | false => 0 end;\nIo/pure(())"
+            "{HEADER}\nlet row(n: Nat) -> Nat => match n <= 0x7F | true => match proved(@False) end | false => 0 end;\nIo/pure(())"
         );
         typecheck(&program).expect_err("the control is refused")
     };
@@ -1236,7 +1236,7 @@ fn a_refused_bound_names_the_facts_it_considered_and_a_counterexample() {
 #[test]
 fn a_refusal_names_a_hypothesis_its_arm_retypes_once() {
     let program = format!(
-        "{HEADER}\nlet first(l: List(Nat), q: Holds(List/length(l) <= 3)) -> Nat =\n    match l\n    | [] => match proved(@False) end\n    | [x, .._] => x\n    end;\nIo/pure(())"
+        "{HEADER}\nlet first(l: List(Nat), q: Holds(List/length(l) <= 3)) -> Nat =>\n    match l\n    | [] => match proved(@False) end\n    | [x, .._] => x\n    end;\nIo/pure(())"
     );
 
     let refusal = typecheck(&program).expect_err("the empty case is no contradiction");
@@ -1248,8 +1248,8 @@ fn a_refusal_names_a_hypothesis_its_arm_retypes_once() {
 #[test]
 fn a_counterexample_spells_an_atom_as_the_bound_states_it() {
     for body in [
-        "let needs(n: Nat, @_: Holds(0 < Nat/log2(n))) -> Nat = n;\nlet row(n: Nat) -> Nat = needs(n);",
-        "let row(n: Nat) -> Holds(0 < Nat/log2(n)) = proved();",
+        "let needs(n: Nat, @_: Holds(0 < Nat/log2(n))) -> Nat => n;\nlet row(n: Nat) -> Nat => needs(n);",
+        "let row(n: Nat) -> Holds(0 < Nat/log2(n)) => proved();",
     ] {
         let refused = typecheck(&format!("{HEADER}\n{body}\nIo/pure(())"))
             .expect_err("the control is refused");
@@ -1264,7 +1264,7 @@ fn a_counterexample_spells_an_atom_as_the_bound_states_it() {
 #[test]
 fn a_fact_a_local_definition_states_is_named_with_its_operators() {
     let refused = typecheck(&format!(
-        "{HEADER}\nlet row(a: Int, b: Int, c: Int, h: Eq()(a, b * c + c)) -> Holds(a < b) = let stated: Eq()(b * c + c, a) = Eq/sym(h); proved();\nIo/pure(())"
+        "{HEADER}\nlet row(a: Int, b: Int, c: Int, h: Eq()(a, b * c + c)) -> Holds(a < b) => let stated: Eq()(b * c + c, a) = Eq/sym(h); proved();\nIo/pure(())"
     ))
     .expect_err("the control is refused");
     assert!(
@@ -1277,12 +1277,12 @@ fn a_fact_a_local_definition_states_is_named_with_its_operators() {
 #[test]
 fn a_counterexample_spells_an_operand_of_an_operation_as_written() {
     let width =
-        "let width(s: Str) -> Nat = List/fold(Str/to_list(s), 0, (_: Char, n: Nat) => n + 1);";
+        "let width(s: Str) -> Nat => List/fold(Str/to_list(s), 0, (_: Char, n: Nat) => n + 1);";
     for bound in [
-        "let row(s: Str, t: Str, w: Nat) -> Holds(width(s) - width(t) < w) = proved();",
-        "let row(s: Str, t: Str, w: Nat) -> {} = let x = width(s) - width(t); let _: Holds(x < w) = proved(); ();",
-        "let row(s: Str, t: Str, w: Nat) -> Holds(Nat/min(width(s), width(t)) < w) = proved();",
-        "let row(s: Str, w: Nat) -> Holds(width(s) / 2 < w) = proved();",
+        "let row(s: Str, t: Str, w: Nat) -> Holds(width(s) - width(t) < w) => proved();",
+        "let row(s: Str, t: Str, w: Nat) -> {} => let x = width(s) - width(t); let _: Holds(x < w) = proved(); ();",
+        "let row(s: Str, t: Str, w: Nat) -> Holds(Nat/min(width(s), width(t)) < w) => proved();",
+        "let row(s: Str, w: Nat) -> Holds(width(s) / 2 < w) => proved();",
     ] {
         let refused = typecheck(&format!("{HEADER}\n{width}\n{bound}\nIo/pure(())"))
             .expect_err("the control is refused");
@@ -1304,7 +1304,7 @@ const SPLIT: &str = "struct Split: Type {
     multiple: Int,
 }
 
-let split(n: Int, d: Nat, @ok: Holds(0 < d)) -> Split =
+let split(n: Int, d: Nat, @ok: Holds(0 < d)) -> Split =>
     match Int/view(n)
     | nonneg(m) =>
         Split {
@@ -1324,7 +1324,7 @@ fn a_counterexample_names_a_call_whatever_a_fact_spells_inside_it() {
     let recombined = "n: Int, d: Nat, q: Int, r: Nat, @ok: Holds(0 < d), joined: Eq()(n, q * Nat/to_int(d) + Nat/to_int(r)), bounded: Holds(r < d)";
     let refusal = |binders: &str, body: &str| {
         typecheck(&format!(
-            "{HEADER}\n{SPLIT}\nlet row({binders}) -> Nat = {body};\nIo/pure(())"
+            "{HEADER}\n{SPLIT}\nlet row({binders}) -> Nat => {body};\nIo/pure(())"
         ))
         .expect_err("the control is refused")
     };
@@ -1369,11 +1369,11 @@ fn a_counterexample_names_a_call_whatever_a_fact_spells_inside_it() {
 fn a_bound_from_a_signature_leaves_out_the_type_its_operands_restore() {
     for (body, written) in [
         (
-            "let last(xs: List(Nat)) -> Nat = List/get(xs, List/length(xs) - 1);",
+            "let last(xs: List(Nat)) -> Nat => List/get(xs, List/length(xs) - 1);",
             "List/length(xs) - 1 < List/length(xs)",
         ),
         (
-            "let share(total: Nat, people: Nat) -> Nat = total / people;",
+            "let share(total: Nat, people: Nat) -> Nat => total / people;",
             "Div/Ok(people)",
         ),
     ] {
@@ -1398,7 +1398,7 @@ fn a_hidden_argument_a_list_literal_restores_is_left_out() {
         ("List/length([1]) <= 3", "List/length(@Nat, [1]) <= 3"),
     ] {
         let program = format!(
-            "{HEADER}\nlet f(x: Nat, xs: List(Nat), h: Holds({hypothesis})) -> Nat = ?;\nIo/pure(())"
+            "{HEADER}\nlet f(x: Nat, xs: List(Nat), h: Holds({hypothesis})) -> Nat => ?;\nIo/pure(())"
         );
         let goal = typecheck(&program).expect_err("a written goal never compiles");
 
@@ -1416,7 +1416,7 @@ const FRAMES: &str = "use /std/{Bool, List, Nat, Vec, Io};";
 fn a_proof_field_of_a_term_a_bound_names_is_a_fact_where_the_term_stands() {
     let cell = |held: &str, body: &str| {
         format!(
-            "{FRAMES}\nlet cell(@w: Nat, @h: Nat, frame: Vec(Vec(Nat, w), h), other: Vec(Vec(Nat, w), h), x: Nat, y: Nat, @ok_y: Bool/Holds(y < h){held}) -> Nat =\n    {body};\nIo/pure(())"
+            "{FRAMES}\nlet cell(@w: Nat, @h: Nat, frame: Vec(Vec(Nat, w), h), other: Vec(Vec(Nat, w), h), x: Nat, y: Nat, @ok_y: Bool/Holds(y < h){held}) -> Nat =>\n    {body};\nIo/pure(())"
         )
     };
     let within = ", @ok_x: Bool/Holds(x < w)";
@@ -1445,7 +1445,7 @@ fn a_proof_field_of_a_term_a_bound_names_is_a_fact_where_the_term_stands() {
 fn a_refused_bound_names_each_guard_once_and_a_guard_as_the_way_out() {
     let refusal = |declared: &str, binders: &str, body: &str| {
         let program =
-            format!("{HEADER}\n{declared}\nlet row({binders}) -> Nat = {body};\nIo/pure(())");
+            format!("{HEADER}\n{declared}\nlet row({binders}) -> Nat => {body};\nIo/pure(())");
         typecheck(&program).expect_err("the control is refused")
     };
     let index = |guard: &str, taken: &str, other: &str| {
@@ -1501,7 +1501,7 @@ fn a_refused_bound_names_each_guard_once_and_a_guard_as_the_way_out() {
 
     // A bound the search reads nothing in has no guard that would decide it.
     let opaque = refusal(
-        "let needs(f: (Nat) -> Bool, n: Nat, @_: Holds(f(n))) -> Nat = n;",
+        "let needs(f: (Nat) -> Bool, n: Nat, @_: Holds(f(n))) -> Nat => n;",
         "f: (Nat) -> Bool, n: Nat",
         "needs(f, n)",
     );
@@ -1516,7 +1516,7 @@ fn a_refused_bound_names_each_guard_once_and_a_guard_as_the_way_out() {
 fn an_undischarged_bound_is_headed_alike_at_a_call_a_literal_and_an_operator() {
     let refusal = |declared: &str, binders: &str, body: &str| {
         let program =
-            format!("{HEADER}\n{declared}\nlet row({binders}) -> Nat = {body};\nIo/pure(())");
+            format!("{HEADER}\n{declared}\nlet row({binders}) -> Nat => {body};\nIo/pure(())");
         typecheck(&program).expect_err("the control is refused")
     };
     let call = refusal("", "xs: List(Nat), i: Nat", "List/get(xs, i)");
@@ -1545,7 +1545,7 @@ fn an_undischarged_bound_is_headed_alike_at_a_call_a_literal_and_an_operator() {
 fn a_written_goal_over_a_bound_shows_what_the_procedure_found() {
     let goal = |binders: &str| {
         let program = format!(
-            "{HEADER}\nlet row({binders}) -> Nat = List/get(@Nat, xs, i, @?);\nIo/pure(())"
+            "{HEADER}\nlet row({binders}) -> Nat => List/get(@Nat, xs, i, @?);\nIo/pure(())"
         );
         typecheck(&program).expect_err("a written goal never compiles")
     };
@@ -1589,7 +1589,7 @@ fn a_vector_literal_of_another_length_is_refused_by_its_count() {
 #[test]
 fn a_bound_over_a_product_of_unknowns_says_the_search_read_it_as_one() {
     let report =
-        error("use /std/{Nat};\nlet f(a: Nat, b: Nat) -> Nat = 10 / (a * b);\n/std/print(\"ok\")");
+        error("use /std/{Nat};\nlet f(a: Nat, b: Nat) -> Nat => 10 / (a * b);\n/std/print(\"ok\")");
     assert!(
         report.contains("the search finds no proof, and no values under which it fails")
             && report.contains("it reads a product of unknowns as an unknown of its own"),
@@ -1608,10 +1608,10 @@ fn an_undischarged_bound_is_reported_with_its_reducts_arguments_evaluated() {
         induct Missing: (List(Nat)) -> pub Prop
         end
 
-        let Present(xs: List(Nat), x: Nat) -> Prop =
+        let Present(xs: List(Nat), x: Nat) -> Prop =>
             match List/any(xs, (y) => y == x) | true => True | false => Missing(List/map(xs, (y) => y + 1)) end;
 
-        let need(xs: List(Nat), x: Nat, @_: Present(xs, x)) -> Nat = x;
+        let need(xs: List(Nat), x: Nat, @_: Present(xs, x)) -> Nat => x;
 
         print(Nat/to_str(need([1, 2], 5)))
         "#,

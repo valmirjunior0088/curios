@@ -13,13 +13,13 @@ fn distinct_families_with_matching_tags_and_widths_compile_and_run() {
         use /std/{Bool, Nat, List, Proc};
         induct Left: Type | wrap(Nat) | other(Nat) end
         induct Right: Type | wrap(Nat) | other(Nat) end
-        let Shape(b: Bool) -> Type = match b | true => Left | false => Right end;
-        let read(b: Bool, x: Shape(b)) -> Nat =
+        let Shape(b: Bool) -> Type => match b | true => Left | false => Right end;
+        let read(b: Bool, x: Shape(b)) -> Nat =>
             match b
             | true => match x | wrap(n) => n | other(n) => n + 1 end
             | false => match x | wrap(n) => n | other(n) => n + 1 end
             end;
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let n = List/length(Proc/args()!);
             let a = read(true, Left/wrap(n));
             let b = read(false, Right/wrap(n + 1));

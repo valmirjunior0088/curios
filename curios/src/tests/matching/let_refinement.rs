@@ -10,7 +10,7 @@ use {crate::test_support::*, curios_common::fill};
 fn a_let_bound_scrutinee_is_refined_through_its_definition() {
     let source = r#"
         use /std/{Nat, Eq};
-        let f(x: Nat) -> Nat =
+        let f(x: Nat) -> Nat =>
             let y: Nat = x;
             match y
             | 0 => let _zero: Eq()(y, 0) = Eq/refl(); 0
@@ -29,7 +29,7 @@ fn a_let_bound_scrutinee_is_refined_through_its_definition() {
 fn a_let_bound_boolean_scrutinee_is_refined_through_its_definition() {
     let source = r#"
         use /std/{Bool, Eq, Str};
-        let f(b: Bool) -> Str =
+        let f(b: Bool) -> Str =>
             let c: Bool = b;
             match c
             | true => let _: Eq()(c, true) = Eq/refl(); "yes"
@@ -45,7 +45,7 @@ fn a_let_bound_boolean_scrutinee_is_refined_through_its_definition() {
 fn a_let_bound_inductive_scrutinee_is_refined_through_its_definition() {
     let source = r#"
         use /std/{Nat, Eq, Option};
-        let f(o: Option(Nat)) -> Nat =
+        let f(o: Option(Nat)) -> Nat =>
             let p: Option(Nat) = o;
             match p
             | some(v) => let _: Eq()(p, Option/some(v)) = Eq/refl(); v
@@ -60,7 +60,7 @@ fn a_let_bound_inductive_scrutinee_is_refined_through_its_definition() {
 fn a_chain_of_lets_is_refined_to_its_end() {
     let source = r#"
         use /std/{Nat, Eq};
-        let f(x: Nat) -> Nat =
+        let f(x: Nat) -> Nat =>
             let y: Nat = x;
             let z: Nat = y;
             match z
@@ -80,8 +80,8 @@ fn a_chain_of_lets_is_refined_to_its_end() {
 fn a_let_bound_expression_scrutinee_is_refined_through_its_definition() {
     let source = r#"
         use /std/{Nat, Eq};
-        let count(n: Nat) -> Nat = match n | 0 => 0 | k + 1 => count(k) + 1 end;
-        let f(x: Nat) -> Nat =
+        let count(n: Nat) -> Nat => match n | 0 => 0 | k + 1 => count(k) + 1 end;
+        let f(x: Nat) -> Nat =>
             let y: Nat = count(x);
             match y
             | 0 => 0
@@ -99,7 +99,7 @@ fn a_projection_of_a_let_bound_scrutinee_is_refined_through_its_definition() {
         use /std/{Nat, Char, Str, List};
         use /std/Bool/{True, Holds};
 
-        let pair(n: Nat, g: (Nat) -> {Nat, Nat}) -> Nat =
+        let pair(n: Nat, g: (Nat) -> {Nat, Nat}) -> Nat =>
             let p = g(n);
             match p
             | (3, _) =>
@@ -109,7 +109,7 @@ fn a_projection_of_a_let_bound_scrutinee_is_refined_through_its_definition() {
             | _ => 1
             end;
 
-        let character(n: Nat, g: (Nat) -> Char) -> Nat =
+        let character(n: Nat, g: (Nat) -> Char) -> Nat =>
             let c = g(n);
             match c
             | 'a' =>
@@ -119,7 +119,7 @@ fn a_projection_of_a_let_bound_scrutinee_is_refined_through_its_definition() {
             | _ => 1
             end;
 
-        let string(n: Nat, g: (Nat) -> Str) -> Nat =
+        let string(n: Nat, g: (Nat) -> Str) -> Nat =>
             let s = g(n);
             match s
             | "a" =>
@@ -139,10 +139,10 @@ fn a_guard_meets_itself_through_a_definition_that_binds_its_operand() {
     assert_eq!(
         run(r#"
         use /std/{Nat, Byte, Bool, Eq};
-        let outside(c: Byte, lo: Nat, hi: Nat) -> Bool =
+        let outside(c: Byte, lo: Nat, hi: Nat) -> Bool =>
             let n = Byte/to_nat(c);
             match | Bool/not(Nat/in_range(n, lo, hi)) => false | _ => true end;
-        let _inside(c: Byte, lo: Nat, hi: Nat) -> Nat =
+        let _inside(c: Byte, lo: Nat, hi: Nat) -> Nat =>
             match Bool/not(Nat/in_range(Byte/to_nat(c), lo, hi))
             | true => 0
             | false => let _: Eq()(outside(c, lo, hi), true) = Eq/refl(); 1
@@ -159,9 +159,9 @@ fn a_guard_over_a_let_meets_itself_spelled_over_the_value() {
     assert_eq!(
         run(r#"
         use /std/{Nat, Byte, Bool, Eq};
-        let outside(c: Byte, lo: Nat, hi: Nat) -> Bool =
+        let outside(c: Byte, lo: Nat, hi: Nat) -> Bool =>
             match | Bool/not(Nat/in_range(Byte/to_nat(c), lo, hi)) => false | _ => true end;
-        let _inside(c: Byte, lo: Nat, hi: Nat) -> Nat =
+        let _inside(c: Byte, lo: Nat, hi: Nat) -> Nat =>
             let n = Byte/to_nat(c);
             match Bool/not(Nat/in_range(n, lo, hi))
             | true => 0
@@ -179,10 +179,10 @@ fn a_guard_over_a_let_meets_a_definition_that_binds_its_own() {
     assert_eq!(
         run(r#"
         use /std/{Nat, Byte, Bool, Eq};
-        let outside(c: Byte, lo: Nat, hi: Nat) -> Bool =
+        let outside(c: Byte, lo: Nat, hi: Nat) -> Bool =>
             let n = Byte/to_nat(c);
             match | Bool/not(Nat/in_range(n, lo, hi)) => false | _ => true end;
-        let _inside(c: Byte, lo: Nat, hi: Nat) -> Nat =
+        let _inside(c: Byte, lo: Nat, hi: Nat) -> Nat =>
             let m = Byte/to_nat(c);
             match Bool/not(Nat/in_range(m, lo, hi))
             | true => 0
@@ -208,7 +208,7 @@ fn a_guard_over_a_local_definition_answers_a_term_over_its_value() {
         use /std/{Nat, Str};
         use /std/Bool/{Holds, True};
 
-        let ranged(m : Nat) -> Str =
+        let ranged(m : Nat) -> Str =>
             ${guard}
             | true =>
                 let _ : Holds(240 <= m) = Nat/le/of_in_range(m, 240, 244, True/qed()).low;
@@ -233,7 +233,7 @@ fn a_nested_projection_of_a_let_bound_scrutinee_is_refined_through_its_definitio
             use /std/{Nat, Char};
             use /std/Bool/{True, Holds};
 
-            let nested(n: Nat, g: (Nat) -> {{Nat, Nat}, Nat}) -> Nat =
+            let nested(n: Nat, g: (Nat) -> {{Nat, Nat}, Nat}) -> Nat =>
                 let p = g(n);
                 match p
                 | ((_, 3), _) =>
@@ -243,7 +243,7 @@ fn a_nested_projection_of_a_let_bound_scrutinee_is_refined_through_its_definitio
                 | _ => 1
                 end;
 
-            let chars(n: Nat, g: (Nat) -> {Char, Nat}) -> Nat =
+            let chars(n: Nat, g: (Nat) -> {Char, Nat}) -> Nat =>
                 let p = g(n);
                 match p
                 | ('a', _) =>

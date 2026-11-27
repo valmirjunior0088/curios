@@ -7,7 +7,7 @@ fn a_goal_mentioning_a_type_param_lowers() {
     // `pick` is polymorphic in `A`, and the `match c` has nothing expected of it. Its goal metavariable is solved to `A` — a binder local to `pick`'s telescope. zonk must realign that solution to the enclosing binders when it splices it back in; otherwise `A` dangles as a free var after the module is re-closed and `erase` rejects it with `unbound variable`. Guards zonk's binder realignment.
     let source = r#"
         use /std/{Bool};
-        let pick(A : Type, a : A, b : A, c : Bool) -> A =
+        let pick(A : Type, a : A, b : A, c : Bool) -> A =>
             match c
             | false => a
             | true => b
@@ -36,7 +36,7 @@ fn checked_constructor_postpones_a_tuple_under_a_holed_type_arg() {
     let source = r#"
         use /std/{Result};
         use /std/{Nat};
-        let f(a : Nat) -> Result(Nat, { Nat, Nat }) =
+        let f(a : Nat) -> Result(Nat, { Nat, Nat }) =>
             Result/success((a, a));
         let r : Result(Nat, { Nat, Nat }) = f(7);
         /std/Io/pure(())
@@ -60,7 +60,7 @@ fn match_arm_arity_is_checked_statically() {
     let source = r#"
         use /std/{Result};
         use /std/{Nat, Bytes};
-        let f(r : Result(Nat, Bytes)) -> Nat =
+        let f(r : Result(Nat, Bytes)) -> Nat =>
             match r
             | success(value, extra) => value
             | failure(_) => 0
@@ -134,7 +134,7 @@ fn new_style_inductive_match_lowers_end_to_end() {
     let source = r#"
         use /std/{Result};
         use /std/{Nat, Bytes};
-        let f(r : Result(Bytes, Nat)) -> Nat =
+        let f(r : Result(Bytes, Nat)) -> Nat =>
             match r
             | success(value) => value
             | failure(_) => 0
@@ -155,7 +155,7 @@ fn indexed_inductive_declares_constructs_and_matches() {
         | nil() : (0)
         | cons(@m : Nat, x : T, xs : Vec(T)(m)) : (Nat/succ(m))
         end
-        let len(@T : Type, @n : Nat, v : Vec(T)(n)) -> Nat =
+        let len(@T : Type, @n : Nat, v : Vec(T)(n)) -> Nat =>
             match v
             | nil() => 0
             | cons(@m, x, xs) => Nat/add(len(xs), 1)
@@ -197,7 +197,7 @@ fn indexed_inductive_goal_reads_the_index() {
         | nil() : (0)
         | cons(@m : Nat, x : T, xs : Vec(T)(m)) : (Nat/succ(m))
         end
-        let append(@T : Type, @n : Nat, @m : Nat, v : Vec(T)(n), w : Vec(T)(m)) -> Vec(T)(Nat/add(n, m)) =
+        let append(@T : Type, @n : Nat, @m : Nat, v : Vec(T)(n), w : Vec(T)(m)) -> Vec(T)(Nat/add(n, m)) =>
             match v
             | nil() => w
             | cons(@j, x, xs) => Vec/cons(x, append(xs, w))
@@ -226,16 +226,16 @@ fn index_refinement_learns_inside_the_arm() {
         induct Eq(A : Type) : (x : A, y : A) -> Type
         | refl(z : A) : (z, z)
         end
-        let subst(@n : Nat, @m : Nat, p : Eq(Nat)(n, m), v : Vec(Bytes)(n)) -> Vec(Bytes)(m) =
+        let subst(@n : Nat, @m : Nat, p : Eq(Nat)(n, m), v : Vec(Bytes)(n)) -> Vec(Bytes)(m) =>
             match p
             | refl(z) => v
             end;
-        let sym(@A : Type, @x : A, @y : A, p : Eq(A)(x, y)) -> Eq(A)(y, x) =
+        let sym(@A : Type, @x : A, @y : A, p : Eq(A)(x, y)) -> Eq(A)(y, x) =>
             match p
             | refl(z) => Eq/refl(z)
             end;
-        let zonly(@T : Type, v : Vec(T)(0)) -> Nat = 9;
-        let f(@T : Type, @n : Nat, v : Vec(T)(n), w : Vec(T)(n)) -> Nat =
+        let zonly(@T : Type, v : Vec(T)(0)) -> Nat => 9;
+        let f(@T : Type, @n : Nat, v : Vec(T)(n), w : Vec(T)(n)) -> Nat =>
             match v
             | nil() => zonly(w)
             | cons(@j, x, xs) => 1
@@ -257,7 +257,7 @@ fn empty_inductive_lowers_and_vacuous_match_eliminates_it() {
     let source = r#"
         induct False : Type
         end
-        let absurd(A : Type, v : False) -> A =
+        let absurd(A : Type, v : False) -> A =>
             match v
             end;
         let subject : /std/Nat = 5;
@@ -276,11 +276,11 @@ fn inversion_prunes_impossible_arms_and_solves_binders() {
         | nil() : (0)
         | cons(@m : Nat, x : T, xs : Vec(T)(m)) : (Nat/succ(m))
         end
-        let first(@T : Type, @n : Nat, v : Vec(T)(Nat/succ(n))) -> T =
+        let first(@T : Type, @n : Nat, v : Vec(T)(Nat/succ(n))) -> T =>
             match v
             | cons(@j, x, xs) => x
             end;
-        let rest(@T : Type, @n : Nat, v : Vec(T)(Nat/succ(n))) -> Vec(T)(n) =
+        let rest(@T : Type, @n : Nat, v : Vec(T)(Nat/succ(n))) -> Vec(T)(n) =>
             match v
             | cons(@j, x, xs) => xs
             end;
@@ -302,7 +302,7 @@ fn impossible_inductive_arm_lowers_to_unreachable() {
         | nil() : (0)
         | cons(@m : Nat, x : T, xs : Vec(T)(m)) : (Nat/succ(m))
         end
-        let first(@T : Type, @n : Nat, v : Vec(T)(Nat/succ(n))) -> T =
+        let first(@T : Type, @n : Nat, v : Vec(T)(Nat/succ(n))) -> T =>
             match v
             | cons(@j, x, xs) => x
             end;
@@ -334,7 +334,7 @@ fn omission_requires_a_definite_clash() {
         | nil() : (0)
         | cons(@m : Nat, x : T, xs : Vec(T)(m)) : (Nat/succ(m))
         end
-        let f(@T : Type, @n : Nat, v : Vec(T)(n)) -> Nat =
+        let f(@T : Type, @n : Nat, v : Vec(T)(n)) -> Nat =>
             match v
             | cons(@j, x, xs) => 1
             end;
@@ -353,7 +353,7 @@ fn omission_requires_a_definite_clash() {
         | same(z : Nat) : (z, z)
         | diff() : (0, 1)
         end
-        let f(a : Nat, b : Nat, q : Foo(a, b)) -> Bytes =
+        let f(a : Nat, b : Nat, q : Foo(a, b)) -> Bytes =>
             match q
             | diff() => /std/Str/to_bytes("d")
             end;
@@ -372,7 +372,7 @@ fn omission_requires_a_definite_clash() {
         | same(z : Nat) : (z, z)
         | diff() : (0, 1)
         end
-        let f(q : Foo(3, 4)) -> Bytes =
+        let f(q : Foo(3, 4)) -> Bytes =>
             match q
             | diff() => /std/Str/to_bytes("d")
             end;
@@ -386,7 +386,7 @@ fn omission_requires_a_definite_clash() {
         | same(z : Nat) : (z, z)
         | diff() : (0, 1)
         end
-        let g(q : Foo(5, 5)) -> Bytes =
+        let g(q : Foo(5, 5)) -> Bytes =>
             match q
             | same(z) => /std/Str/to_bytes("s")
             end;

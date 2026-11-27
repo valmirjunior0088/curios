@@ -1,19 +1,19 @@
 use /std/{Flt, Nat, Int, Bool, Bytes};
 use /std/Flt/{Rounding};
 
-let pow2(k: Nat) -> Nat =
+let pow2(k: Nat) -> Nat =>
     Nat/shl(1, k);
 
 --- How many bits spell `n`: none for zero, one past the highest set bit otherwise.
-pub let bit_length(n: Nat) -> Nat =
+pub let bit_length(n: Nat) -> Nat =>
     match n | 0 => 0 | _ => Nat/log2(n) + 1 end;
 
 --- `f`'s bit pattern as a natural.
-pub let bits(f: Flt) -> Nat =
+pub let bits(f: Flt) -> Nat =>
     Bytes/to_nat(Flt/to_le_bytes(f));
 
 --- The float a 64-bit pattern spells, eight bytes least significant first.
-pub let of_bits(n: Nat) -> Flt =
+pub let of_bits(n: Nat) -> Flt =>
     let at = (i: Nat) => Nat/to_byte(Nat/shr(n, 8 * i) % 256);
     Flt/of_le_bytes(0x[at(0), at(1), at(2), at(3), at(4), at(5), at(6), at(7)]);
 
@@ -31,7 +31,7 @@ let rounds_up_in(
     tie: Bool,
     odd: Bool,
     inexact: Bool,
-) -> Bool =
+) -> Bool =>
     match mode
     | direction(ties_to_even()) => above || tie && odd
     | direction(ties_to_away()) => above || tie
@@ -49,11 +49,11 @@ pub let rounds_up(
     tie: Bool,
     odd: Bool,
     inexact: Bool,
-) -> Bool =
+) -> Bool =>
     rounds_up_in(Mode/direction(r), negative, above, tie, odd, inexact);
 
 --- Whether a result past the largest finite value becomes the infinity of its sign rather than that value (§7.4): always when rounding to nearest, ties toward zero included, when directed only toward the infinity of its own sign.
-let overflows_to_infinity(mode: Mode, negative: Bool) -> Bool =
+let overflows_to_infinity(mode: Mode, negative: Bool) -> Bool =>
     match mode
     | direction(toward_zero()) => false
     | direction(toward_positive()) => Bool/not(negative)
@@ -61,11 +61,11 @@ let overflows_to_infinity(mode: Mode, negative: Bool) -> Bool =
     | _ => true
     end;
 
-let sign_bit(negative: Bool) -> Nat =
+let sign_bit(negative: Bool) -> Nat =>
     match negative | true => pow2(63) | false => 0 end;
 
 --- The float a significand under `2^53` and its exponent encode: a subnormal when the hidden bit is clear, which leaves the exponent at the grid; otherwise the biased field, past the largest of which an overflow answers what `mode` sends it to.
-let encode(mode: Mode, negative: Bool, m: Nat, e: Int) -> Flt =
+let encode(mode: Mode, negative: Bool, m: Nat, e: Int) -> Flt =>
     let field = e + +1075;
     match
     | m < pow2(52) => of_bits(sign_bit(negative) + m)
@@ -79,7 +79,7 @@ let encode(mode: Mode, negative: Bool, m: Nat, e: Int) -> Flt =
 
 -- It is `curios_num::Floating`'s `round`, line for line, so the rounding a type reasons about is the one every primitive folds by.
 --- The float `(-1)^negative · (m + ε) · 2^e` rounds to in `mode`, `ε` in `(0, 1)` when `sticky` and zero when not.
-pub let round_in(mode: Mode, negative: Bool, m: Nat, e: Int, sticky: Bool) -> Flt =
+pub let round_in(mode: Mode, negative: Bool, m: Nat, e: Int, sticky: Bool) -> Flt =>
     let width = Nat/to_int(bit_length(m));
     let grid = -1074 - e;
     match
@@ -116,15 +116,15 @@ pub let round_in(mode: Mode, negative: Bool, m: Nat, e: Int, sticky: Bool) -> Fl
     end;
 
 --- `round_in` in one of the five directions.
-pub let round(r: Rounding, negative: Bool, m: Nat, e: Int, sticky: Bool) -> Flt =
+pub let round(r: Rounding, negative: Bool, m: Nat, e: Int, sticky: Bool) -> Flt =>
     round_in(Mode/direction(r), negative, m, e, sticky);
 
 --- `mantissa · 2^exponent` rounded ties toward zero, as §9.5's augmented operations round.
-pub let ties_toward_zero(mantissa: Int, exponent: Int) -> Flt =
+pub let ties_toward_zero(mantissa: Int, exponent: Int) -> Flt =>
     round_in(Mode/ties_toward_zero(), mantissa < +0, Int/abs(mantissa), exponent, false);
 
 --- `magnitude · 2^exponent` rounded to 53 bits in `mode` with no ceiling on the exponent, compared with the largest finite value: IEEE's test for overflow (§7.4), which the ceiling a real rounding applies would hide.
-pub let overflows_in(mode: Mode, negative: Bool, m: Nat, e: Int, sticky: Bool) -> Bool =
+pub let overflows_in(mode: Mode, negative: Bool, m: Nat, e: Int, sticky: Bool) -> Bool =>
     let width = bit_length(m);
     match
     | width == 0 => false
@@ -143,9 +143,9 @@ pub let overflows_in(mode: Mode, negative: Bool, m: Nat, e: Int, sticky: Bool) -
     end;
 
 --- `overflows_in` in one of the five directions.
-pub let overflows(r: Rounding, negative: Bool, m: Nat, e: Int, sticky: Bool) -> Bool =
+pub let overflows(r: Rounding, negative: Bool, m: Nat, e: Int, sticky: Bool) -> Bool =>
     overflows_in(Mode/direction(r), negative, m, e, sticky);
 
 --- Whether `m · 2^e` is nonzero and below the least normal `2^-1022` — and so is any value above it by less than `2^e`, which a quotient's sticky residue is: tininess detected before rounding, the one reading this library takes (§7.5).
-pub let tiny(m: Nat, e: Int) -> Bool =
+pub let tiny(m: Nat, e: Int) -> Bool =>
     m != 0 && e + Nat/to_int(bit_length(m)) <= -1022;

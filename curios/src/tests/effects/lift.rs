@@ -9,18 +9,18 @@ use crate::test_support::*;
 fn a_try_region_over_io_sequences_io_actions_and_results() {
     let source = r#"
         use /std/{Nat, Str, Result, Try, Io, print};
-        pub let step(n: Nat) -> Try(Io, Str, Nat) =
+        pub let step(n: Nat) -> Try(Io, Str, Nat) =>
             let _ = print("s")!;
             let m = Result/success(n + 1)!;
             match m == 3
             | true => Try/raise("three")
             | false => Try/pure(m)
             end;
-        pub let twice() -> Try(Io, Str, Nat) =
+        pub let twice() -> Try(Io, Str, Nat) =>
             let a = step(1)!;
             let b = step(a)!;
             Try/pure(b);
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let outcome = Try/run(Try/rescue(twice(), (e) => Try/pure(Str/length(e))))!;
             match outcome
             | success(n) => print(Nat/to_str(n))
@@ -38,16 +38,16 @@ fn a_try_region_over_io_sequences_io_actions_and_results() {
 fn a_try_region_over_io_takes_every_declared_edge() {
     let source = r#"
         use /std/{Nat, Str, Result, Try, Io, print};
-        pub let sync(n: Nat) -> Try(Io, Str, Nat) =
+        pub let sync(n: Nat) -> Try(Io, Str, Nat) =>
             let _ = print("i")!;
             Try/pure(n * 2);
-        pub let body() -> Try(Io, Str, Nat) =
+        pub let body() -> Try(Io, Str, Nat) =>
             let a = sync(2)!;
             let _ = print("a")!;
             let b = Result/success(a + 1)!;
             let _ = Result/raise(@Str, @{}, "stop")!;
             Try/pure(b);
-        pub let program() -> Io({}) =
+        pub let program() -> Io({}) =>
             let outcome = Try/run(body())!;
             match outcome
             | success(n) => print(Nat/to_str(n))
@@ -68,25 +68,25 @@ fn running_a_try_lifts_by_the_base_its_argument_was_declared_over() {
         pub struct Job(A: Type): pub Type {
             Io(A),
         }
-        pub let jpure(@A: Type, a: A) -> Job(A) =
+        pub let jpure(@A: Type, a: A) -> Job(A) =>
             Job { Io/pure(a) };
-        pub let jbind(@A: Type, @B: Type, m: Job(A), f: (A) -> Job(B)) -> Job(B) =
+        pub let jbind(@A: Type, @B: Type, m: Job(A), f: (A) -> Job(B)) -> Job(B) =>
             Job { Io/bind(m.0, (a) => f(a).0) };
         satisfy Monad(Job) {
             pure = jpure,
             bind = jbind,
         }
         satisfy Lift(Io, Job) {
-            lift(action) = Job { action },
+            lift(action) => Job { action },
         }
-        pub let step() -> Try(Io, Str, Nat) =
+        pub let step() -> Try(Io, Str, Nat) =>
             let _ = print("s")!;
             Try/pure(4);
-        pub let wrapped() -> Try(Job, Str, Nat) =
+        pub let wrapped() -> Try(Job, Str, Nat) =>
             let outcome = Try/run(step())!;
             let n = outcome!;
             Try/pure(n + 1);
-        pub let program() -> Io({}) =
+        pub let program() -> Io({}) =>
             let r = Try/run(wrapped()).0!;
             match r
             | success(n) => print(Nat/to_str(n))
@@ -107,25 +107,25 @@ fn a_try_action_lifts_by_the_base_its_context_argument_was_declared_over() {
         pub struct Job(A: Type): pub Type {
             Io(A),
         }
-        pub let jpure(@A: Type, a: A) -> Job(A) =
+        pub let jpure(@A: Type, a: A) -> Job(A) =>
             Job { Io/pure(a) };
-        pub let jbind(@A: Type, @B: Type, m: Job(A), f: (A) -> Job(B)) -> Job(B) =
+        pub let jbind(@A: Type, @B: Type, m: Job(A), f: (A) -> Job(B)) -> Job(B) =>
             Job { Io/bind(m.0, (a) => f(a).0) };
         satisfy Monad(Job) {
             pure = jpure,
             bind = jbind,
         }
         satisfy Lift(Io, Job) {
-            lift(action) = Job { action },
+            lift(action) => Job { action },
         }
-        pub let step() -> Try(Io, Str, Nat) =
+        pub let step() -> Try(Io, Str, Nat) =>
             let _ = print("s")!;
             Try/raise("e");
-        pub let rescued() -> Try(Job, Str, {}) =
+        pub let rescued() -> Try(Job, Str, {}) =>
             let n = Try/rescue(step(), (e) => Try/pure(4))!;
             let _ = print(Nat/to_str(n))!;
             Try/pure(());
-        pub let program() -> Io({}) =
+        pub let program() -> Io({}) =>
             let r = Try/run(rescued()).0!;
             match r
             | success(_) => print("!")
@@ -145,15 +145,15 @@ fn an_unreadable_action_of_another_monad_is_reported_at_its_own_bang() {
         pub struct Job(A: Type): pub Type {
             Io(A),
         }
-        pub let jpure(@A: Type, a: A) -> Job(A) =
+        pub let jpure(@A: Type, a: A) -> Job(A) =>
             Job { Io/pure(a) };
-        pub let jbind(@A: Type, @B: Type, m: Job(A), f: (A) -> Job(B)) -> Job(B) =
+        pub let jbind(@A: Type, @B: Type, m: Job(A), f: (A) -> Job(B)) -> Job(B) =>
             Job { Io/bind(m.0, (a) => f(a).0) };
         satisfy Monad(Job) {
             pure = jpure,
             bind = jbind,
         }
-        let job() -> Job({}) =
+        let job() -> Job({}) =>
             let _ = jpure(())!;
             let acts = (print("b"), 1);
             let _ = acts.0!;
@@ -183,18 +183,18 @@ fn an_io_action_lifts_into_a_region_with_a_declared_edge() {
         pub struct Job(A: Type): pub Type {
             Io(A),
         }
-        pub let jpure(@A: Type, a: A) -> Job(A) =
+        pub let jpure(@A: Type, a: A) -> Job(A) =>
             Job { Io/pure(a) };
-        pub let jbind(@A: Type, @B: Type, m: Job(A), f: (A) -> Job(B)) -> Job(B) =
+        pub let jbind(@A: Type, @B: Type, m: Job(A), f: (A) -> Job(B)) -> Job(B) =>
             Job { Io/bind(m.0, (a) => f(a).0) };
         satisfy Monad(Job) {
             pure = jpure,
             bind = jbind,
         }
         satisfy Lift(Io, Job) {
-            lift(action) = Job { action },
+            lift(action) => Job { action },
         }
-        pub let job() -> Job({}) =
+        pub let job() -> Job({}) =>
             let _ = print("a")!;
             let _ = jpure(())!;
             let _ = print("b")!;
@@ -214,18 +214,18 @@ fn an_io_tail_lifts_into_a_region_with_a_declared_edge() {
         pub struct Job(A: Type): pub Type {
             Io(A),
         }
-        pub let jpure(@A: Type, a: A) -> Job(A) =
+        pub let jpure(@A: Type, a: A) -> Job(A) =>
             Job { Io/pure(a) };
-        pub let jbind(@A: Type, @B: Type, m: Job(A), f: (A) -> Job(B)) -> Job(B) =
+        pub let jbind(@A: Type, @B: Type, m: Job(A), f: (A) -> Job(B)) -> Job(B) =>
             Job { Io/bind(m.0, (a) => f(a).0) };
         satisfy Monad(Job) {
             pure = jpure,
             bind = jbind,
         }
         satisfy Lift(Io, Job) {
-            lift(action) = Job { action },
+            lift(action) => Job { action },
         }
-        pub let job(flag: Bool) -> Job({}) =
+        pub let job(flag: Bool) -> Job({}) =>
             let _ = jpure(())!;
             match flag
             | true => print("t")
@@ -244,7 +244,7 @@ fn an_io_tail_lifts_into_a_region_with_a_declared_edge() {
 fn a_format_print_lifts_into_a_try_region() {
     let source = r#"
         use /std/{Str, Try, Io, Fmt};
-        let first() -> Try(Io, Str, {}) =
+        let first() -> Try(Io, Str, {}) =>
             let _ = Fmt/print("a %\n")(1)!;
             Fmt/print("b %\n")(2);
         first()
@@ -261,9 +261,9 @@ fn a_tail_with_no_edge_reports_the_lift_witness() {
         pub struct Job(A: Type): pub Type {
             Io(A),
         }
-        pub let jpure(@A: Type, a: A) -> Job(A) =
+        pub let jpure(@A: Type, a: A) -> Job(A) =>
             Job { Io/pure(a) };
-        pub let jbind(@A: Type, @B: Type, m: Job(A), f: (A) -> Job(B)) -> Job(B) =
+        pub let jbind(@A: Type, @B: Type, m: Job(A), f: (A) -> Job(B)) -> Job(B) =>
             Job { Io/bind(m.0, (a) => f(a).0) };
         satisfy Monad(Job) {
             pure = jpure,
@@ -291,18 +291,18 @@ fn an_explicit_lift_spells_the_same_embedding() {
         pub struct Job(A: Type): pub Type {
             Io(A),
         }
-        pub let jpure(@A: Type, a: A) -> Job(A) =
+        pub let jpure(@A: Type, a: A) -> Job(A) =>
             Job { Io/pure(a) };
-        pub let jbind(@A: Type, @B: Type, m: Job(A), f: (A) -> Job(B)) -> Job(B) =
+        pub let jbind(@A: Type, @B: Type, m: Job(A), f: (A) -> Job(B)) -> Job(B) =>
             Job { Io/bind(m.0, (a) => f(a).0) };
         satisfy Monad(Job) {
             pure = jpure,
             bind = jbind,
         }
         satisfy Lift(Io, Job) {
-            lift(action) = Job { action },
+            lift(action) => Job { action },
         }
-        pub let job() -> Job({}) =
+        pub let job() -> Job({}) =>
             let _ = lift(print("x"))!;
             jpure(());
         job().0
@@ -319,15 +319,15 @@ fn a_missing_edge_reports_the_lift_witness() {
         pub struct Job(A: Type): pub Type {
             Io(A),
         }
-        pub let jpure(@A: Type, a: A) -> Job(A) =
+        pub let jpure(@A: Type, a: A) -> Job(A) =>
             Job { Io/pure(a) };
-        pub let jbind(@A: Type, @B: Type, m: Job(A), f: (A) -> Job(B)) -> Job(B) =
+        pub let jbind(@A: Type, @B: Type, m: Job(A), f: (A) -> Job(B)) -> Job(B) =>
             Job { Io/bind(m.0, (a) => f(a).0) };
         satisfy Monad(Job) {
             pure = jpure,
             bind = jbind,
         }
-        pub let job() -> Job({}) =
+        pub let job() -> Job({}) =>
             let _ = Io/yield()!;
             jpure(());
         job().0
@@ -347,7 +347,7 @@ fn a_missing_edge_reports_the_lift_witness() {
 fn a_missing_edge_between_aliased_monads_reports_them_as_written() {
     let source = r#"
         use /std/{Byte, Str, Parse};
-        pub let mixed() -> Parse(Str, Byte) =
+        pub let mixed() -> Parse(Str, Byte) =>
             let b = Parse/bytes/byte()!;
             Parse/pure(b);
         /std/Io/pure(())
@@ -372,32 +372,32 @@ fn a_missing_composite_reports_the_declared_chain() {
         pub struct Job(A: Type): pub Type {
             Io(A),
         }
-        pub let jpure(@A: Type, a: A) -> Job(A) =
+        pub let jpure(@A: Type, a: A) -> Job(A) =>
             Job { Io/pure(a) };
-        pub let jbind(@A: Type, @B: Type, m: Job(A), f: (A) -> Job(B)) -> Job(B) =
+        pub let jbind(@A: Type, @B: Type, m: Job(A), f: (A) -> Job(B)) -> Job(B) =>
             Job { Io/bind(m.0, (a) => f(a).0) };
         satisfy Monad(Job) {
             pure = jpure,
             bind = jbind,
         }
         satisfy Lift(Io, Job) {
-            lift(action) = Job { action },
+            lift(action) => Job { action },
         }
         pub struct Sched(A: Type): pub Type {
             Job(A),
         }
-        pub let spure(@A: Type, a: A) -> Sched(A) =
+        pub let spure(@A: Type, a: A) -> Sched(A) =>
             Sched { jpure(a) };
-        pub let sbind(@A: Type, @B: Type, m: Sched(A), f: (A) -> Sched(B)) -> Sched(B) =
+        pub let sbind(@A: Type, @B: Type, m: Sched(A), f: (A) -> Sched(B)) -> Sched(B) =>
             Sched { jbind(m.0, (a) => f(a).0) };
         satisfy Monad(Sched) {
             pure = spure,
             bind = sbind,
         }
         satisfy Lift(Job, Sched) {
-            lift(action) = Sched { action },
+            lift(action) => Sched { action },
         }
-        pub let prog() -> Sched({}) =
+        pub let prog() -> Sched({}) =>
             let _ = print("io into sched")!;
             spure(());
         prog().0.0
@@ -417,7 +417,7 @@ fn a_try_sequenced_in_a_region_with_no_edge_for_it_is_told_what_is_written_inste
     let error = typecheck(
         r#"
         use /std/{Result, Io, Try, File, Path, print};
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let text = File/read_all(Path/of_str("notes.txt"))!;
             print("read");
         entry()
@@ -448,15 +448,15 @@ fn a_missing_edge_between_monads_that_hold_no_failure_offers_no_runner() {
         pub struct Job(A: Type): pub Type {
             Io(A),
         }
-        pub let jpure(@A: Type, a: A) -> Job(A) =
+        pub let jpure(@A: Type, a: A) -> Job(A) =>
             Job { Io/pure(a) };
-        pub let jbind(@A: Type, @B: Type, m: Job(A), f: (A) -> Job(B)) -> Job(B) =
+        pub let jbind(@A: Type, @B: Type, m: Job(A), f: (A) -> Job(B)) -> Job(B) =>
             Job { Io/bind(m.0, (a) => f(a).0) };
         satisfy Monad(Job) {
             pure = jpure,
             bind = jbind,
         }
-        pub let job() -> Job({}) =
+        pub let job() -> Job({}) =>
             let _ = Io/yield()!;
             jpure(());
         job().0
@@ -474,7 +474,7 @@ fn a_missing_edge_between_monads_that_hold_no_failure_offers_no_runner() {
 /// An action of another monad a region returns, with no `!` to run it, is lifted as one a `!` runs, and the missing edge says it was returned: in a nominal region as in any other.
 #[test]
 fn a_returned_action_of_another_monad_is_said_to_be_returned() {
-    let source = "use /std/{Nat, Io, Option};\npub let wrap() -> Option(Nat) = Io/pure(1);\n()\n";
+    let source = "use /std/{Nat, Io, Option};\npub let wrap() -> Option(Nat) => Io/pure(1);\n()\n";
 
     let error = typecheck(source).expect_err("a missing edge must refuse");
     assert!(

@@ -51,13 +51,13 @@ fn declared_at(program: &str, written: &str, within: usize) -> Described {
 
 const TYPED: &str = "let one: /std/Nat = true;\nlet two: /std/Nat = one;\nlet three: /std/Nat = 3;\n/std/print(\"\")";
 
-const LOCAL: &str = "let twice(n: /std/Nat) -> /std/Nat = n + n;\nlet four: /std/Nat = twice(/std/Nat/add(1, 1));\n/std/print(\"\")";
+const LOCAL: &str = "let twice(n: /std/Nat) -> /std/Nat => n + n;\nlet four: /std/Nat = twice(/std/Nat/add(1, 1));\n/std/print(\"\")";
 
-const NAMED: &str = "let outer(given: /std/Nat) -> /std/Nat =\n    let inner(taken: /std/Nat) -> /std/Nat = taken;\n    inner(given);\n/std/print(\"\")";
+const NAMED: &str = "let outer(given: /std/Nat) -> /std/Nat =>\n    let inner(taken: /std/Nat) -> /std/Nat => taken;\n    inner(given);\n/std/print(\"\")";
 
-const GROUP: &str = "let outer(given: /std/Nat) -> /std/Nat =\n    let left(k: /std/Nat) -> /std/Nat = right(k)\n    and right(m: /std/Nat) -> /std/Nat = m;\n    left(given);\n/std/print(\"\")";
+const GROUP: &str = "let outer(given: /std/Nat) -> /std/Nat =>\n    let left(k: /std/Nat) -> /std/Nat => right(k)\n    and right(m: /std/Nat) -> /std/Nat => m;\n    left(given);\n/std/print(\"\")";
 
-const TELESCOPE: &str = "induct Shape(A: Type): Type\n| circle(radius: A)\nend\nlet apply(f: (x: /std/Nat) -> /std/Nat) -> /std/Nat = f(1);\n/std/print(\"\")";
+const TELESCOPE: &str = "induct Shape(A: Type): Type\n| circle(radius: A)\nend\nlet apply(f: (x: /std/Nat) -> /std/Nat) -> /std/Nat => f(1);\n/std/print(\"\")";
 
 const MEMBERS: &str = "struct Sized(n: /std/Nat): Type {\n    size: /std/Nat,\n    count: /std/Eq()(size, n),\n}\nconcept Shown(T: Type): Type {\n    shown: (value: T) -> /std/Nat,\n    again: (value: T) -> /std/Eq()(shown(value), shown(value)),\n}\nlet pairs: Type = {n: /std/Nat, p: /std/Eq()(n, n)};\n/std/print(\"\")";
 
@@ -71,7 +71,7 @@ induct Colour: pub Type
 end
 
 satisfy Painted(Colour) {
-    paint(shown) = shown,
+    paint(shown) => shown,
 }
 
 /std/print(\"\")";
@@ -468,7 +468,7 @@ fn a_heads_structure_is_answered() {
 fn a_field_of_a_structure_in_scope_answers_where_its_unit_writes_it() {
     const SHAPES: &str = "use /std/{Nat};\npub struct Pair: pub Type {\n    first: Nat,\n}\n";
     const READS: &str =
-        "use /std/{Nat};\nuse /shapes/{Pair};\npub let read(held: Pair) -> Nat = held.first;\n";
+        "use /std/{Nat};\nuse /shapes/{Pair};\npub let read(held: Pair) -> Nat => held.first;\n";
     let library = |mount, file, text| {
         RootSource::supplied_module(mount, &Source::held(file, text))
             .expect("the text is written as a module")

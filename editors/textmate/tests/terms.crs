@@ -38,4 +38,4 @@ match
 | _ => 0
 end
 let Point { x, y } = point;
-let keep(@A: Sort, a: A) -> A = a;
+let keep(@A: Sort, a: A) -> A => a;

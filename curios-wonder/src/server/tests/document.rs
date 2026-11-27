@@ -102,7 +102,7 @@ induct Colour: pub Type
 end
 
 satisfy Painted(Colour) {
-    paint(shown) = shown,
+    paint(shown) => shown,
 }
 
 /std/print(\"\")
@@ -132,7 +132,7 @@ satisfy Painted(Colour) {
 fn a_written_definition_is_outlined_by_the_type_it_states() {
     const DEFINED: &str = "\
 let one: /std/Nat = 1;
-let same(n: /std/Nat) -> /std/Nat = n;
+let same(n: /std/Nat) -> /std/Nat => n;
 let Count: Type = /std/Nat;
 
 /std/print(\"\")
@@ -152,7 +152,7 @@ let Count: Type = /std/Nat;
 /// A selection grows from the innermost term holding a position through each term around it to its declaration, and a position between two declarations is held by none. Mutation-checked: with every term inside the last one kept whether or not it holds the position, the chain runs into the parameter's type.
 #[test]
 fn a_selection_grows_through_each_term_around_a_position_to_its_declaration() {
-    let program = "pub let double(x: Nat) -> Nat = x + x * 2;\n\n/std/print(\"ok\")\n";
+    let program = "pub let double(x: Nat) -> Nat => x + x * 2;\n\n/std/print(\"ok\")\n";
     let checked = checked_program(program);
     let mut grown = Vec::new();
     let mut selection = selected(
@@ -171,7 +171,7 @@ fn a_selection_grows_through_each_term_around_a_position_to_its_declaration() {
             "2",
             "x * 2",
             "x + x * 2",
-            "pub let double(x: Nat) -> Nat = x + x * 2;"
+            "pub let double(x: Nat) -> Nat => x + x * 2;"
         ]
     );
     assert_eq!(
@@ -187,7 +187,7 @@ fn a_selection_grows_through_each_term_around_a_position_to_its_declaration() {
 /// A declaration written over several lines folds from its first line to its last, and one written on one line does not. Mutation-checked: with a text folded on its one line too, the one-line declaration folds.
 #[test]
 fn a_declaration_over_several_lines_folds_and_one_on_a_line_does_not() {
-    let program = "pub let one(x: Nat) -> Nat = x;\n\npub let two(x: Nat) -> Nat =\n    x + x;\n\n/std/print(\"ok\")\n";
+    let program = "pub let one(x: Nat) -> Nat => x;\n\npub let two(x: Nat) -> Nat =>\n    x + x;\n\n/std/print(\"ok\")\n";
     let folds = folded(program, &checked_program(program))
         .into_iter()
         .map(|fold| (fold.start_line, fold.end_line))
@@ -199,7 +199,7 @@ fn a_declaration_over_several_lines_folds_and_one_on_a_line_does_not() {
 /// A segment of a path that reaches a module the program declares links to where its `mod` line names it, and the mount a `use` line starts from links nowhere. Mutation-checked: with a segment linked to itself, the link at `Shapes` lands on the call.
 #[test]
 fn a_path_through_a_module_links_to_where_its_mod_line_names_it() {
-    let program = "use /std/{Nat};\n\nmod Shapes\n    use /std/{Nat};\n\n    pub let side() -> Nat = 3;\nend\n\n/std/print(Nat/to_str(Shapes/side()))\n";
+    let program = "use /std/{Nat};\n\nmod Shapes\n    use /std/{Nat};\n\n    pub let side() -> Nat => 3;\nend\n\n/std/print(Nat/to_str(Shapes/side()))\n";
     let checked = checked_program(program);
     let links = linked(program, &checked)
         .into_iter()
@@ -217,7 +217,7 @@ fn a_path_through_a_module_links_to_where_its_mod_line_names_it() {
 /// A `let`'s binder and a lambda's parameter written as a name with no type are hinted with the type they were opened at, after the name, and a `let` and a parameter that state theirs, or a match arm's binder, whose form takes none, are not. Mutation-checked: with every written binder noted as stating no type, the stated ones and the arm's are hinted too.
 #[test]
 fn a_binder_that_states_no_type_where_it_could_is_hinted_with_its_type() {
-    let program = "use /std/{Nat, List, Option};\n\npub let total(n: Nat, o: Option(Nat)) -> Nat =\n    let sum = n + 1;\n    let stated: Nat = sum;\n    let held = match o | some(v) => v | none() => 0 end;\n    List/fold([1, 2], stated + held, (x, acc: Nat) => x + acc);\n\n/std/print(\"ok\")\n";
+    let program = "use /std/{Nat, List, Option};\n\npub let total(n: Nat, o: Option(Nat)) -> Nat =>\n    let sum = n + 1;\n    let stated: Nat = sum;\n    let held = match o | some(v) => v | none() => 0 end;\n    List/fold([1, 2], stated + held, (x, acc: Nat) => x + acc);\n\n/std/print(\"ok\")\n";
     let whole = Range {
         start: Position::new(0, 0),
         end: position_of(program, program.len()),

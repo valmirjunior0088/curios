@@ -20,7 +20,7 @@ fn called(summands: usize) -> String {
         .collect::<Vec<_>>()
         .join(" + ");
     fill!(
-        "use /std/{Nat, Eq, Io};\nlet called(g: (Nat) -> Nat, ${binders}) -> Eq()(${left}, ${right}) = Eq/refl();\nIo/pure(())",
+        "use /std/{Nat, Eq, Io};\nlet called(g: (Nat) -> Nat, ${binders}) -> Eq()(${left}, ${right}) => Eq/refl();\nIo/pure(())",
         binders,
         left,
         right

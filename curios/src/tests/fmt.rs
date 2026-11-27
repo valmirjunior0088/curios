@@ -24,7 +24,7 @@ fn print_partial_evaluation_reduces_residual() {
     let source = r#"
         use /std/{Str, Bytes, Fmt, Io, Try, Proc};
 
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             match Try/run(Io/read(Proc/stdin, 1024))!
             | success(bytes(bytes, @_)) =>
                 match Str/of_bytes(bytes)
@@ -71,7 +71,7 @@ fn print_runtime_args_specializes_spine() {
     let source = r#"
         use /std/{Str, Bytes, Fmt, Io, Try, Proc};
 
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             match Try/run(Io/read(Proc/stdin, 1024))!
             | success(bytes(bytes, @_)) =>
                 match Str/of_bytes(bytes)
@@ -120,7 +120,7 @@ fn print_err_formats_to_stderr() {
     assert_eq!(
         run(r#"
         use /std/{Fmt, Io};
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let a = /std/print("before;")!;
             let b = Fmt/print_err("%: %;")("code")(3)!;
             /std/print("after");
@@ -218,7 +218,7 @@ fn a_format_past_the_evaluators_budget_still_prints() {
 fn runtime_args_leave_no_formatter_in_cps() {
     let source = r#"
         use /std/{Fmt, Nat, List, Proc};
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             Fmt/print("count: %")(Nat/to_str(List/length(Proc/args()!)));
         entry()
         "#;
@@ -239,7 +239,7 @@ fn a_runtime_format_string_is_refused_by_its_written_type() {
         r#"
         use /std/{Str, Fmt, Io, Try, Proc};
 
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             match Try/run(Io/read(Proc/stdin, 1024))!
             | success(bytes(bytes, @_)) =>
                 match Str/of_bytes(bytes)

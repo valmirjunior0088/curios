@@ -4,7 +4,7 @@ use /std/ops/{Eql};
 use /std/Bool/{True, Holds};
 
 --- Whether `b` may stand in a field value: the tab, the space, and every octet past them but DEL, obs-text included (RFC 9110 §5.5). No other control octet may, a line's end least of all.
-pub let admits(b: Byte) -> Bool =
+pub let admits(b: Byte) -> Bool =>
     let n = Byte/to_nat(b);
     n == '\t' || n >= ' ' && n != '\u{7F}';
 
@@ -29,22 +29,22 @@ pub let empty: Value =
     Value { bytes = 0x[] };
 
 --- The value the literal `s` spells.
-pub let lit(s: Str, @_: Holds(Bytes/all(Str/to_bytes(s), admits))) -> Value =
+pub let lit(s: Str, @_: Holds(Bytes/all(Str/to_bytes(s), admits))) -> Value =>
     Value { bytes = Str/to_bytes(s) };
 
 --- The value `b` holds, or `none` where an octet of it may not stand in one.
-pub let of_bytes(b: Bytes) -> Option(Value) =
+pub let of_bytes(b: Bytes) -> Option(Value) =>
     match Bytes/all(b, admits)
     | true => Option/some(Value { bytes = b })
     | false => Option/none()
     end;
 
 --- The value `s` spells, or `none` where a character of it may not stand in one.
-pub let of_str(s: Str) -> Option(Value) =
+pub let of_str(s: Str) -> Option(Value) =>
     of_bytes(Str/to_bytes(s));
 
 --- The value as text, or `none` unless it is UTF-8.
-pub let to_str(v: Value) -> Option(Str) =
+pub let to_str(v: Value) -> Option(Str) =>
     Result/to_option(Str/of_bytes(v.bytes));
 
 --- One octet a value may hold.
@@ -54,17 +54,17 @@ pub struct Octet: pub Type {
 }
 
 --- `v` with `o` ahead of it: how a value is built an octet at a time, each carrying its own reason.
-pub let cons(o: Octet, v: Value) -> Value =
+pub let cons(o: Octet, v: Value) -> Value =>
     Value {
         bytes = 0x[o.byte, ..v.bytes],
         @Bool/and/both(admits(o.byte), Bytes/all(v.bytes, admits), o.clean, v.clean) };
 
 --- `a` then `b`: octets that may each stand in a value may stand in one together.
-pub let append(a: Value, b: Value) -> Value =
+pub let append(a: Value, b: Value) -> Value =>
     prepended(a.bytes, @a.clean, b);
 
 -- `m`'s octets ahead of `b`, each standing in a value by what `clean` says of them all.
-let prepended(m: Bytes, @clean: Holds(Bytes/all(m, admits)), b: Value) -> Value =
+let prepended(m: Bytes, @clean: Holds(Bytes/all(m, admits)), b: Value) -> Value =>
     match m
     | 0x[] => b
     | 0x[h, ..t] =>
@@ -87,19 +87,19 @@ let digit_octets: List(Octet) =
         Octet { byte = '8' },
         Octet { byte = '9' }];
 
-let digit(n: Nat, @below: Holds(n < 10)) -> Octet =
+let digit(n: Nat, @below: Holds(n < 10)) -> Octet =>
     List/get(digit_octets, n);
 
 -- `n` in two digits ahead of `rest`, what is past its tens left out.
-let two_digits(n: Nat, rest: Value) -> Value =
+let two_digits(n: Nat, rest: Value) -> Value =>
     cons(digit(n / 10 % 10), cons(digit(n % 10), rest));
 
 -- `n`, below ten thousand, in four digits ahead of `rest`: the year as the fixed-length form writes it.
-let year_digits(n: Nat, rest: Value, @below: Holds(n < 10000)) -> Value =
+let year_digits(n: Nat, rest: Value, @below: Holds(n < 10000)) -> Value =>
     cons(digit(n / 1000), cons(digit(n / 100 % 10), two_digits(n, rest)));
 
 -- The weekday in the three letters the Internet message format writes it in.
-let weekday_name(d: Weekday) -> Str =
+let weekday_name(d: Weekday) -> Str =>
     match d
     | monday() => "Mon"
     | tuesday() => "Tue"
@@ -111,7 +111,7 @@ let weekday_name(d: Weekday) -> Str =
     end;
 
 -- The month in the three letters the Internet message format writes it in.
-let month_name(m: Month) -> Str =
+let month_name(m: Month) -> Str =>
     match m
     | january() => "Jan"
     | february() => "Feb"
@@ -128,30 +128,30 @@ let month_name(m: Month) -> Str =
     end;
 
 -- A weekday's and a month's three letters may each stand in a value: by cases, a literal's reason at each.
-let weekday_admitted(d: Weekday) -> Holds(Bytes/all(Str/to_bytes(weekday_name(d)), admits)) =
+let weekday_admitted(d: Weekday) -> Holds(Bytes/all(Str/to_bytes(weekday_name(d)), admits)) =>
     match d
     | sunday() | monday() | tuesday() | wednesday() | thursday() | friday() | saturday() =>
         True/qed()
     end;
 
-let month_admitted(m: Month) -> Holds(Bytes/all(Str/to_bytes(month_name(m)), admits)) =
+let month_admitted(m: Month) -> Holds(Bytes/all(Str/to_bytes(month_name(m)), admits)) =>
     match m
     | january() | february() | march() | april() | may() | june() | july() | august() | september()
     | october() | november() | december() => True/qed()
     end;
 
 --- The moment as a field's value, in the fixed-length form HTTP sends a date in (RFC 9110 §5.6.7), `Sun, 06 Nov 1994 08:49:37 GMT`: its date and time in UTC, or `none` where its year has more digits than the form's four. Every octet is built valid, so dating a message needs no check that could fail.
-pub let of_timestamp(t: Timestamp) -> Option(Value) =
+pub let of_timestamp(t: Timestamp) -> Option(Value) =>
     of_utc(OffsetDateTime/of_timestamp(t, Offset/utc).date_time);
 
 -- Decided over a parameter: over the date `of_timestamp` computes, each reading of the year reduces the calendar walk again, which exhausts the certifier run without its memo.
-let of_utc(at: DateTime) -> Option(Value) =
+let of_utc(at: DateTime) -> Option(Value) =>
     match rfc3339/four_digits(at.date)
     | some(fits) => Option/some(fixdate(at, @fits))
     | none() => Option/none()
     end;
 
-let fixdate(at: DateTime, @four_digits: rfc3339/FourDigits(at.date)) -> Value =
+let fixdate(at: DateTime, @four_digits: rfc3339/FourDigits(at.date)) -> Value =>
     let date = at.date;
     let time = at.time;
     let weekday = Date/weekday(date);

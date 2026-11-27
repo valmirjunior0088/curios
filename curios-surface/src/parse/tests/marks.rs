@@ -7,8 +7,8 @@ use {crate::*, curios_common::Plicity, curios_module::SYNTAX};
 fn a_signature_member_is_a_type_under_its_mark() {
     for source in [
         "(n : Nat, Nat, @m : Nat, @Holds(0 < n), @_ : Holds(0 < n), use Show(Nat)) -> Nat",
-        "let f(n : Nat, _ : Nat, @m : Nat, @_ : Holds(0 < n), use Show(Nat)) -> Nat = n; f",
-        "satisfy (@A : Type, @_ : Holds(0 < 1), use Show(A)) => Show(List(A)) { show = f } u",
+        "let f(n : Nat, _ : Nat, @m : Nat, @_ : Holds(0 < n), use Show(Nat)) -> Nat => n; f",
+        "satisfy (@A : Type, @_ : Holds(0 < 1), use Show(A)) -> Show(List(A)) { show = f } u",
         "induct Pos : Type | at(n : Nat, Nat, @m : Nat, @Holds(0 < n)) end u",
         "struct Slot(K : Type, @V : Type, use Key(K)) : Type { key : K } u",
         "struct At : Type { n : Nat, @ok : Holds(0 < n), @Holds(0 < n) } u",
@@ -30,7 +30,7 @@ fn a_signature_member_is_a_type_under_its_mark() {
 /// A definition's premise has no binder in the tree and its plain and `@` members each have one: a `_` the author wrote is a binder that binds nothing.
 #[test]
 fn a_definitions_member_is_a_premise_or_has_a_binder() {
-    let TopItem::Let(item) = &"let f(n : Nat, @_ : Holds(0 < n), use Show(Nat)) -> Nat = n; u"
+    let TopItem::Let(item) = &"let f(n : Nat, @_ : Holds(0 < n), use Show(Nat)) -> Nat => n; u"
         .parse::<Entrypoint>()
         .unwrap()
         .module
@@ -57,8 +57,8 @@ fn a_binding_member_is_a_binder_under_its_mark() {
     for source in [
         "(n, m : Nat, _, @a, @b : Nat, @_, @_ : Holds(0 < n), use _) => n",
         "((lo, hi), @Pair { fst, snd }, use _) => lo",
-        "Fm { fm(@B, use _, a, b : Nat) = b }",
-        "(fm(@B, use _, a) = a)",
+        "Fm { fm(@B, use _, a, b : Nat) => b }",
+        "(fm(@B, use _, a) => a)",
     ] {
         let term = source.parse::<Term>().unwrap();
         assert_eq!(
@@ -178,7 +178,7 @@ fn a_refused_form_names_its_rule() {
     for (source, rule) in [
         // Where the site declares.
         (
-            "let f(use d : Show(A), x : A) -> Str = x; u",
+            "let f(use d : Show(A), x : A) -> Str => x; u",
             "a `use` member has no binder",
         ),
         (
@@ -186,7 +186,7 @@ fn a_refused_form_names_its_rule() {
             "a `use` member has no binder",
         ),
         (
-            "let f(@A : Type, use _, x : A) -> Str = x; u",
+            "let f(@A : Type, use _, x : A) -> Str => x; u",
             "`use _` holds a place and states no type",
         ),
         (
@@ -198,7 +198,7 @@ fn a_refused_form_names_its_rule() {
             "a `use` member has no binder",
         ),
         (
-            "satisfy (@A : Type, use s : Show(A)) => Show(List(A)) { show = f } u",
+            "satisfy (@A : Type, use s : Show(A)) -> Show(List(A)) { show = f } u",
             "a `use` member has no binder",
         ),
         (
@@ -206,27 +206,27 @@ fn a_refused_form_names_its_rule() {
             "a `use` member has no binder",
         ),
         (
-            "let f(x) -> Nat = x; u",
+            "let f(x) -> Nat => x; u",
             "a definition names its plain and `@` parameters",
         ),
         (
-            "let f(n : Nat, Nat) -> Nat = n; u",
+            "let f(n : Nat, Nat) -> Nat => n; u",
             "a definition names its plain and `@` parameters",
         ),
         (
-            "let f(@A, x : A) -> A = x; u",
+            "let f(@A, x : A) -> A => x; u",
             "a definition names its plain and `@` parameters",
         ),
         (
-            "let f(n : Nat, @Holds(0 < n)) -> Nat = n; u",
+            "let f(n : Nat, @Holds(0 < n)) -> Nat => n; u",
             "a definition names its plain and `@` parameters",
         ),
         (
-            "let f(@_, n : Nat) -> Nat = n; u",
+            "let f(@_, n : Nat) -> Nat => n; u",
             "a definition names its plain and `@` parameters",
         ),
         (
-            "satisfy (@A, use Show(A)) => Show(List(A)) { show = f } u",
+            "satisfy (@A, use Show(A)) -> Show(List(A)) { show = f } u",
             "a definition names its plain and `@` parameters",
         ),
         // Where the site binds.
@@ -244,11 +244,11 @@ fn a_refused_form_names_its_rule() {
             "after `@` a binder is read here, not a type",
         ),
         (
-            "Fm { fm(@B, use d, a, b) = b }",
+            "Fm { fm(@B, use d, a, b) => b }",
             "write the member as `use _`",
         ),
         (
-            "Fm { fm(@B, use Show(B), a, b) = b }",
+            "Fm { fm(@B, use Show(B), a, b) => b }",
             "a `use` member is written `use _` here",
         ),
         // Where no mark, or not this one, is taken.

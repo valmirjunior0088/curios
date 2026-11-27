@@ -1,13 +1,13 @@
 -- Sort N scattered naturals, each index scattered by a multiplicative hash, and print a checksum of the sorted list.
 use /std/{Str, Nat, List, Option, Result, Try, Io, Proc, Fmt};
 
-let scattered(n: Nat) -> List(Nat) =
+let scattered(n: Nat) -> List(Nat) =>
     List/map(List/range(0, n), (i) => (i * 1103515245 + 12345) % 2147483648);
 
-let checksum(l: List(Nat)) -> Nat =
+let checksum(l: List(Nat)) -> Nat =>
     List/fold(l, 0, (acc, x) => (acc * 31 + x) % 1000003);
 
-let execute() -> Try(Io, Str, {}) =
+let execute() -> Try(Io, Str, {}) =>
     let arguments = Proc/args()!;
     let bytes = Option/to_result(List/try_get(arguments, 1), "no input")!;
     let s = Result/map_failure(Str/of_bytes(bytes), (_) => "invalid utf-8")!;

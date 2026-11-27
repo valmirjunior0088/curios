@@ -48,7 +48,7 @@ use /std/{Nat};
 --- Twice the input.
 ---
 --- Never overflows, since `Nat` is unbounded.
-pub let double(n: Nat) -> Nat =
+pub let double(n: Nat) -> Nat =>
     n + n;
 ```
 
@@ -226,7 +226,7 @@ Only the `0x` and the `[` are glued, and the prefix is the literal's alone: a [h
 ```crs
 use /std/{Eq};
 
-pub let keep(@A: Sort, a: A) -> A =
+pub let keep(@A: Sort, a: A) -> A =>
     a;
 
 pub induct Maybe(A: Sort): pub Type
@@ -234,7 +234,7 @@ pub induct Maybe(A: Sort): pub Type
 | none()
 end
 
-pub let carry(@A: Type, @x: A, @y: A, P: (A) -> Sort, p: Eq()(x, y), v: P(x)) -> P(y) =
+pub let carry(@A: Type, @x: A, @y: A, P: (A) -> Sort, p: Eq()(x, y), v: P(x)) -> P(y) =>
     match p | refl() => v end;
 ```
 
@@ -304,7 +304,7 @@ A tuple literal is read against its expected type's labels, position by position
 A labeled tuple is projected by position or by label: `z.0` and `z.a` name one field. A labeled field may be written as a function definition:
 
 ```text
-(base = 3, bump(x) = x + 1)
+(base = 3, bump(x) => x + 1)
 ```
 
 ### Names, calls, and projections
@@ -396,11 +396,11 @@ A local function is written with its parameters and its result type, as a top-le
 use /std/{Nat};
 
 pub let five: Nat =
-    let increment(n: Nat) -> Nat = n + 1;
+    let increment(n: Nat) -> Nat => n + 1;
     increment(4);
 ```
 
-The parameters of a `let` or a `satisfy` are a signature, written as a [function type](#function-types)'s, except that a plain or `@` parameter is always named. One the body never names is `_: type`: `let positive(n: Nat, @_: Holds(0 < n)) -> Nat = n;` takes its bound as an implicit argument, which the body has as a fact. A witness parameter is `use Concept(args)`. A field written `label(params) = value` inside a tuple, a structure or a witness binds as a [lambda](#lambdas) does: a name or a [pattern](#irrefutable-binder-patterns), marked `@` or not, its annotation optional, or `use _`.
+The parameters of a `let` or a `satisfy` are a signature, written as a [function type](#function-types)'s, except that a plain or `@` parameter is always named. One the body never names is `_: type`: `let positive(n: Nat, @_: Holds(0 < n)) -> Nat => n;` takes its bound as an implicit argument, which the body has as a fact. A witness parameter is `use Concept(args)`. A field written `label(params) = value` inside a tuple, a structure or a witness binds as a [lambda](#lambdas) does: a name or a [pattern](#irrefutable-binder-patterns), marked `@` or not, its annotation optional, or `use _`.
 
 A binder may be an irrefutable tuple, structure or constructor pattern:
 
@@ -412,7 +412,7 @@ pub struct Point: pub Type {
     y: Nat,
 }
 
-pub let sum(pair: {Nat, Nat}, point: Point) -> Nat =
+pub let sum(pair: {Nat, Nat}, point: Point) -> Nat =>
     let (a, b) = pair;
     let Point { x, y } = point;
     a + b + x + y;
@@ -434,7 +434,7 @@ pub struct Point: pub Type {
     color: Nat,
 }
 
-pub let total(value: {Nat, {Nat, Nat}}, point: Point) -> Nat =
+pub let total(value: {Nat, {Nat, Nat}}, point: Point) -> Nat =>
     let (a, (_, b)) = value;
     let Point { loc = (x, y), color } = point;
     a + b + x + y + color;
@@ -457,12 +457,12 @@ A constructor pattern `tag(p, …)` holds its value to that one case, as a match
 ```crs
 use /std/{Eq};
 
-pub let symmetric(@A: Type, @x: A, @y: A, p: Eq()(x, y)) -> Eq()(y, x) =
+pub let symmetric(@A: Type, @x: A, @y: A, p: Eq()(x, y)) -> Eq()(y, x) =>
     let refl() = p;
     Eq/refl();
 ```
 
-A `let` written `let name(…) =` holds its value to the case `name`, and one written `let name(…) -> T =` defines a function: the `->` that states a function's result is what tells the two apart.
+A `let` written `let name(…) =` holds its value to the case `name`, and one written `let name(…) => …` defines a function, its body after `=>` as a lambda's and an arm's are: the arrow tells the two apart. A local function's parameter types and its result are optional where a lambda's are, `let increment(n: Nat) => n + 1;`, and one that names itself states them all, `let count(n: Nat) -> Nat => …`, as a top-level function does.
 
 A pattern that can fail belongs to `match`.
 
@@ -471,7 +471,7 @@ A pattern that can fail belongs to `match`.
 `?` is a goal: the compiler infers what it can, reports the scope, the expected type and the candidate fits it found, and fails the compilation. A goal written as a type, `let y: ? = e`, reports the type of `e`.
 
 ```text
-let compose(@A: Type, @B: Type, @C: Type, f: (B) -> C, g: (A) -> B) -> (A) -> C =
+let compose(@A: Type, @B: Type, @C: Type, f: (B) -> C, g: (A) -> B) -> (A) -> C =>
     ?;
 compose
 ```
@@ -482,7 +482,7 @@ No program with a goal compiles. The other declarations are still checked in the
 
 A `let`, a lambda and a function type are whole-term forms: a body or a tail extends to the end of the term around it. There is no ascription `term: type`: a `:` annotation stands only at a binder and a signature.
 
-A `let` chain stands only as a body: a function's, a lambda's, a `match` arm's, a test's or a top-level value's, a program's final term, and the tail of another chain. Anywhere else — a `let`'s value, an argument, a list element, a field's value, a scrutinee, an operand, between parentheses — it is refused, so a value is never a chain, and a value that sequences is a function, `let name() -> T = …;`, called where its value is needed. Why: [Bang sequencing is governed by the region's type](design/surface/bang-sequencing-is-governed-by-the-regions-type.md).
+A `let` chain stands only as a body: a function's, a lambda's, a `match` arm's, a test's or a top-level value's, a program's final term, and the tail of another chain. Anywhere else — a `let`'s value, an argument, a list element, a field's value, a scrutinee, an operand, between parentheses — it is refused, so a value is never a chain, and a value that sequences is a function, `let name() -> T => …;`, called where its value is needed. Why: [Bang sequencing is governed by the region's type](design/surface/bang-sequencing-is-governed-by-the-regions-type.md).
 
 An infix operand is an atom — a literal, a name, a sort (`Type`, `Prop` or `Sort`), a tuple, a tuple type, a structure literal, a goal, a `match`, or a term in parentheses — followed by any chain of calls, projections and postfix `!`. A `match`, headed or not, is an atom because `end` closes it. A whole-term form is no operand until it is put in parentheses.
 
@@ -529,7 +529,7 @@ Why: [A bound is stated in a decided proposition and discharged by reduction](de
 ```crs
 use /std/{Nat, Byte, Bytes, Parse};
 
-pub let parser() -> Parse(Bytes, Nat) =
+pub let parser() -> Parse(Bytes, Nat) =>
     let a = Parse/bytes/byte()!;
     let b = Parse/bytes/byte()!;
     Parse/pure(Byte/to_nat(a) + Byte/to_nat(b));
@@ -537,7 +537,7 @@ pub let parser() -> Parse(Bytes, Nat) =
 
 A `!` stands in a function's body, at any depth there: a declared function's, a local function's, a lambda's or a witness method's, and a test's body and a program's final term, each a function of none the runner calls. A top-level value and a witness's value hold none, and a `!` there is refused: a value that sequences is a function of none, called where its description is needed.
 
-A `match` arm and a guard each keep a region of their own, and a local `let`'s value, which is a term and never a chain ([Whole-term forms and operand positions](#whole-term-forms-and-operand-positions)), shares the region around it; no `let !` header or `end` marks a region. Why: [Bang sequencing is governed by the region's type](design/surface/bang-sequencing-is-governed-by-the-regions-type.md).
+A `match` arm keeps a region of its own, a guard holds no `!` ([Guards](#guards)), and a local `let`'s value, which is a term and never a chain ([Whole-term forms and operand positions](#whole-term-forms-and-operand-positions)), shares the region around it; no `let !` header or `end` marks a region. Why: [Bang sequencing is governed by the region's type](design/surface/bang-sequencing-is-governed-by-the-regions-type.md).
 
 An action of another monad than its region's is lifted through the `Monad/Lift` witness declared for that pair, and refused where none is ([Lifting between monads](#lifting-between-monads)).
 
@@ -551,7 +551,7 @@ Every operation that touches the host — writing to a handle, reading a clock, 
 use /std/{File, Path, Bytes, Try, Io};
 use /std/Io/{Reader};
 
-pub let contents() -> Try(Io, Io/Error, Bytes) =
+pub let contents() -> Try(Io, Io/Error, Bytes) =>
     Try/scope((s) =>
         let f = File/open(s, Path/of_str("notes.txt"), File/Mode/read())!;
         let r = Reader/new(f)!;
@@ -574,15 +574,15 @@ pub struct Job(A: Type): pub Type {
 }
 
 satisfy Monad(Job) {
-    pure(a) = Job { Io/pure(a) },
-    bind(job, next) = Job { Io/bind(job.0, (a) => next(a).0) },
+    pure(a) => Job { Io/pure(a) },
+    bind(job, next) => Job { Io/bind(job.0, (a) => next(a).0) },
 }
 
 satisfy Monad/Lift(Io, Job) {
-    lift(action) = Job { action },
+    lift(action) => Job { action },
 }
 
-pub let job() -> Job({}) =
+pub let job() -> Job({}) =>
     let () = print("hello\n")!;
     Monad/pure(());
 ```
@@ -606,7 +606,7 @@ An inductive pattern names a constructor and gives a pattern for each plain payl
 ```crs
 use /std/{Nat, Option};
 
-pub let or_zero(option: Option(Nat)) -> Nat =
+pub let or_zero(option: Option(Nat)) -> Nat =>
     match option | some(value) => value | none() => 0 end;
 ```
 
@@ -620,10 +620,10 @@ pub induct Vector(T: Type): (length: Nat) -> pub Type
 | cons(@length: Nat, head: T, tail: Vector(T)(length)): (length + 1)
 end
 
-pub let head_or(@n: Nat, vector: Vector(Nat)(n), fallback: Nat) -> Nat =
+pub let head_or(@n: Nat, vector: Vector(Nat)(n), fallback: Nat) -> Nat =>
     match vector | nil() => fallback | cons(head, _) => head end;
 
-pub let length(@T: Type, @n: Nat, vector: Vector(T)(n)) -> Nat =
+pub let length(@T: Type, @n: Nat, vector: Vector(T)(n)) -> Nat =>
     match vector | nil() => 0 | cons(@length, _, _) => length + 1 end;
 ```
 
@@ -632,7 +632,7 @@ A pattern nests inside a constructor's, a tuple's or a structure's field and in 
 ```crs
 use /std/{List, Nat, Option};
 
-pub let first_or_zero(value: Option(List(Nat))) -> Nat =
+pub let first_or_zero(value: Option(List(Nat))) -> Nat =>
     match value
     | some([head, ..tail]) => head + List/length(tail)
     | some([]) => 0
@@ -649,7 +649,7 @@ A tuple written as the scrutinee, `match (left, right)`, is matched column by co
 ```crs
 use /std/{Nat, Option};
 
-pub let sum(left: Option(Nat), right: Option(Nat)) -> Nat =
+pub let sum(left: Option(Nat), right: Option(Nat)) -> Nat =>
     match (left, right)
     | (some(x), some(y)) => x + y
     | (some(x), none()) => x
@@ -664,7 +664,7 @@ A `Bool` match has a `true` arm and a `false` arm in either order, or one of the
 ```crs
 use /std/{Bool, Str};
 
-pub let answer(condition: Bool) -> Str =
+pub let answer(condition: Bool) -> Str =>
     match condition | true => "yes" | false => "no" end;
 ```
 
@@ -675,7 +675,7 @@ A `Nat` is taken apart by its literals, its successors and a binder. A literal i
 ```crs
 use /std/{Nat};
 
-pub let induction(P: (Nat) -> Type, base: P(0), step: (k: Nat, P(k)) -> P(k + 1), n: Nat) -> P(n) =
+pub let induction(P: (Nat) -> Type, base: P(0), step: (k: Nat, P(k)) -> P(k + 1), n: Nat) -> P(n) =>
     match n
     | 0 => base
     | predecessor + 1 => step(predecessor, induction(P, base, step, predecessor))
@@ -687,7 +687,7 @@ Literals and successor arms meet as every pattern does ([Binders beside patterns
 ```crs
 use /std/{Nat, Str};
 
-pub let name(tag: Nat) -> Str =
+pub let name(tag: Nat) -> Str =>
     match tag | 0 => "first" | 1 => "second" | _ => "otherwise" end;
 ```
 
@@ -700,7 +700,7 @@ An `Int` is dispatched on its keys, each written with its sign, beside an arm th
 ```crs
 use /std/{Int, Str};
 
-pub let classify(i: Int) -> Str =
+pub let classify(i: Int) -> Str =>
     match i | -1 => "minus one" | +0 => "zero" | _ => "otherwise" end;
 ```
 
@@ -709,7 +709,7 @@ A `Byte` is dispatched on its values, each a numeral from `0` through `255` or a
 ```crs
 use /std/{Byte, Nat};
 
-pub let class(b: Byte) -> Nat =
+pub let class(b: Byte) -> Nat =>
     match b | 0 => 0 | '\n' => 1 | _ => 2 end;
 ```
 
@@ -720,10 +720,10 @@ A `Char` is dispatched on character literals and a `Str` on string literals, bes
 ```crs
 use /std/{Char, Nat, Str};
 
-pub let spacing(c: Char) -> Nat =
+pub let spacing(c: Char) -> Nat =>
     match c | ' ' | '\t' => 0 | '\n' => 1 | _ => 2 end;
 
-pub let command(name: Str) -> Nat =
+pub let command(name: Str) -> Nat =>
     match name | "build" => 0 | "test" => 1 | _ => 2 end;
 ```
 
@@ -738,17 +738,17 @@ A list pattern is a run, written as the [list literal](#list-literals) that buil
 ```crs
 use /std/{List, Nat, Option};
 
-pub let sum(values: List(Nat)) -> Nat =
+pub let sum(values: List(Nat)) -> Nat =>
     match values | [] => 0 | [head, ..tail] => head + sum(tail) end;
 
-pub let last(values: List(Nat)) -> Option(Nat) =
+pub let last(values: List(Nat)) -> Option(Nat) =>
     match values
     | [] => Option/none()
     | [only] => Option/some(only)
     | [_, ..rest] => last(rest)
     end;
 
-pub let present(values: List(Option(Nat))) -> List(Nat) =
+pub let present(values: List(Option(Nat))) -> List(Nat) =>
     match values
     | [] => []
     | [none(), ..rest] => present(rest)
@@ -765,19 +765,19 @@ A `Bytes` pattern is a [run](#list-case-split) under the bracket `0x[`, as the [
 ```crs
 use /std/{Byte, Bytes, Nat};
 
-pub let total(bytes: Bytes) -> Nat =
+pub let total(bytes: Bytes) -> Nat =>
     match bytes
     | 0x[] => 0
     | 0x[head, ..tail] => Byte/to_nat(head) + total(tail)
     end;
 
-pub let first_or_zero(bytes: Bytes) -> Byte =
+pub let first_or_zero(bytes: Bytes) -> Byte =>
     match bytes | 0x[] => 0 | 0x[head, .._] => head end;
 
-pub let second_or_zero(bytes: Bytes) -> Nat =
+pub let second_or_zero(bytes: Bytes) -> Nat =>
     match bytes | 0x[_, second, .._] => Byte/to_nat(second) | _ => 0 end;
 
-pub let escapes(bytes: Bytes) -> Nat =
+pub let escapes(bytes: Bytes) -> Nat =>
     match bytes
     | 0x[] => 0
     | 0x['%', _, _, ..rest] => 1 + escapes(rest)
@@ -792,7 +792,7 @@ A binder — a name or `_` — may stand wherever a pattern may, beside the patt
 ```crs
 use /std/{Nat, Option};
 
-pub let inner_or(value: Option(Option(Nat))) -> Nat =
+pub let inner_or(value: Option(Option(Nat))) -> Nat =>
     match value
     | some(some(inner)) => inner
     | some(_) => 0
@@ -815,7 +815,7 @@ An arm may write several patterns before its `=>`, each after a bar of its own, 
 ```crs
 use /std/{Bool, Char};
 
-pub let is_space(c: Char) -> Bool =
+pub let is_space(c: Char) -> Bool =>
     match Char/to_nat(c)
     | ' ' | '\t' | '\n' | '\r' => true
     | _ => false
@@ -827,7 +827,7 @@ Every alternative binds the same names, and the body reads each as the alternati
 ```crs
 use /std/{Bool, Html, Str};
 
-pub let named(h: Html, name: Str) -> Bool =
+pub let named(h: Html, name: Str) -> Bool =>
     match h
     | element(tag, _, _) | void(tag, _) => Str/eql_ignoring_ascii_case(tag, name)
     | _ => false
@@ -845,7 +845,7 @@ An arm may write guards after its patterns, each after a comma: a `Bool` term, w
 ```crs
 use /std/{Nat, Option};
 
-pub let size(value: Option(Nat)) -> Nat =
+pub let size(value: Option(Nat)) -> Nat =>
     match value
     | some(n), n > 9 => 2
     | some(n), n != 0, 100 / n > 20 => 1
@@ -855,7 +855,7 @@ pub let size(value: Option(Nat)) -> Nat =
 
 Where a guard fails, the value goes on to the arms after it, in the order they are written, and a value only guarded arms reach is a value no arm matches, unless the facts in scope, a lone condition's failure among them, rule it out. Guards never order patterns: two arms whose patterns meet are held to the rules of [Binders beside patterns](#binders-beside-patterns) as they would be with no guard.
 
-A bind guard whose pattern cannot fail is refused: a binding with no case to test is a `let`. A guard takes no [alternatives](#alternatives); the value they would test is written as the head. A guard's term is an operand, so a `let`, a lambda or a function type stands in one in parentheses.
+A bind guard whose pattern cannot fail is refused: a binding with no case to test is a `let`. A guard takes no [alternatives](#alternatives); the value they would test is written as the head. A guard's term is an operand, so a `let`, a lambda or a function type stands in one in parentheses. A guard holds no `!`: it decides which arm is taken, so an action it would test is bound inside an arm, `| p => let held = action!; match | held => … | _ => … end`, and one written in a guard is refused as `action in a guard`.
 
 `&&` is no chain of guards: `a && b` evaluates both, and `| a, b =>` evaluates `b` only where `a` holds. Why: [An arm is taken by its patterns, then its guards](design/surface/an-arm-is-taken-by-its-patterns-then-its-guards.md).
 
@@ -866,7 +866,7 @@ A final arm whose pattern takes nothing apart that could fail — most often a b
 ```crs
 use /std/{Nat, Option};
 
-pub let or_zero(option: Option(Nat)) -> Nat =
+pub let or_zero(option: Option(Nat)) -> Nat =>
     match option | some(value) => value | _ => 0 end;
 ```
 
@@ -879,7 +879,7 @@ A `match` that writes no scrutinee is guards alone: each arm is a list of guards
 ```crs
 use /std/{Bool, Map, Nat, Str};
 
-pub let found(condition: Bool, map: Map(Str, Nat), key: Str) -> Nat =
+pub let found(condition: Bool, map: Map(Str, Nat), key: Str) -> Nat =>
     match
     | condition => 0
     | some(value) = Map/try_get(map, key) => value
@@ -904,7 +904,7 @@ Each tail of the final term closes the program: a tail is reached through a loca
 ```crs
 use /std/{Io, Try, File, Path, print};
 
-let main() -> Try(Io, Io/Error, {}) =
+let main() -> Try(Io, Io/Error, {}) =>
     let text = File/read_all_text(Path/of_str("notes.txt"))!;
     print(text);
 
@@ -913,7 +913,7 @@ main()
 
 ### Top-level definitions
 
-A top-level `let` states its type, by an annotation or as a function's parameters and result type.
+A top-level `let` states its type, by an annotation or as a function's parameters and result type. A value follows `=`, and a function's body `=>`, as a lambda's and an arm's do; a test's body and a method's follow `=>` too, and a witness's premises are its signature's, `satisfy (@A: Type, use Show(A)) -> Show(Bag(A)) { … }`.
 
 That is also what tells an item from the final term: in a program, a top-level `let` with no annotation is no item but a local `let` that opens the final term. A top-level definition's value is checked at the type its annotation states, and holds no `!`: a definition that sequences is a function, of no parameters where it takes none.
 
@@ -925,7 +925,7 @@ use /std/{Nat, Option};
 pub let zero: Nat =
     0;
 
-pub let map(@A: Type, @B: Type, value: Option(A), f: (A) -> B) -> Option(B) =
+pub let map(@A: Type, @B: Type, value: Option(A), f: (A) -> B) -> Option(B) =>
     match value
     | some(x) => Option/some(f(x))
     | none() => Option/none()
@@ -941,16 +941,16 @@ A `test` declaration names a check: a description of type `/std/Test({})`, built
 ```crs
 use /std/{Nat, Eq, Test};
 
-test the_answer_holds =
+test the_answer_holds =>
     Test/assert("twenty-one doubled is forty-two", 21 * 2 == 42);
 
-let _right_identity(n: Nat) -> Eq()(n + 0, n) =
+let _right_identity(n: Nat) -> Eq()(n + 0, n) =>
     Eq/refl();
 ```
 
 A test takes no parameters. A claim about every instance is a proposition, not a description: it is a `let` whose type states the claim and whose body proves it, checked on every build, as the second declaration above is, its `_` marking a declaration that exists for its type. Why: [A test is a declared description, and a proof is a `let`](design/tooling/a-test-is-a-declared-description-and-a-proof-is-a-let.md).
 
-A claim checked at chosen instances is a definition answering `Test({})`, run over a table: `test table = Test/all(List/map(cases, ((a, b)) => claim(a, b)));` is one test over the author's cases, reporting each case that fails by its position: the cases are independent, so each runs whatever the others found. `Test/step(label, test)` names a part of a test the same way, its label leading the path of each failure the part reports.
+A claim checked at chosen instances is a definition answering `Test({})`, run over a table: `test table => Test/all(List/map(cases, ((a, b)) => claim(a, b)));` is one test over the author's cases, reporting each case that fails by its position: the cases are independent, so each runs whatever the others found. `Test/step(label, test)` names a part of a test the same way, its label leading the path of each failure the part reports.
 
 A test's path is its report line and what [`curios test --filter`](usage.md#test) selects by prefix, and nothing else names it: its name binds nothing, and is unique among its module's declarations. A test is never `pub`, and no documentation comment precedes one.
 
@@ -1027,9 +1027,9 @@ A local group's first member may be a pattern; every later one is a name that st
 ```crs
 use /std/{Bool, Nat};
 
-pub let parity(input: Nat) -> Bool =
-    let even(n: Nat) -> Bool = match n | 0 => true | p + 1 => odd(p) end
-    and odd(n: Nat) -> Bool = match n | 0 => false | p + 1 => even(p) end;
+pub let parity(input: Nat) -> Bool =>
+    let even(n: Nat) -> Bool => match n | 0 => true | p + 1 => odd(p) end
+    and odd(n: Nat) -> Bool => match n | 0 => false | p + 1 => even(p) end;
     even(input);
 ```
 
@@ -1156,7 +1156,7 @@ A structure value names its type and gives its fields. Its head may be applied, 
 Pair { fst = 1, snd = true }
 Pair(Nat, Bool) { fst = 1, snd = true }
 Box(@Nat) { value = 1 }
-Api { base = 3, bump(x) = x + 1 }
+Api { base = 3, bump(x) => x + 1 }
 ```
 
 Fields are checked in their declared order. A field written as a function definition is a lambda assigned to it.
@@ -1237,8 +1237,8 @@ pub struct Hours: pub Type {
 }
 
 satisfy Rem(Hours) {
-    Ok(b) = Nat/NonZero(b.0),
-    rem(a, b) = Hours { a.0 % b.0 },
+    Ok(b) => Nat/NonZero(b.0),
+    rem(a, b) => Hours { a.0 % b.0 },
 }
 ```
 
@@ -1272,7 +1272,7 @@ pub struct Meters: pub Type {
 }
 
 satisfy Show(Meters) {
-    show(m) = Nat/to_str(m.0),
+    show(m) => Nat/to_str(m.0),
 }
 ```
 
@@ -1285,8 +1285,8 @@ pub struct Bag(A: Type): pub Type {
     List(A),
 }
 
-satisfy (@A: Type, use Show(A)) => Show(Bag(A)) {
-    show(bag) = List/fold(bag.0, "", (value, result) => Str/concat(result, Show/show(value))),
+satisfy (@A: Type, use Show(A)) -> Show(Bag(A)) {
+    show(bag) => List/fold(bag.0, "", (value, result) => Str/concat(result, Show/show(value))),
 }
 ```
 
@@ -1306,11 +1306,11 @@ pub and Forest: pub Type
 end
 
 satisfy Show(Tree) {
-    show(t) =
+    show(t) =>
         match t | leaf(n) => Show/show(n) | node(f) => Show/show(f) end,
 }
 and Show(Forest) {
-    show(f) =
+    show(f) =>
         match f
         | nil() => ""
         | cons(t, rest) => Str/concat(Show/show(t), Show/show(rest))
@@ -1326,23 +1326,23 @@ A second dictionary for an unsealed concept at the same key is an ordinary conce
 use /std/{Eq, List, Nat};
 use /std/ops/{Ord};
 
-pub let descending(values: List(Nat)) -> List(Nat) =
+pub let descending(values: List(Nat)) -> List(Nat) =>
     let reverse: Ord(Nat) =
         Ord {
-            ord(a, b) = Ord/ord(b, a),
-            lt(a, b) = b < a,
-            le(a, b) = b <= a,
-            flips(a, b) = Ord/flips(b, a),
-            trans(a, b, c, p, q) = Ord/trans(c, b, a, q, p),
-            eq(a, b, h) = Eq/sym(Ord/eq(b, a, h)),
-            is_lt(a, b) = Ord/is_lt(b, a),
-            is_le(a, b) = Ord/is_le(b, a) };
+            ord(a, b) => Ord/ord(b, a),
+            lt(a, b) => b < a,
+            le(a, b) => b <= a,
+            flips(a, b) => Ord/flips(b, a),
+            trans(a, b, c, p, q) => Ord/trans(c, b, a, q, p),
+            eq(a, b, h) => Eq/sym(Ord/eq(b, a, h)),
+            is_lt(a, b) => Ord/is_lt(b, a),
+            is_le(a, b) => Ord/is_le(b, a) };
     List/sort(@_, use reverse, values);
 ```
 
 ### Derived witnesses
 
-A witness whose body is `..` alone is derived: the compiler writes its body from the declaration of the type in its key. `satisfy Spell(Point) { .. }` derives one, and so does `satisfy (@A: Type, use Spell(A)) => Spell(Tree(A)) { .. }` under a telescope; either may stand in an `and` group beside written witnesses. The dots are no entry — nothing stands beside them and they take no comma — so a body is written whole or derived whole. The signature is the author's, and registers, keys and meets the orphan and sealing rules as a written witness does. Why: [A witness body may be written by the compiler](design/surface/a-witness-body-may-be-written-by-the-compiler.md).
+A witness whose body is `..` alone is derived: the compiler writes its body from the declaration of the type in its key. `satisfy Spell(Point) { .. }` derives one, and so does `satisfy (@A: Type, use Spell(A)) -> Spell(Tree(A)) { .. }` under a telescope; either may stand in an `and` group beside written witnesses. The dots are no entry — nothing stands beside them and they take no comma — so a body is written whole or derived whole. The signature is the author's, and registers, keys and meets the orphan and sealing rules as a written witness does. Why: [A witness body may be written by the compiler](design/surface/a-witness-body-may-be-written-by-the-compiler.md).
 
 `Spell`, `Eql`, `Ord`, `Hash` and `Hash/Key` derive; every other concept refuses the form by name, and a written witness stays the norm. A derived `Hash/Key` proves its law of the order and the encoding a derivation writes, so it is derived beside a derived `Ord` and `Hash`, and its type keys a `Map` and fills a `Set`.
 
@@ -1364,15 +1364,15 @@ satisfy Spell(Point) {
     ..
 }
 
-satisfy (@A: Type, use Spell(A)) => Spell(Tree(A)) {
+satisfy (@A: Type, use Spell(A)) -> Spell(Tree(A)) {
     ..
 }
 
-satisfy (@A: Type, use Eql(A)) => Eql(Tree(A)) {
+satisfy (@A: Type, use Eql(A)) -> Eql(Tree(A)) {
     ..
 }
 
-satisfy (@A: Type, use Ord(A)) => Ord(Tree(A)) {
+satisfy (@A: Type, use Ord(A)) -> Ord(Tree(A)) {
     ..
 }
 ```
@@ -1398,7 +1398,7 @@ A witness parameter is written `use Concept(args)` in a function type or a defin
 ```crs
 use /std/{List, Show, Str};
 
-pub let join(@A: Type, use Show(A), values: List(A)) -> Str =
+pub let join(@A: Type, use Show(A), values: List(A)) -> Str =>
     List/fold(values, "", (value, result) => Str/concat(result, Show/show(value)));
 ```
 
@@ -1425,7 +1425,7 @@ pub struct Slot(K: Type, use Key(K), V: Type): pub Type {
     value: V,
 }
 
-pub let holds(@K: Type, use Key(K), @V: Type, slot: Slot(K, V), key: K) -> Bool =
+pub let holds(@K: Type, use Key(K), @V: Type, slot: Slot(K, V), key: K) -> Bool =>
     Key/same(slot.key, key);
 ```
 
@@ -1472,7 +1472,7 @@ Propositional equality, `Eq`, is an ordinary indexed inductive proposition of `/
 ```crs
 use /std/{Eq};
 
-pub let sym(@A: Type, @x: A, @y: A, proof: Eq()(x, y)) -> Eq()(y, x) =
+pub let sym(@A: Type, @x: A, @y: A, proof: Eq()(x, y)) -> Eq()(y, x) =>
     match proof | refl() => Eq/refl() end;
 ```
 
@@ -1481,13 +1481,13 @@ pub let sym(@A: Type, @x: A, @y: A, proof: Eq()(x, y)) -> Eq()(y, x) =
 ```crs
 use /std/{Eq, Nat};
 
-pub let twice(n: Nat) -> Nat =
+pub let twice(n: Nat) -> Nat =>
     n + n;
 
 pub let unfolded: Eq()(twice, (n: Nat) => n + n) =
     Eq/refl();
 
-pub let agree(f: (Nat) -> Nat, g: (Nat) -> Nat, same: Eq()(f, g), n: Nat) -> Eq()(f(n), g(n)) =
+pub let agree(f: (Nat) -> Nat, g: (Nat) -> Nat, same: Eq()(f, g), n: Nat) -> Eq()(f(n), g(n)) =>
     Eq/cong((h: (Nat) -> Nat) => h(n), same);
 ```
 
@@ -1503,7 +1503,13 @@ A bound that reduction does not decide is proved by the compiler where it follow
 use /std/{List, Nat};
 use /std/Bool/{Holds};
 
-pub let get(xs: List(Nat), i: Nat, m: Nat, p: Holds(i < m), q: Holds(m <= List/length(xs))) -> Nat =
+pub let get(
+    xs: List(Nat),
+    i: Nat,
+    m: Nat,
+    p: Holds(i < m),
+    q: Holds(m <= List/length(xs)),
+) -> Nat =>
     List/get(xs, i);
 ```
 
@@ -1513,7 +1519,7 @@ pub let get(xs: List(Nat), i: Nat, m: Nat, p: Holds(i < m), q: Holds(m <= List/l
 use /std/{Nat};
 use /std/Bool/{Holds};
 
-pub let pick(n: Nat, q: Holds(n < 3)) -> Nat =
+pub let pick(n: Nat, q: Holds(n < 3)) -> Nat =>
     match n | 0 => 10 | 1 => 11 | 2 => 12 end;
 ```
 
@@ -1523,10 +1529,10 @@ An equation at a type whose equality is decided, one with an `Eql` witness, is p
 use /std/{Eq, Str, proved};
 use /std/Bool/{Holds};
 
-pub let same(a: Str, b: Str, h: Holds(a == b)) -> Eq()(a, b) =
+pub let same(a: Str, b: Str, h: Holds(a == b)) -> Eq()(a, b) =>
     proved();
 
-pub let moved(F: (Str) -> Type, a: Str, b: Str, h: Holds(a == b), x: F(a)) -> F(b) =
+pub let moved(F: (Str) -> Type, a: Str, b: Str, h: Holds(a == b), x: F(a)) -> F(b) =>
     Eq/subst(F, proved(@Eq()(a, b)), x);
 ```
 
@@ -1552,9 +1558,9 @@ A bound the facts do not imply is refused, the report naming the facts it read a
 | `[a, b, ..rest]` / `0x[a, ..rest]` | A run — a list or `Bytes` literal written as a pattern, its rest a binder |
 | `\| pattern, guard, … =>` | An arm taken where its pattern matches and each guard passes: a `Bool`, or `pattern = term` |
 | `match \| guard, … => … \| _ => … end` | A match with no head: guards alone, closed by a default |
-| `test name = body;` | Test — a `/std/Test` description, run by `curios test` |
+| `test name => body;` | Test — a `/std/Test` description, run by `curios test` |
 | `satisfy C(args) { ... }` | Registered witness, which has no name |
 | `satisfy C(args) { .. }` | Derived witness — the compiler writes the body |
-| `satisfy (@A: Type, use C(A)) => D(args) { ... }` | Witness under a telescope |
+| `satisfy (@A: Type, use C(A)) -> D(args) { ... }` | Witness under a telescope |
 | `use /std/{Nat};` / `use /std/*;` / `use /{Name};` | Import a group, what a module exports, or a name of the compilation root |
 | `… and …` | [Recursive group](#recursive-groups) — `let`, `induct`, `struct`, `concept` or `satisfy` |

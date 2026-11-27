@@ -35,12 +35,12 @@ satisfy Monad(Io) {
 
 --- The identity edge, for a witness whose premise is `Monad/Lift(Io, M)` at `M = Io`.
 satisfy Monad/Lift(Io, Io) {
-    lift(@_, m) = m,
+    lift(@_, m) => m,
 }
 
 --- A description that yields nothing is the program it describes.
 satisfy Program(Io({})) {
-    execute(program) = program,
+    execute(program) => program,
 }
 
 -- How many children of a scope have not ended, and the latch those waiting for none to be left wait on, kept until the last child's end trips it and the next waiter makes another: what `join_all` waits on, a count rather than the tasks, so a scope that spawns without end holds nothing of the children that have ended.
@@ -58,20 +58,20 @@ pub struct Scope: Type {
 }
 
 --- `body` run with a scope it spawns children into and opens resources into, and its answer once it has one. The children run beside the body, and those still running when the body answers are cancelled where they wait: a description's answer is all it yields, so a child the body needs is joined before it answers. Then every release deferred to the scope runs, the latest first, told whether the scope `finished` or was `cancelled` where it waited — however it ends, its children are cancelled before its resources are released.
-pub let scope(@A: Type, body: (Scope) -> Io(A)) -> Io(A) =
+pub let scope(@A: Type, body: (Scope) -> Io(A)) -> Io(A) =>
     let children = Box/new(@Option(List(Io({}))), Option/some([]))!;
     let live = Box/new(Live { count = 0, idle = Option/none() })!;
     let releases = Box/new(@List((Ended) -> Io({})), [])!;
     let s = Scope { children = children, live = live, releases = releases };
     let answer: Future(A) = Future/new()!;
-    let driven() -> Io(A) =
+    let driven() -> Io(A) =>
         let () = drive([into(body(s), answer)], spawned(children), answered(answer))!;
         let () = Box/set(children, Option/none())!;
         Future/wait(answer);
     using((how) => released(s, how), driven());
 
 -- Every child spawned into `children` since the last time it was asked, in the order they were spawned.
-let spawned(children: Box(Option(List(Io({}))))) -> Io(List(Branch)) =
+let spawned(children: Box(Option(List(Io({}))))) -> Io(List(Branch)) =>
     Box/change(children, (held: Option(List(Io({})))) =>
         match held
         | some(waiting) => (Option/some([]), List/map(List/reverse(waiting), Branch/fresh))
@@ -79,14 +79,14 @@ let spawned(children: Box(Option(List(Io({}))))) -> Io(List(Branch)) =
         end);
 
 -- Each of `releases` told `how`, in its order.
-let each(releases: List((Ended) -> Io({})), how: Ended) -> Io({}) =
+let each(releases: List((Ended) -> Io({})), how: Ended) -> Io({}) =>
     match releases
     | [] => pure(())
     | [r, ..more] => bind(r(how), (()) => each(more, how))
     end;
 
 -- Every release deferred to `s`, the latest first, told `how` it ended.
-let released(s: Scope, how: Ended) -> Io({}) =
+let released(s: Scope, how: Ended) -> Io({}) =>
     let rs = Box/change(s.releases, (rs: List((Ended) -> Io({}))) => ([], rs))!;
     each(rs, how);
 
@@ -98,7 +98,7 @@ let furthest: Int =
     Int/shl(+1, 63) - +1;
 
 --- A handle ready once the monotonic clock has reached `i`: what a description suspends on to wait until then. One already past is ready at once; one before the clock's origin crosses as the origin, which has passed too.
-let deadline(i: Instant) -> Io(Handle) =
+let deadline(i: Instant) -> Io(Handle) =>
     let (seconds, nanos) =
         (Instant/to_nanos(i) / 1000000000, Int/rem(Instant/to_nanos(i), 1000000000));
     match
@@ -108,28 +108,28 @@ let deadline(i: Instant) -> Io(Handle) =
     end;
 
 --- Until the monotonic clock has reached `i`, on a deadline of its own, closed whether the wait ends or is cancelled. An instant already past ends the wait at once.
-pub let sleep_until(i: Instant) -> Io({}) =
+pub let sleep_until(i: Instant) -> Io({}) =>
     let h = deadline(i)!;
     suspend_on(Waiting { on = [h], tripped = [], release = Close/close(h) });
 
 --- Until `d` has passed from now: the clock read once, and a wait until then. A length of no time, or of less, ends at once.
-pub let sleep(d: Duration) -> Io({}) =
+pub let sleep(d: Duration) -> Io({}) =>
     let now = Instant/now()!;
     sleep_until(Instant/add(now, d));
 
 -- A latch tripped already: what a suspension that may go on at once waits on. Private to the subtree, which is where every such suspension is made.
-let ready() -> Io(Latch) =
+let ready() -> Io(Latch) =>
     let latch = Latch/new()!;
     let () = Latch/trip(latch)!;
     pure(latch);
 
 --- Let what waits beside this run, and go on: a suspension on a latch tripped already, which whatever advances it may go on from at once, and which the top of a program goes on from without waiting.
-pub let yield() -> Io({}) =
+pub let yield() -> Io({}) =>
     let latch = ready()!;
     wait_tripped([latch]);
 
 -- `body`, and then `release` told how it ended: `finished` where it ran to its end, and `cancelled` where whatever advances it drops it while it waits, which `release` hears as the cancel of every suspension the body passes out. The scope's machinery: a program defers a release to a scope instead.
-let using(@A: Type, release: (Ended) -> Io({}), body: Io(A)) -> Io(A) =
+let using(@A: Type, release: (Ended) -> Io({}), body: Io(A)) -> Io(A) =>
     /sys/Io/advance(
         body,
         (a) => bind(release(Ended/finished()), (()) => pure(a)),
@@ -184,8 +184,8 @@ pub concept Close(S: Type): pub Type {
 pub use Close/*;
 
 --- Every chunk of `from` written to `to` until `from` ends; the first failure on either side is the answer. A chunk read is taken by the write before anything waits, so a copy cancelled where it waits has moved whole chunks and lost none.
-pub let copy(@S: Type, @T: Type, use Read(S), use Write(T), from: S, to: T) -> Try(Io, Error, {}) =
-    let go() -> Try(Io, Error, {}) =
+pub let copy(@S: Type, @T: Type, use Read(S), use Write(T), from: S, to: T) -> Try(Io, Error, {}) =>
+    let go() -> Try(Io, Error, {}) =>
         let c = Read/read(from, 4096)!;
         match c
         | bytes(b) =>
@@ -203,7 +203,7 @@ induct Branch: Type
 end
 
 -- `b` advanced until it ends or suspends: nothing where it ended, or the branch it suspended as.
-let step(b: Io({})) -> Io(Option(Branch)) =
+let step(b: Io({})) -> Io(Option(Branch)) =>
     /sys/Io/advance(
         b,
         (()) => pure(Option/none()),
@@ -211,7 +211,7 @@ let step(b: Io({})) -> Io(Option(Branch)) =
             pure(Option/some(Branch/waiting(on, tripped, cancel, rest))));
 
 -- Whether a latch of `latches` is tripped.
-let any_tripped(latches: List(Latch)) -> Io(Bool) =
+let any_tripped(latches: List(Latch)) -> Io(Bool) =>
     match latches
     | [] => pure(false)
     | [latch, ..more] =>
@@ -220,7 +220,7 @@ let any_tripped(latches: List(Latch)) -> Io(Bool) =
     end;
 
 -- Whether any of the first `n` of `flags` holds, and the flags after them.
-let split(flags: List(Bool), n: Nat) -> {Bool, List(Bool)} =
+let split(flags: List(Bool), n: Nat) -> {Bool, List(Bool)} =>
     match n
     | 0 => (false, flags)
     | m + 1 =>
@@ -233,17 +233,17 @@ let split(flags: List(Bool), n: Nat) -> {Bool, List(Bool)} =
     end;
 
 -- The handles the waiting branches of `branches` wait on, in their order.
-let handles(branches: List(Branch)) -> List(Handle) =
+let handles(branches: List(Branch)) -> List(Handle) =>
     List/concat_map(branches, (b: Branch) =>
         match b | waiting(on, _, _, _) => on | fresh(_) => [] end);
 
 -- The latches the waiting branches of `branches` wait on, in their order.
-let latches(branches: List(Branch)) -> List(Latch) =
+let latches(branches: List(Branch)) -> List(Latch) =>
     List/concat_map(branches, (b: Branch) =>
         match b | waiting(_, tripped, _, _) => tripped | fresh(_) => [] end);
 
 -- Every waiting branch's cancel, in their order. A branch that never started has nothing to cancel.
-let cancel_all(branches: List(Branch)) -> Io({}) =
+let cancel_all(branches: List(Branch)) -> Io({}) =>
     match branches
     | [] => pure(())
     | [b, ..more] =>
@@ -255,11 +255,15 @@ let cancel_all(branches: List(Branch)) -> Io({}) =
         cancel_all(more)
     end;
 
-let kept(stepped: Option(Branch), after: List(Branch)) -> List(Branch) =
+let kept(stepped: Option(Branch), after: List(Branch)) -> List(Branch) =>
     match stepped | some(b) => [b, ..after] | none() => after end;
 
 -- One pass over `branches`, `flags` saying which of their handles are ready, in their order: a fresh branch is started, a waiting one whose handle is ready or whose latch is tripped advanced, and any other kept as it waits. A pass advances nothing more once `settled` holds. Answers the branches after the pass, and whether any moved.
-let pass(branches: List(Branch), flags: List(Bool), settled: Io(Bool)) -> Io({List(Branch), Bool}) =
+let pass(
+    branches: List(Branch),
+    flags: List(Bool),
+    settled: Io(Bool),
+) -> Io({List(Branch), Bool}) =>
     match branches
     | [] => pure(([], false))
     | [b, ..more] =>
@@ -289,7 +293,7 @@ let pass(branches: List(Branch), flags: List(Bool), settled: Io(Bool)) -> Io({Li
     end;
 
 -- `branches`, with whatever `intake` hands over before each pass, advanced pass after pass until `settled` holds or none is left: the one place `/std` holds a branch's rest and performs a dropped branch's cancel, under every combinator. A pass that moved something yields outward on a latch tripped already, so whatever advances this description runs its own branches between passes; a pass that moved nothing suspends outward on every handle and latch its branches wait on, and on nothing where they wait on nothing. The branches still waiting when it ends are cancelled, each once, and so is every one of them where whatever advances it cancels it.
-let drive(held: List(Branch), intake: Io(List(Branch)), settled: Io(Bool)) -> Io({}) =
+let drive(held: List(Branch), intake: Io(List(Branch)), settled: Io(Bool)) -> Io({}) =>
     let incoming = intake!;
     let branches = [..held, ..incoming];
     let done = settled!;
@@ -322,19 +326,19 @@ let drive(held: List(Branch), intake: Io(List(Branch)), settled: Io(Bool)) -> Io
     end;
 
 -- A driver over a fixed set of branches.
-let nothing_more() -> Io(List(Branch)) =
+let nothing_more() -> Io(List(Branch)) =>
     pure([]);
 
 -- Whether `f` has been filled.
-let answered(@A: Type, f: Future(A)) -> Io(Bool) =
+let answered(@A: Type, f: Future(A)) -> Io(Bool) =>
     bind(Future/poll(f), (held) => pure(Option/is_some(held)));
 
 -- `a` as a branch that fills `f` with its answer.
-let into(@A: Type, a: Io(A), f: Future(A)) -> Branch =
+let into(@A: Type, a: Io(A), f: Future(A)) -> Branch =>
     Branch/fresh(bind(a, (x) => Future/fill(f, x)));
 
 --- `a` and `b` side by side, and both answers once both have them.
-pub let both(@A: Type, @B: Type, a: Io(A), b: Io(B)) -> Io({A, B}) =
+pub let both(@A: Type, @B: Type, a: Io(A), b: Io(B)) -> Io({A, B}) =>
     let fa = Future/new()!;
     let fb = Future/new()!;
     let () = drive([into(a, fa), into(b, fb)], nothing_more(), pure(false))!;
@@ -343,7 +347,7 @@ pub let both(@A: Type, @B: Type, a: Io(A), b: Io(B)) -> Io({A, B}) =
     pure((x, y));
 
 -- A future for each action of `actions`, beside it.
-let promised(@A: Type, actions: List(Io(A))) -> Io(Vec({Io(A), Future(A)}, List/length(actions))) =
+let promised(@A: Type, actions: List(Io(A))) -> Io(Vec({Io(A), Future(A)}, List/length(actions))) =>
     match actions
     | [] => pure(Vec/nil())
     | [a, ..more] =>
@@ -353,7 +357,7 @@ let promised(@A: Type, actions: List(Io(A))) -> Io(Vec({Io(A), Future(A)}, List/
     end;
 
 -- The answer of each future of `fs`, in their order.
-let awaited(@A: Type, fs: List(Future(A))) -> Io(Vec(A, List/length(fs))) =
+let awaited(@A: Type, fs: List(Future(A))) -> Io(Vec(A, List/length(fs))) =>
     match fs
     | [] => pure(Vec/nil())
     | [f, ..more] =>
@@ -363,7 +367,7 @@ let awaited(@A: Type, fs: List(Future(A))) -> Io(Vec(A, List/length(fs))) =
     end;
 
 --- Every action of `actions` side by side, and their answers in their order once all have them, one for each action: an answer is read by its position, with no case for one missing, whatever the actions do.
-pub let all(@A: Type, actions: List(Io(A))) -> Io(Vec(A, List/length(actions))) =
+pub let all(@A: Type, actions: List(Io(A))) -> Io(Vec(A, List/length(actions))) =>
     let pairs = promised(actions)!;
     let () =
         drive(
@@ -376,11 +380,11 @@ pub let all(@A: Type, actions: List(Io(A))) -> Io(Vec(A, List/length(actions))) 
 --- The answer of the first of `actions` to finish; every other one is cancelled where it waits. They are stepped in list order, so of two that can answer at once the earlier wins: `select([a, Io/pure(d)])` tries `a` and answers `d` rather than wait, and in a loop an action that is always ready starves the ones after it. Which action answered is its answer's to say. With no action, nothing answers.
 ---
 --- Every action of `/std` cancelled where it waits has lost nothing: what it took before it waited is answered already or kept where the drop cannot reach it, so a take, a read, a join, a `Future`'s wait, a sleep, a `write`, a `copy` and a `Reader`'s reads can be dropped and run again without loss. A write takes its whole message before it waits, which the stream then holds and hands on whole; a reader keeps what it read ahead in itself. Keep what must not be lost as the last step of its action, and do what follows after `select` answers. An action of your own that holds something across a wait of its own keeps it where a drop cannot lose it: in a `Box` before it waits, as `Io/Reader` keeps the bytes it read ahead, or in a release deferred to its scope, which is told the scope was `cancelled`.
-pub let select(@A: Type, actions: List(Io(A))) -> Io(A) =
+pub let select(@A: Type, actions: List(Io(A))) -> Io(A) =>
     let won: Future(A) = Future/new()!;
     let () = drive(List/map(actions, (a: Io(A)) => into(a, won)), nothing_more(), answered(won))!;
     Future/wait(won);
 
 --- `a`'s answer, or `none` where `d` passes first, `a` then cancelled where it waits: a `select` against a sleep. An answer that lands after `d` is dropped, which is what a timeout means.
-pub let timeout(@A: Type, d: Duration, a: Io(A)) -> Io(Option(A)) =
+pub let timeout(@A: Type, d: Duration, a: Io(A)) -> Io(Option(A)) =>
     select([bind(a, (x) => pure(Option/some(x))), bind(sleep(d), (()) => pure(Option/none()))]);

@@ -108,7 +108,7 @@ fn every_direction_executes_as_the_model_rounds() {
         r#"
         use /std/{Nat, Int, Flt, Bytes, List, Io, Try, Proc};
         use /std/Flt/{Rounding, rounded};
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let one = Nat/to_flt(Bytes/length(/std/rand/bytes(3)!)) / +3.0;
             let zero = Bytes/length(/std/rand/bytes(0)!);
             let operands = List/map([
@@ -117,8 +117,8 @@ fn every_direction_executes_as_the_model_rounds() {
             let naturals: List(Nat) = List/map([
                 ${naturals},
             ], (n) => n + zero);
-            let addends(a: Flt, b: Flt) -> List(Flt) = [+0.0, -0.0, +1.0, +1.0e-300, Flt/neg(a * b)];
-            let direction(r: Rounding) -> List(Flt) =
+            let addends(a: Flt, b: Flt) -> List(Flt) => [+0.0, -0.0, +1.0, +1.0e-300, Flt/neg(a * b)];
+            let direction(r: Rounding) -> List(Flt) =>
                 let pairs = List/concat_map(operands, (a) => List/concat_map(operands, (b) => [
                     rounded/add(r, a, b),
                     rounded/sub(r, a, b),
@@ -215,10 +215,10 @@ fn the_exact_rounding_executes_as_the_model_rounds() {
         r#"
         use /std/{Flt, Str, Bytes, List, Io, Option, Try, Proc};
         use /std/Flt/{Rounding, rounded};
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let unread = Str/repeat("0", Bytes/length(/std/rand/bytes(0)!));
             let cases: List(Str) = List/map([${cases}], (s) => Str/concat(s, unread));
-            let direction(r: Rounding) -> List(Flt) =
+            let direction(r: Rounding) -> List(Flt) =>
                 List/map(cases, (s) => Option/unwrap_or(rounded/of_hex_str(r, s), +nan.0));
             let results = List/concat_map([
                 Rounding/ties_to_even(),
@@ -419,7 +419,7 @@ fn every_exception_is_raised_as_ieee_defines_it() {
         r#"
         use /std/{Nat, Int, Flt, Bytes, Byte, List, Io, Bool, Try, Proc};
         use /std/Flt/{Rounding, Exceptions, signals};
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let one = Nat/to_flt(Bytes/length(/std/rand/bytes(3)!)) / +3.0;
             let tick = Nat/to_byte(Bytes/length(/std/rand/bytes(1)!) % 256);
             let signaling = Flt/of_le_bytes(0x[tick, 0x00, 0x00, 0x00, 0x00, 0x00, 0xF0, 0x7F]);
@@ -427,12 +427,12 @@ fn every_exception_is_raised_as_ieee_defines_it() {
                 ${operands},
             ], (v) => v * one), signaling];
             let scalings: List(Int) = [${scalings}];
-            let flag(set: Bool, weight: Nat) -> Nat = match set | true => weight | false => 0 end;
-            let code(e: Exceptions) -> Byte =
+            let flag(set: Bool, weight: Nat) -> Nat => match set | true => weight | false => 0 end;
+            let code(e: Exceptions) -> Byte =>
                 Nat/to_byte((flag(e.invalid, 16) + flag(e.division_by_zero, 8) + flag(e.overflow, 4)
                     + flag(e.underflow, 2) + flag(e.inexact, 1)) % 256);
-            let addends(a: Flt, b: Flt) -> List(Flt) = [+0.0, +1.0, +1.0e-300, Flt/neg(a * b)];
-            let direction(r: Rounding) -> List(Exceptions) =
+            let addends(a: Flt, b: Flt) -> List(Flt) => [+0.0, +1.0, +1.0e-300, Flt/neg(a * b)];
+            let direction(r: Rounding) -> List(Exceptions) =>
                 let pairs = List/concat_map(operands, (a) => List/concat_map(operands, (b) => [
                     signals/add(r, a, b),
                     signals/sub(r, a, b),

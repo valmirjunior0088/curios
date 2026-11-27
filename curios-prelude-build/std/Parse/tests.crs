@@ -1,10 +1,10 @@
 -- Parsing through `Parse`: a text parser reads characters and pieces of its input by position, a refusal says the byte offset it stopped at, and of two refusals open to an alternative the one that reached further is reported.
 use /std/{Parse, Str, Char, List, Result, Test, Byte, Bytes, Nat};
 
-let shown(@A: Type, r: Result(Parse/Error, A), f: (A) -> Str) -> Str =
+let shown(@A: Type, r: Result(Parse/Error, A), f: (A) -> Str) -> Str =>
     match r | success(a) => f(a) | failure(e) => Parse/Error/to_str(e) end;
 
-let pair() -> Parse(Str, {Str, Str}) =
+let pair() -> Parse(Str, {Str, Str}) =>
     let word = Parse/str/take_while((c) => c != ' ')!;
     let _ = Parse/str/expect(' ')!;
     let () = Parse/str/literal("wö")!;
@@ -13,23 +13,23 @@ let pair() -> Parse(Str, {Str, Str}) =
     Parse/pure((word, rest));
 
 -- A text parser answers characters and the pieces of its input it read: a run of non-spaces, a separator, a literal of multi-byte characters and what follows it.
-test a_text_parser_reads_characters_and_pieces =
+test a_text_parser_reads_characters_and_pieces =>
     Test/equal(
         shown(Parse/run(pair(), "héllo wörld"), ((w, r)) => Str/flatten([w, "|", r])),
         "héllo|rld");
 
 -- A text refusal is where it stopped as a byte offset into the input: the literal `wö` is wanted after `héllo `, whose `é` is two bytes.
-test a_text_refusal_is_at_a_byte_offset =
+test a_text_refusal_is_at_a_byte_offset =>
     Test/equal(
         shown(Parse/run(pair(), "héllo world"), ((w, r)) => Str/flatten([w, "|", r])),
         "expected \"wö\" at byte 7");
 
-let two() -> Parse(Str, {Char, Char}) =
+let two() -> Parse(Str, {Char, Char}) =>
     let a = Parse/str/char()!;
     let b = Parse/str/char()!;
     Parse/pure((a, b));
 
-let peeked() -> Parse(Str, Str) =
+let peeked() -> Parse(Str, Str) =>
     let first = Parse/str/peek()!;
     let taken = Parse/str/char()!;
     Parse/pure(
@@ -38,7 +38,7 @@ let peeked() -> Parse(Str, Str) =
             Str/of_char(taken)));
 
 -- The end of the input refuses a character, and `peek` sees one without consuming it.
-test a_character_is_refused_at_the_end =
+test a_character_is_refused_at_the_end =>
     Test/all([
         Test/equal(
             shown(Parse/run(two(), "€"), ((_, b)) => Str/of_char(b)),
@@ -46,7 +46,7 @@ test a_character_is_refused_at_the_end =
         Test/equal(shown(Parse/run(peeked(), "€"), (s) => s), "€€")]);
 
 -- Of two alternatives that both decline, the refusal reported is the one that reached further into the input, in either order: `ab` then `cd` stops at byte 2, where `x` stopped at the start.
-test or_reports_the_refusal_that_reached_further =
+test or_reports_the_refusal_that_reached_further =>
     let far: Parse(Str, {}) = Parse/bind(Parse/str/literal("ab"), (()) => Parse/str/literal("cd"));
     let near: Parse(Str, {}) = Parse/str/literal("x");
     Test/all([
@@ -58,7 +58,7 @@ test or_reports_the_refusal_that_reached_further =
             "expected \"cd\" at byte 2")]);
 
 -- A bytes parser walks its literal byte by byte, and declines where it started when the input is not it.
-test a_bytes_literal_is_read_byte_by_byte =
+test a_bytes_literal_is_read_byte_by_byte =>
     Test/all([
         Test/equal(
             shown(Parse/run(Parse/bytes/literal("ab"), 0x['a', 'b', 'c']), (()) => "ok"),
@@ -67,22 +67,22 @@ test a_bytes_literal_is_read_byte_by_byte =
             shown(Parse/run(Parse/bytes/literal("ab"), 0x['a']), (()) => "ok"),
             "expected \"ab\" at byte 0")]);
 
-let digit() -> Parse(Str, Char) =
+let digit() -> Parse(Str, Char) =>
     Parse/label(Parse/str/char_if(Char/is_ascii_digit), "expected a digit");
 
-let comma() -> Parse(Str, {}) =
+let comma() -> Parse(Str, {}) =>
     Parse/str/literal(",");
 
-let whole(list: Parse(Str, List(Char))) -> Parse(Str, Str) =
+let whole(list: Parse(Str, List(Char))) -> Parse(Str, Str) =>
     let items = list!;
     let () = Parse/eof()!;
     Parse/pure(Str/flatten(List/map(items, Str/of_char)));
 
-let read(list: Parse(Str, List(Char)), input: Str) -> Str =
+let read(list: Parse(Str, List(Char)), input: Str) -> Str =>
     shown(Parse/run(whole(list), input), (s) => Str/flatten(["[", s, "]"]));
 
 -- A separator owes the element after it, so a dangling one is refused at the element it lacks rather than handed back for whatever follows to trip on. A `_trailing` list lets a last separator close it, and a `sep_by1` owes its first element too.
-test a_separator_owes_the_element_after_it =
+test a_separator_owes_the_element_after_it =>
     Test/equal(
         Str/join("|", [
             read(Parse/sep_by0(digit(), comma()), "1,2"),
@@ -96,7 +96,7 @@ test a_separator_owes_the_element_after_it =
         "[12]|[]|expected a digit at byte 4|[12]|[]|expected a digit at byte 0|[1]|expected a digit at byte 0");
 
 -- `many1` owes its first value where `many0` answers an empty list.
-test many1_owes_its_first_value =
+test many1_owes_its_first_value =>
     Test/equal(
         Str/join("|", [
             read(Parse/many0(digit()), "12"),
@@ -106,21 +106,21 @@ test many1_owes_its_first_value =
         "[12]|[]|[12]|expected a digit at byte 0");
 
 -- Of two alternatives that decline at one offset, the first's refusal is reported: it is the reading the choice led with.
-test or_reports_the_first_refusal_on_a_tie =
+test or_reports_the_first_refusal_on_a_tie =>
     Test/equal(
         shown(
             Parse/run(Parse/or(Parse/str/literal("a"), Parse/str/literal("b")), "x"),
             (()) => "ok"),
         "expected \"a\" at byte 0");
 
-let cut(lit: Str) -> Parse(Str, {Str, Str}) =
+let cut(lit: Str) -> Parse(Str, {Str, Str}) =>
     let before = Parse/str/until(lit)!;
     let rest = Parse/str/rest()!;
     Parse/pure((before, rest));
 
 -- `until` answers the piece of the input before a literal's next occurrence and leaves the literal unread, with multi-byte characters on either side of it. Where the literal does not occur it answers all that is left, and an occurrence where the parser stands is an empty piece.
-test until_reads_the_piece_before_a_literal =
-    let read(lit: Str, input: Str) -> Str =
+test until_reads_the_piece_before_a_literal =>
+    let read(lit: Str, input: Str) -> Str =>
         shown(Parse/run(cut(lit), input), ((before, rest)) => Str/flatten([before, "|", rest]));
     Test/equal(
         Str/join(" / ", [
@@ -130,14 +130,14 @@ test until_reads_the_piece_before_a_literal =
             read("-->", "")]),
         "é → ü|-->𝄞 / no end -- > here| / |→x / |");
 
-let one_byte() -> Parse(Bytes, Byte) =
+let one_byte() -> Parse(Bytes, Byte) =>
     let b = Parse/bytes/byte()!;
     let () = Parse/eof()!;
     Parse/pure(b);
 
 -- `eof` accepts only where the input has ended: a parser that reads one byte and then `eof` accepts exactly one byte, and refuses a second byte and an empty input alike.
-test eof_accepts_only_the_end_of_the_input =
-    let one(input: Bytes) -> Str =
+test eof_accepts_only_the_end_of_the_input =>
+    let one(input: Bytes) -> Str =>
         match Parse/run(one_byte(), input)
         | success(b) => Str/concat("ok:", Nat/to_str(Byte/to_nat(b)))
         | failure(_) => "rejected"

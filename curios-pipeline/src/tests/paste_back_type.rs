@@ -17,7 +17,7 @@ fn a_polymorphic_signature_over_imported_names_reads_back() {
 fn a_local_function_type_reads_back() {
     let source = r#"
         use /std/{Nat};
-        let double(n: Nat) -> Nat = n + n;
+        let double(n: Nat) -> Nat => n + n;
         pub let t: ? = double;
         /std/print("")
     "#;
@@ -92,7 +92,7 @@ fn an_operator_under_an_abstract_witness_reads_back() {
     let source = r#"
         use /std/{Eq};
         use /std/ops/{Add};
-        pub let f(@A: Type, use Add(A), a: A) -> Eq()(a + a, a + a) = Eq/refl();
+        pub let f(@A: Type, use Add(A), a: A) -> Eq()(a + a, a + a) => Eq/refl();
         pub let t: ? = f;
         /std/print("")
     "#;
@@ -106,8 +106,8 @@ fn a_call_with_a_witness_between_two_implicits_reads_back() {
     let source = r#"
         use /std/{Nat, Bool, Show};
         use /std/Bool/{Holds};
-        pub let pick(@K: Type, use Show(K), @V: Type, key: K, value: V) -> Bool = true;
-        pub let held(@K: Type, use Show(K), @V: Type, key: K, value: V) -> Holds(pick(key, value)) =
+        pub let pick(@K: Type, use Show(K), @V: Type, key: K, value: V) -> Bool => true;
+        pub let held(@K: Type, use Show(K), @V: Type, key: K, value: V) -> Holds(pick(key, value)) =>
             /std/Bool/True/qed();
         pub let t: ? = held;
         /std/print("")

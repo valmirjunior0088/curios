@@ -8,11 +8,11 @@ struct Pen: Type {
 }
 
 -- Whether every terminal agrees on how far `text` moves the cursor: text of ASCII alone.
-let agreed(text: Bytes) -> Bool =
+let agreed(text: Bytes) -> Bool =>
     Bytes/all(text, (b) => b < '\u{80}');
 
 -- The pen once `tile` is written at `x`, `y`, unless it is what `before` shows there. After a glyph whose width terminals may disagree on the pen forgets where it stands, so the next tile it writes moves there first: a terminal that measures a glyph otherwise misplaces that glyph alone.
-let paint(pen: Pen, x: Nat, y: Nat, tile: Tile, before: Option(Tile)) -> Pen =
+let paint(pen: Pen, x: Nat, y: Nat, tile: Tile, before: Option(Tile)) -> Pen =>
     match before == Option/some(tile)
     | true => pen
     | false =>
@@ -38,7 +38,7 @@ let paint(pen: Pen, x: Nat, y: Nat, tile: Tile, before: Option(Tile)) -> Pen =
         end
     end;
 
-let paint_row(@w: Nat, pen: Pen, y: Nat, row: Vec(Tile, w), before: Option(Vec(Tile, w))) -> Pen =
+let paint_row(@w: Nat, pen: Pen, y: Nat, row: Vec(Tile, w), before: Option(Vec(Tile, w))) -> Pen =>
     let tiles = List/zip(List/range(0, w), row.list);
     let previous =
         match before
@@ -58,8 +58,8 @@ pub let render(
     next: Frame(w, h),
     cursor: Option(View/Point),
     synchronized: Bool,
-) -> Bytes =
-    let bracket(b: Bytes) -> Bytes =
+) -> Bytes =>
+    let bracket(b: Bytes) -> Bytes =>
         match synchronized | true => b | false => 0x[] end;
     let clear =
         match previous | some(_) => 0x[] | none() => ansi/clear end;

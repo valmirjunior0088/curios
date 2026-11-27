@@ -60,7 +60,7 @@ pub use Toml/*;
 ---
 --- Written in the witness, which may read its own methods: an array and a table are compared by `==`, which asks this witness of `List`'s and of `Map`'s, each applying it below what it holds.
 satisfy Eql(Toml) {
-    eql(a, b) =
+    eql(a, b) =>
         match a
         | str(x) => match b | str(y) => x == y | _ => false end
         | int(x) => match b | int(y) => x == y | _ => false end
@@ -76,7 +76,7 @@ satisfy Eql(Toml) {
         | table(x) => match b | table(y) => x == y | _ => false end
         end,
     -- A row for each case: at the same one the values are one by their own law, and at every other `eql` answered `false`, refuted together.
-    eq(a, b, h) =
+    eq(a, b, h) =>
         match a
         | str(x) =>
             match b
@@ -229,7 +229,7 @@ satisfy Eql(Toml) {
             | arr(_) => match h end
             end
         end,
-    refl(a) =
+    refl(a) =>
         match a
         | str(x)
         | int(x)

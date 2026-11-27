@@ -30,7 +30,7 @@ satisfy Hash(Class) {
 }
 
 satisfy Show(Class) {
-    show(c) =
+    show(c) =>
         match c
         | signaling_nan() => "signaling_nan"
         | quiet_nan() => "quiet_nan"

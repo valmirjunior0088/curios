@@ -15,18 +15,18 @@ fn a_goal_whose_sort_its_index_decides_is_no_goal() {
         | qb(): (false)
         end
 
-        let S(b: Bool) -> Type = match b | true => Prop | false => Type end;
+        let S(b: Bool) -> Type => match b | true => Prop | false => Type end;
 
-        let F(b: Bool) -> S(b) = match b | true => True | false => Nat end;
+        let F(b: Bool) -> S(b) => match b | true => True | false => Nat end;
 
-        let read(b: Bool, t: Q(b)) -> True = match t | qa() => True/qed() | qb() => True/qed() end;
+        let read(b: Bool, t: Q(b)) -> True => match t | qa() => True/qed() | qb() => True/qed() end;
 
         /std/print("ok")
         "#,
         b"ok",
     )
     .refused(&[
-        ("-> True = match t | qa() => True/qed() | qb() => True/qed() end", "-> F(b) = match t | qa() => True/qed() | qb() => 7 end"),
+        ("-> True => match t | qa() => True/qed() | qb() => True/qed() end", "-> F(b) => match t | qa() => True/qed() | qb() => 7 end"),
     ])
     .by_elaborator_in("/read", |error| matches!(error, Error::TypeMismatch { inferred, .. } if pinned(inferred) == "/S(b)"));
 }
@@ -43,9 +43,9 @@ fn two_spellings_of_one_type_forced_on_one_binder_do_not_clash() {
         | refl(@A: Type): (A, A)
         end
 
-        let Id(A: Type) -> Type = A;
+        let Id(A: Type) -> Type => A;
 
-        let absurd(p: TEq(Nat, Id(Nat))) -> Nat = match p | refl() => 0 end;
+        let absurd(p: TEq(Nat, Id(Nat))) -> Nat => match p | refl() => 0 end;
 
         let _forged: Nat = absurd(TEq/refl(@Nat));
 
@@ -55,8 +55,8 @@ fn two_spellings_of_one_type_forced_on_one_binder_do_not_clash() {
     )
     .refused(&[
         (
-            "-> Nat = match p | refl() => 0 end",
-            "-> False = match p end",
+            "-> Nat => match p | refl() => 0 end",
+            "-> False => match p end",
         ),
         ("let _forged: Nat", "let _forged: False"),
     ])
@@ -81,7 +81,7 @@ fn a_payload_under_a_propositions_constructor_is_not_pinned() {
         | mk(@a: Nat): (a)
         end
 
-        let read(@x: Nat, p: P(x)) -> Nat = match p | mk(@a) => a end;
+        let read(@x: Nat, p: P(x)) -> Nat => match p | mk(@a) => a end;
 
         let apart = read;
 
@@ -112,13 +112,13 @@ fn a_guard_over_a_proof_match_is_settled_with_the_equations_inside_it_withheld()
         use /std/{Nat, Eq, Bool};
         use /std/Bool/{True, False, Holds};
 
-        let g(n: Nat) -> Nat = match n | 0 => 0 | j + 1 => 1 end;
+        let g(n: Nat) -> Nat => match n | 0 => 0 | j + 1 => 1 end;
 
         let f(
             k: (Nat) -> Bool,
             n: Nat,
             p: Eq()(g(n), g(g(n))),
-            guard: Holds(match p | refl(@z) => (match z | 0 => k(0) | j + 1 => k(1) end) end)) -> True =
+            guard: Holds(match p | refl(@z) => (match z | 0 => k(0) | j + 1 => k(1) end) end)) -> True =>
             match (match p | refl(@z) => (match z | 0 => k(0) | j + 1 => k(1) end) end)
             | false => match guard end
             | true =>
@@ -152,13 +152,13 @@ fn a_proposition_over_every_proposition_is_not_applied_at_itself() {
 
         let A: Prop = (P: Prop) -> (P) -> P;
 
-        let delta(x: A) -> True = x(True)(True/qed());
+        let delta(x: A) -> True => x(True)(True/qed());
 
         /std/print("ok")
         "#,
         b"ok",
     )
-    .refused(&[("-> True = x(True)(True/qed())", "-> A = x(A)(x)")])
+    .refused(&[("-> True => x(True)(True/qed())", "-> A => x(A)(x)")])
     .by_elaborator_in("/delta", |error| {
         matches!(error, Error::UniverseInconsistency { .. })
     });
@@ -175,9 +175,9 @@ fn a_proposition_with_two_constructors_does_not_eliminate_into_a_universe() {
         | a()
         end
 
-        let F(t: Two) -> Prop = match t | a() => True end;
+        let F(t: Two) -> Prop => match t | a() => True end;
 
-        let cast(h: F(Two/a())) -> F(Two/a()) = h;
+        let cast(h: F(Two/a())) -> F(Two/a()) => h;
 
         let kept: F(Two/a()) = cast(True/qed());
 
@@ -194,7 +194,7 @@ fn a_proposition_with_two_constructors_does_not_eliminate_into_a_universe() {
             "match t | a() => True end",
             "match t | a() => True | b() => False end",
         ),
-        ("-> F(Two/a()) = h", "-> F(Two/b()) = h"),
+        ("-> F(Two/a()) => h", "-> F(Two/b()) => h"),
         (
             "let kept: F(Two/a()) = cast(True/qed());\n\n        /std/print(\"one\")",
             "cast(True/qed())",
@@ -217,7 +217,7 @@ fn a_proposition_with_one_bare_constructor_eliminates_into_a_universe() {
         | it()
         end
 
-        let F(o: One) -> Prop = match o | it() => True end;
+        let F(o: One) -> Prop => match o | it() => True end;
 
         let held: F(One/it()) = True/qed();
 
@@ -238,9 +238,9 @@ fn a_goal_computed_by_a_term_meets_the_guard() {
         | a()
         end
 
-        let Universe(s: Two) -> Type = Prop;
+        let Universe(s: Two) -> Type => Prop;
 
-        let F(t: Two) -> Universe(t) = match t | a() => True end;
+        let F(t: Two) -> Universe(t) => match t | a() => True end;
 
         /std/print("ok")
         "#,
@@ -263,7 +263,7 @@ fn a_goal_computed_by_a_term_meets_the_guard() {
         | a()
         end
 
-        let elim(P: (Two) -> Type, x: P(Two/a()), t: Two) -> P(t) =
+        let elim(P: (Two) -> Type, x: P(Two/a()), t: Two) -> P(t) =>
             match t | a() => x end;
 
         /std/print("ok")
@@ -300,7 +300,7 @@ fn a_tree_over_every_proposition_is_none_of_them_and_hands_back_no_label() {
 
         let t: T = T/node(False, (x) => match x end);
 
-        let label(x: T) -> True = match x | node(A, f) => True/qed() end;
+        let label(x: T) -> True => match x | node(A, f) => True/qed() end;
 
         /std/print("ok")
         "#,
@@ -310,8 +310,8 @@ fn a_tree_over_every_proposition_is_none_of_them_and_hands_back_no_label() {
         ("{True, False}", "{False}"),
         ("T/node(False, (x) => match x end)", "T/node(T, (x) => x)"),
         (
-            "-> True = match x | node(A, f) => True/qed() end",
-            "-> Prop = match x | node(A, f) => A end",
+            "-> True => match x | node(A, f) => True/qed() end",
+            "-> Prop => match x | node(A, f) => A end",
         ),
     ])
     .by_elaborator_in("/t", |error| {
@@ -330,21 +330,21 @@ fn a_cast_fires_or_stands_alike_in_every_spelling() {
         run(r#"
         use /std/{Nat, Eq};
 
-        let cast(P: (Nat) -> Type, @x: Nat, @y: Nat, q: Eq()(x, y), w: P(x)) -> P(y) =
+        let cast(P: (Nat) -> Type, @x: Nat, @y: Nat, q: Eq()(x, y), w: P(x)) -> P(y) =>
             match q | refl() => w end;
 
         let by_subst(P: (Nat) -> Type, a: Nat, b: Nat, p: Eq()(a + b, b + a), v: P(a + b))
-            -> Eq()(Eq/subst(P, p, v), v) = Eq/refl();
+            -> Eq()(Eq/subst(P, p, v), v) => Eq/refl();
         let by_match(P: (Nat) -> Type, a: Nat, b: Nat, p: Eq()(a + b, b + a), v: P(a + b))
-            -> Eq()(match p | refl(@z) => v end, v) = Eq/refl();
+            -> Eq()(match p | refl(@z) => v end, v) => Eq/refl();
         let by_lemma(P: (Nat) -> Type, a: Nat, b: Nat, p: Eq()(a + b, b + a), v: P(a + b))
-            -> Eq()(cast(P, p, v), v) = Eq/refl();
+            -> Eq()(cast(P, p, v), v) => Eq/refl();
         let by_sym(P: (Nat) -> Type, a: Nat, b: Nat, p: Eq()(a + b, b + a), v: P(a + b))
-            -> Eq()(Eq/subst(P, Eq/sym(Eq/sym(p)), v), v) = Eq/refl();
+            -> Eq()(Eq/subst(P, Eq/sym(Eq/sym(p)), v), v) => Eq/refl();
         let by_trans(P: (Nat) -> Type, a: Nat, b: Nat, p: Eq()(a + b, b + a), v: P(a + b))
-            -> Eq()(cast(P, Eq/trans(p, Eq/refl()), v), v) = Eq/refl();
+            -> Eq()(cast(P, Eq/trans(p, Eq/refl()), v), v) => Eq/refl();
         let by_match_sym(P: (Nat) -> Type, a: Nat, b: Nat, p: Eq()(a + b, b + a), v: P(a + b))
-            -> Eq()(match Eq/sym(Eq/sym(p)) | refl(@z) => v end, v) = Eq/refl();
+            -> Eq()(match Eq/sym(Eq/sym(p)) | refl(@z) => v end, v) => Eq/refl();
 
         /std/print("ok")
         "#),
@@ -355,19 +355,19 @@ fn a_cast_fires_or_stands_alike_in_every_spelling() {
         r#"
         use /std/{Nat, Eq};
 
-        let cast(P: (Nat) -> Type, @x: Nat, @y: Nat, q: Eq()(x, y), w: P(x)) -> P(y) =
+        let cast(P: (Nat) -> Type, @x: Nat, @y: Nat, q: Eq()(x, y), w: P(x)) -> P(y) =>
             match q | refl() => w end;
 
         let u_subst(a: Nat, b: Nat, p: Eq()(a, a), v: Nat)
-            -> Eq()(Eq/subst((_) => Nat, p, v), v) = Eq/refl();
+            -> Eq()(Eq/subst((_) => Nat, p, v), v) => Eq/refl();
         let u_match(a: Nat, b: Nat, p: Eq()(a, a), v: Nat)
-            -> Eq()(match p | refl(@z) => v end, v) = Eq/refl();
+            -> Eq()(match p | refl(@z) => v end, v) => Eq/refl();
         let u_lemma(a: Nat, b: Nat, p: Eq()(a, a), v: Nat)
-            -> Eq()(cast((_) => Nat, p, v), v) = Eq/refl();
+            -> Eq()(cast((_) => Nat, p, v), v) => Eq/refl();
         let u_sym(a: Nat, b: Nat, p: Eq()(a, a), v: Nat)
-            -> Eq()(Eq/subst((_) => Nat, Eq/sym(Eq/sym(p)), v), v) = Eq/refl();
+            -> Eq()(Eq/subst((_) => Nat, Eq/sym(Eq/sym(p)), v), v) => Eq/refl();
         let u_trans(a: Nat, b: Nat, p: Eq()(a, a), v: Nat)
-            -> Eq()(cast((_) => Nat, Eq/trans(p, Eq/refl()), v), v) = Eq/refl();
+            -> Eq()(cast((_) => Nat, Eq/trans(p, Eq/refl()), v), v) => Eq/refl();
 
         /std/print("ok")
         "#,
@@ -435,7 +435,7 @@ fn a_hidden_payload_no_index_pins_is_not_read_out_of_a_proof() {
         | mk(@k: Nat, n: Nat): (k, n)
         end
 
-        let read(j: Nat, m: Nat, q: Q(j, m)) -> Nat = match q | mk(@k, _) => k end;
+        let read(j: Nat, m: Nat, q: Q(j, m)) -> Nat => match q | mk(@k, _) => k end;
 
         let cast = read;
 
@@ -449,7 +449,7 @@ fn a_hidden_payload_no_index_pins_is_not_read_out_of_a_proof() {
         ("induct Q: (Nat, Nat) -> pub Prop", "induct Q: (Nat) -> pub Prop"),
         ("mk(@k: Nat, n: Nat): (k, n)", "mk(@k: Nat, n: Nat): (n)"),
         ("read(j: Nat, m: Nat, q: Q(j, m))", "read(m: Nat, q: Q(m))"),
-        ("let cast = read;", "let cast(G: (Q(5)) -> Prop, y: G(Q/mk(@0, 5))) -> G(Q/mk(@1, 5)) = y;"),
+        ("let cast = read;", "let cast(G: (Q(5)) -> Prop, y: G(Q/mk(@0, 5))) -> G(Q/mk(@1, 5)) => y;"),
         ("let _forged: Holds(read(1, 5, Q/mk(@1, 5)) == 1) = True/qed();", "let _forged: False = cast((q: Q(5)) => Holds(match read(5, q) | 0 => true | _ => false end), True/qed());"),
     ])
     .by_elaborator_in(
@@ -466,7 +466,7 @@ fn a_proofs_payload_is_read_by_no_tuple_slot() {
         use /std/{Nat};
         use /std/Bool/{Holds, True, False};
 
-        let get(p: {Nat, Nat}) -> Nat = p.1;
+        let get(p: {Nat, Nat}) -> Nat => p.1;
 
         let cast = get;
 
@@ -478,7 +478,7 @@ fn a_proofs_payload_is_read_by_no_tuple_slot() {
     )
     .refused(&[
         ("let get(p: {Nat, Nat})", "induct P: pub Prop\n        | mk(n: Nat)\n        end\n\n        let get(p: P)"),
-        ("let cast = get;", "let cast(G: (P) -> Prop, y: G(P/mk(0))) -> G(P/mk(1)) = y;"),
+        ("let cast = get;", "let cast(G: (P) -> Prop, y: G(P/mk(0))) -> G(P/mk(1)) => y;"),
         ("let _held: Holds(match get((0, 1)) | 1 => true | _ => false end) = True/qed();", "let _forged: False = cast((p: P) => Holds(match get(p) | 0 => true | _ => false end), True/qed());"),
     ])
     .by_elaborator_in("/get", |error| matches!(error, Error::NotATuple { .. }));
@@ -497,13 +497,13 @@ fn an_arm_the_facts_close_is_an_arm_to_the_guard() {
         | more(k: Nat): (k + 2)
         end
 
-        let read(n: Nat, t: Le(n), @q: Holds(n < 1)) -> Holds(n == 5) = match t end;
+        let read(n: Nat, t: Le(n), @q: Holds(n < 1)) -> Holds(n == 5) => match t end;
 
         /std/print("ok")
         "#,
         b"ok",
     )
-    .refused(&[("-> Holds(n == 5) = match t end", "-> Nat = match t end")])
+    .refused(&[("-> Holds(n == 5) => match t end", "-> Nat => match t end")])
     .by_elaborator_in(
         "/read",
         |error| matches!(error, Error::LargeElimOfProp { name } if *name == global("/Le")),

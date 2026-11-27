@@ -14,17 +14,17 @@ pub induct Digit: pub Type
 | d3()
 end
 
-pub let f(d: Digit) -> Nat = match d | d2() => 2 | d0() => 0 | _ => 9 end;
-pub let g(d: Digit) -> Nat = match d | d0() => 0 | d2() => 2 | _ => 9 end;
-pub let defaulted(d: Digit) -> Eq()(f(d), g(d)) = Eq/refl();
+pub let f(d: Digit) -> Nat => match d | d2() => 2 | d0() => 0 | _ => 9 end;
+pub let g(d: Digit) -> Nat => match d | d0() => 0 | d2() => 2 | _ => 9 end;
+pub let defaulted(d: Digit) -> Eq()(f(d), g(d)) => Eq/refl();
 
-pub let h(d: Digit) -> Nat = match d | d3() => 3 | d1() => 1 | d2() => 2 | d0() => 0 end;
-pub let k(d: Digit) -> Nat = match d | d0() => 0 | d1() => 1 | d2() => 2 | d3() => 3 end;
-pub let covered(d: Digit) -> Eq()(h(d), k(d)) = Eq/refl();
+pub let h(d: Digit) -> Nat => match d | d3() => 3 | d1() => 1 | d2() => 2 | d0() => 0 end;
+pub let k(d: Digit) -> Nat => match d | d0() => 0 | d1() => 1 | d2() => 2 | d3() => 3 end;
+pub let covered(d: Digit) -> Eq()(h(d), k(d)) => Eq/refl();
 
-pub let deep(a: Digit, b: Digit) -> Nat = match (a, b) | (d3(), d0()) => 30 | (d1(), _) => 1 | _ => 9 end;
-pub let shallow(a: Digit, b: Digit) -> Nat = match (a, b) | (d1(), _) => 1 | (d3(), d0()) => 30 | _ => 9 end;
-pub let rows(a: Digit, b: Digit) -> Eq()(deep(a, b), shallow(a, b)) = Eq/refl();
+pub let deep(a: Digit, b: Digit) -> Nat => match (a, b) | (d3(), d0()) => 30 | (d1(), _) => 1 | _ => 9 end;
+pub let shallow(a: Digit, b: Digit) -> Nat => match (a, b) | (d1(), _) => 1 | (d3(), d0()) => 30 | _ => 9 end;
+pub let rows(a: Digit, b: Digit) -> Eq()(deep(a, b), shallow(a, b)) => Eq/refl();
 
 /std/print("held")"#;
 

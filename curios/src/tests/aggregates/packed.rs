@@ -5,20 +5,20 @@ use {super::test_support::*, crate::test_support::*, curios_native::test_support
 #[test]
 fn vec_cons_with_nat_succ() {
     let source = r#"
-        let Vec(T : Type, n : std/Nat) -> Type =
+        let Vec(T : Type, n : std/Nat) -> Type =>
             match n
             | 0 => {}
             | pred + 1 => { T, Vec(T, pred) }
             end;
 
-        let cons(T : Type, n : std/Nat, x : T, xs : Vec(T, n)) -> Vec(T, std/Nat/succ(n)) =
+        let cons(T : Type, n : std/Nat, x : T, xs : Vec(T, n)) -> Vec(T, std/Nat/succ(n)) =>
             (x, xs);
 
-        let head(T : Type, n : std/Nat, xs : Vec(T, std/Nat/succ(n))) -> T =
+        let head(T : Type, n : std/Nat, xs : Vec(T, std/Nat/succ(n))) -> T =>
             xs.0;
 
         let v : Vec(std/Nat, 1) = cons(std/Nat, 0, 42, ());
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let _ = /std/print(std/Nat/to_str(head(std/Nat, 0, v)))!;
             /std/Io/pure(());
         entry()
@@ -36,12 +36,12 @@ fn indexed_vec_append_executes() {
         | nil() : (0)
         | cons(@m : Nat, x : T, xs : Vec(T)(m)) : (Nat/succ(m))
         end
-        let append(@T : Type, @n : Nat, @m : Nat, v : Vec(T)(n), w : Vec(T)(m)) -> Vec(T)(Nat/add(n, m)) =
+        let append(@T : Type, @n : Nat, @m : Nat, v : Vec(T)(n), w : Vec(T)(m)) -> Vec(T)(Nat/add(n, m)) =>
             match v
             | nil() => w
             | cons(@j, x, xs) => Vec/cons(x, append(xs, w))
             end;
-        let total(@n : Nat, v : Vec(Nat)(n), acc : Nat) -> Nat =
+        let total(@n : Nat, v : Vec(Nat)(n), acc : Nat) -> Nat =>
             match v
             | nil() => acc
             | cons(@m, x, xs) => total(xs, Nat/add(acc, x))
@@ -49,7 +49,7 @@ fn indexed_vec_append_executes() {
         let a : Vec(Nat)(2) = Vec/cons(1, Vec/cons(2, Vec/nil()));
         let b : Vec(Nat)(1) = Vec/cons(4, Vec/nil());
         let c : Vec(Nat)(3) = append(a, b);
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let _ = /std/print(Nat/to_str(total(c, 0)))!;
             /std/Io/pure(());
         entry()
@@ -64,10 +64,10 @@ fn a_packed_concatenation_is_its_parts_across_the_immediate_envelope() {
     let source = r#"
         use /std/{Nat, Byte, Bytes, Bool, Str, Option, Io};
 
-        let front(b: Bytes) -> Bytes =
+        let front(b: Bytes) -> Bytes =>
             match b | 0x[] => 0x[] | 0x[h, ..t] => 0x[h, ..front(t)] end;
 
-        let cut(b: Bytes, k: Nat) -> Bool =
+        let cut(b: Bytes, k: Nat) -> Bool =>
             match k <= Bytes/length(b)
             | true =>
                 let joined = 0x[..Bytes/slice(b, 0, k), ..Bytes/drop(b, k)];
@@ -75,17 +75,17 @@ fn a_packed_concatenation_is_its_parts_across_the_immediate_envelope() {
             | false => false
             end;
 
-        let cuts(b: Bytes, k: Nat) -> Bool =
+        let cuts(b: Bytes, k: Nat) -> Bool =>
             match k | 0 => cut(b, 0) | j + 1 => cut(b, j + 1) && cuts(b, j) end;
 
-        let thirds(b: Bytes, k: Nat) -> Bool =
+        let thirds(b: Bytes, k: Nat) -> Bool =>
             match 2 * k <= Bytes/length(b)
             | true =>
                 0x[..Bytes/slice(b, 0, k), ..Bytes/slice(b, k, k), ..Bytes/drop(b, 2 * k)] == b
             | false => true
             end;
 
-        let prefixes(whole: Bytes, n: Nat) -> Bool =
+        let prefixes(whole: Bytes, n: Nat) -> Bool =>
             match n
             | 0 => true
             | j + 1 =>
@@ -97,7 +97,7 @@ fn a_packed_concatenation_is_its_parts_across_the_immediate_envelope() {
                 end
             end;
 
-        let led(b: Bytes) -> Bool =
+        let led(b: Bytes) -> Bool =>
             match 2 <= Bytes/length(b)
             | true =>
                 let (h, k) = (Bytes/get(b, 0), Bytes/get(b, 1));
@@ -113,7 +113,7 @@ fn a_packed_concatenation_is_its_parts_across_the_immediate_envelope() {
             | false => false
             end;
 
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let standard_input = /std/Io/Reader/new(/std/Proc/stdin)!;
             let input = /std/Result/unwrap_or(/std/Try/run(/std/Io/Reader/line(standard_input))!, /std/Option/none());
             match input
@@ -159,10 +159,10 @@ fn a_run_whose_payload_holds_room_crosses_to_a_host_as_its_run() {
     let source = r#"
         use /std/{Bytes, Io, Try, Proc};
 
-        let settled(run: Bytes) -> Bytes =
+        let settled(run: Bytes) -> Bytes =>
             Bytes/xor(run, Bytes/replicate(Bytes/length(run), 0x00));
 
-        let main() -> Io({}) =
+        let main() -> Io({}) =>
             let arrived = Try/run(Io/read(Proc/stdin, 64))!;
             match arrived
             | success(bytes(leaf)) =>

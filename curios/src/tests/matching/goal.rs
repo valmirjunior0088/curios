@@ -11,7 +11,7 @@ fn a_default_arm_is_allowed_on_an_indexed_family() {
         | nil() : (0)
         | cons(@n : Nat, head : T, tail : Vec(T)(n)) : (n + 1)
         end
-        let head_or(@T : Type, @n : Nat, v : Vec(T)(n), fallback : T) -> T =
+        let head_or(@T : Type, @n : Nat, v : Vec(T)(n), fallback : T) -> T =>
             match v
             | cons(@m, x, xs) => x
             | _ => fallback
@@ -37,7 +37,7 @@ fn a_hypothesis_typed_by_the_scrutinee_needs_no_convoy() {
         | more(c: Byte, st: Scan, t: Bytes, rest: Utf8(step(c, st), t)): (st, 0x[c, ..t])
         end
 
-        let dv(s : Scan, @b : Bytes, d : Utf8(s, b)) -> Eq()(0, 0) =
+        let dv(s : Scan, @b : Bytes, d : Utf8(s, b)) -> Eq()(0, 0) =>
             match s
             | lead() => match d | stop() => Eq/refl() | more(c, _, t, rest) => dv(step(c, Scan/lead()), rest) end
             | cont(_, _, _) => match d | more(c, _, _, rest) => dv(step(c, s), rest) end
@@ -58,18 +58,18 @@ fn a_match_over_an_expression_reaches_a_guard_behind_a_let() {
     let source = r#"
         use /std/{Nat, Bool, Byte};
         use /std/Bool/{True, Holds};
-        let ladder(c : Byte) -> Bool =
+        let ladder(c : Byte) -> Bool =>
             let m = Byte/to_nat(c);
             match m < 1 | true => true | false => match Nat/in_range(m, 3, 5) | true => true | false => true end end;
-        let climbs(c : Byte) -> Holds(ladder(c)) =
+        let climbs(c : Byte) -> Holds(ladder(c)) =>
             match Byte/to_nat(c) < 1
             | true => True/qed()
             | false => match Nat/in_range(Byte/to_nat(c), 3, 5) | true => True/qed() | false => True/qed() end
             end;
-        let aliased(n : Nat) -> Bool =
+        let aliased(n : Nat) -> Bool =>
             let m = n;
             match Nat/in_range(m, 0, 1) | true => true | false => match Nat/in_range(m, 3, 5) | true => true | false => true end end;
-        let climbs_aliased(n : Nat) -> Holds(aliased(n)) =
+        let climbs_aliased(n : Nat) -> Holds(aliased(n)) =>
             match Nat/in_range(n, 0, 1)
             | true => True/qed()
             | false => match Nat/in_range(n, 3, 5) | true => True/qed() | false => True/qed() end
@@ -86,8 +86,8 @@ fn a_match_over_an_expression_reaches_an_occurrence_behind_a_definition() {
     let source = r#"
         use /std/{Nat, Bool};
         use /std/Bool/{True, Holds};
-        let below(n : Nat) -> Bool = match n < 5 | true => true | false => n < 10 end;
-        let bounded(n : Nat, h : Holds(n < 10)) -> Holds(below(n)) =
+        let below(n : Nat) -> Bool => match n < 5 | true => true | false => n < 10 end;
+        let bounded(n : Nat, h : Holds(n < 10)) -> Holds(below(n)) =>
             match n < 5
             | true => True/qed()
             | false => h
@@ -103,7 +103,7 @@ fn a_match_over_an_expression_reaches_an_occurrence_behind_a_definition() {
 fn a_match_over_an_expression_specializes_a_goal_that_writes_it() {
     let source = r#"
         use /std/{Nat, Bool};
-        let pick(n : Nat) -> match n < 5 | true => Nat | false => Bool end =
+        let pick(n : Nat) -> match n < 5 | true => Nat | false => Bool end =>
             match n < 5
             | true => 3
             | false => true
@@ -120,8 +120,8 @@ fn a_match_over_an_expression_refuses_an_arm_whose_goal_fails() {
     let source = r#"
         use /std/{Nat, Bool};
         use /std/Bool/{True, Holds};
-        let below(n : Nat) -> Bool = match n < 5 | true => true | false => n < 10 end;
-        let unbounded(n : Nat) -> Holds(below(n)) =
+        let below(n : Nat) -> Bool => match n < 5 | true => true | false => n < 10 end;
+        let unbounded(n : Nat) -> Holds(below(n)) =>
             match n < 5
             | true => True/qed()
             | false => True/qed()
@@ -142,12 +142,12 @@ fn a_case_split_whose_goal_holds_a_proof_about_its_scrutinee_needs_no_convoy() {
         use /std/{Nat, Bytes, List, Eq};
         use /std/Bool/{Holds};
         let at_bytes(a : Bytes, i : Nat, q : Holds(i < Bytes/length(a)))
-            -> Eq()(Bytes/get(a, i, @q), Bytes/get(a, i, @q)) =
+            -> Eq()(Bytes/get(a, i, @q), Bytes/get(a, i, @q)) =>
             match a | 0x[] => Eq/refl() | 0x[_, .._] => Eq/refl() end;
         let at_list(@T : Type, xs : List(T), i : Nat, q : Holds(i < List/length(xs)))
-            -> Eq()(List/get(@T, xs, i, @q), List/get(@T, xs, i, @q)) =
+            -> Eq()(List/get(@T, xs, i, @q), List/get(@T, xs, i, @q)) =>
             match xs | [] => Eq/refl() | [_, .._] => Eq/refl() end;
-        let byte_of(n : Nat, q : Holds(n < 256)) -> Eq()(Nat/to_byte(n, @q), Nat/to_byte(n, @q)) =
+        let byte_of(n : Nat, q : Holds(n < 256)) -> Eq()(Nat/to_byte(n, @q), Nat/to_byte(n, @q)) =>
             match n | 0 => Eq/refl() | p + 1 => Eq/refl() end;
         /std/print("ok")
         "#;
@@ -161,8 +161,8 @@ fn an_arms_goal_that_eliminates_its_scrutinee_is_a_result_a_match_may_store() {
     let variable = r#"
         use /std/{Nat, Bool, proved};
         use /std/Bool/{True, Holds};
-        let g(c : Bool, @ok : Holds(c)) -> Nat = 1;
-        let f(c : Bool, k : Nat) -> Holds((match c | true => g(c, @True/qed()) | false => 0 end) <= 1) =
+        let g(c : Bool, @ok : Holds(c)) -> Nat => 1;
+        let f(c : Bool, k : Nat) -> Holds((match c | true => g(c, @True/qed()) | false => 0 end) <= 1) =>
             match c
             | true => proved()
             | false => match k | 0 => True/qed() | _ + 1 => True/qed() end
@@ -172,8 +172,8 @@ fn an_arms_goal_that_eliminates_its_scrutinee_is_a_result_a_match_may_store() {
     let call = r#"
         use /std/{Nat, Bool, proved};
         use /std/Bool/{True, Holds};
-        let g(c : Bool, @ok : Holds(c)) -> Nat = 1;
-        let f(p : (Nat) -> Bool, n : Nat, k : Nat) -> Holds((match p(n) | true => g(p(n), @True/qed()) | false => 0 end) <= 1) =
+        let g(c : Bool, @ok : Holds(c)) -> Nat => 1;
+        let f(p : (Nat) -> Bool, n : Nat, k : Nat) -> Holds((match p(n) | true => g(p(n), @True/qed()) | false => 0 end) <= 1) =>
             match p(n)
             | true => proved()
             | false => match k | 0 => True/qed() | _ + 1 => True/qed() end
@@ -193,7 +193,7 @@ fn a_match_nothing_expects_over_a_proposition_is_decided_by_the_proofs_in_its_ar
     let source = r#"
         use /std/Bool/{True};
         induct Two: Prop | a() | b() end
-        let chosen(t: Two) -> True =
+        let chosen(t: Two) -> True =>
             let r = match t | a() => True/qed() | b() => True/qed() end;
             r;
         let _ : True = chosen(Two/a());
@@ -209,7 +209,7 @@ fn a_match_nothing_expects_over_a_proposition_is_refused_where_its_arms_are_data
     let source = r#"
         use /std/{Nat};
         induct Two: Prop | a() | b() end
-        let chosen(t: Two, n: Nat) -> Nat =
+        let chosen(t: Two, n: Nat) -> Nat =>
             let r = match t | a() => n | b() => n end;
             r;
         /std/print(Nat/to_str(chosen(Two/a(), 3)))
@@ -236,7 +236,7 @@ fn a_goal_that_is_a_match_takes_the_sort_its_arms_decide() {
     let inversion = fill!(
         r#"${declared}
         let unconsed(@T: Type, @P: Prop, @x: T, @m: List(T), i: In()(x, m))
-            -> match m | [] => True | [k, ..r] => (head: (Eq()(x, k)) -> P, tail: (In()(x, r)) -> P) -> P end =
+            -> match m | [] => True | [k, ..r] => (head: (Eq()(x, k)) -> P, tail: (In()(x, r)) -> P) -> P end =>
             match i
             | here() => (head, _) => head(Eq/refl())
             | there(rest) => (_, tail) => tail(rest)
@@ -247,7 +247,7 @@ fn a_goal_that_is_a_match_takes_the_sort_its_arms_decide() {
     );
     let data = fill!(
         r#"${declared}
-        let position(@T: Type, @x: T, @m: List(T), i: In()(x, m)) -> match m | [] => Nat | [k, ..r] => Nat end =
+        let position(@T: Type, @x: T, @m: List(T), i: In()(x, m)) -> match m | [] => Nat | [k, ..r] => Nat end =>
             match i
             | here() => 0
             | there(rest) => 1
@@ -275,7 +275,7 @@ fn an_unnamed_binder_a_shown_term_mentions_is_named_in_the_goals_scope() {
         | nil(): (0)
         | cons(@m: Nat, x: T, xs: Vec(T)(m)): (m + 1)
         end
-        pub let append(@T: Type, @n: Nat, @k: Nat, v: Vec(T)(n), w: Vec(T)(k)) -> Vec(T)(n + k) =
+        pub let append(@T: Type, @n: Nat, @k: Nat, v: Vec(T)(n), w: Vec(T)(k)) -> Vec(T)(n + k) =>
             match v | nil() => w | cons(x, xs) => ? end;
         /std/print("")
         "#,
@@ -297,7 +297,7 @@ fn an_unnamed_binder_is_offered_as_no_fit() {
         pub induct Tagged: Type
         | tagged(@n: Nat, v: Nat)
         end
-        pub let value(t: Tagged) -> Nat =
+        pub let value(t: Tagged) -> Nat =>
             match t | tagged(v) => ? end;
         /std/print("")
         "#,

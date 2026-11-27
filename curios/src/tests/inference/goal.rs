@@ -10,7 +10,7 @@ fn a_goal_in_a_local_let_annotation_is_reported() {
     let source = r#"
         use /std/{Nat};
 
-        let g(x : Nat) -> Nat =
+        let g(x : Nat) -> Nat =>
             let y : ? = x + 1;
             y;
 
@@ -43,12 +43,12 @@ fn a_goal_as_a_scrutinee_or_a_guard_is_reported_at_the_type_its_arms_name() {
     let source = r#"
         use /std/{Bool, Bytes, List, Nat, Option};
 
-        let a(k: Nat) -> Nat = match ? | true => k | false => 0 end;
-        let b(o: Option(Nat)) -> Nat = match o | some(k), ? => k | _ => 0 end;
-        let c(o: Option(Nat)) -> Nat = match o | some(k), k > 2, ? => k | _ => 0 end;
-        let d(k: Nat) -> Nat = match ? | 0 => k | _ + 1 => 0 end;
-        let e(k: Nat) -> Nat = match ? | 0x[] => k | 0x[_, .._] => 0 end;
-        let f(k: Nat) -> Nat = match ? | [] => k | [_, .._] => 0 end;
+        let a(k: Nat) -> Nat => match ? | true => k | false => 0 end;
+        let b(o: Option(Nat)) -> Nat => match o | some(k), ? => k | _ => 0 end;
+        let c(o: Option(Nat)) -> Nat => match o | some(k), k > 2, ? => k | _ => 0 end;
+        let d(k: Nat) -> Nat => match ? | 0 => k | _ + 1 => 0 end;
+        let e(k: Nat) -> Nat => match ? | 0x[] => k | 0x[_, .._] => 0 end;
+        let f(k: Nat) -> Nat => match ? | [] => k | [_, .._] => 0 end;
 
         /std/print("unreachable\n")
         "#;

@@ -24,7 +24,7 @@ end
 let said: Str = Spoken/spoken(Tone/hush());
 
 satisfy Spoken(Tone) {
-    spoken(_) = "hush",
+    spoken(_) => "hush",
 }
 "#;
 

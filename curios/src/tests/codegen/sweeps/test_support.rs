@@ -2,7 +2,7 @@
 
 pub const JUMPS: &str = r#"
 use /std/{Nat, Bool, Option, List, Proc};
-let walk(n: Nat, acc: Nat) -> Nat =
+let walk(n: Nat, acc: Nat) -> Nat =>
     match n
     | 0 => acc
     | k + 1 =>
@@ -12,7 +12,7 @@ let walk(n: Nat, acc: Nat) -> Nat =
         let y = match b | some(y) => y | none() => acc end;
         walk(k, (x + y) % 65537)
     end;
-let entry() -> /std/Io({}) =
+let entry() -> /std/Io({}) =>
     let n = List/length(Proc/args()!);
     /std/print(Nat/to_str(walk(n, 0)));
 entry()
@@ -20,11 +20,11 @@ entry()
 
 pub const WORKERS: &str = r#"
 use /std/{Nat, List, Proc};
-let left(n: Nat, pair: {Nat, Nat}) -> Nat =
+let left(n: Nat, pair: {Nat, Nat}) -> Nat =>
     match n | 0 => pair.0 + pair.1 | k + 1 => left(k, (pair.1, (pair.0 + pair.1) % 65537)) + 1 end;
-let right(n: Nat, pair: {Nat, Nat}) -> Nat =
+let right(n: Nat, pair: {Nat, Nat}) -> Nat =>
     match n | 0 => pair.0 + pair.1 | k + 1 => right(k, ((pair.0 + pair.1) % 65537, pair.0)) + 2 end;
-let entry() -> /std/Io({}) =
+let entry() -> /std/Io({}) =>
     let n = List/length(Proc/args()!);
     /std/print(Nat/to_str(left(n, (n, 1)) + right(n, (n, 2))));
 entry()
@@ -32,7 +32,7 @@ entry()
 
 pub const UNCURRY_INDEPENDENT: &str = r#"
 use /std/{Nat, List, Proc};
-let left(n: Nat) -> (Nat) -> Nat =
+let left(n: Nat) -> (Nat) -> Nat =>
     match n
     | 0 => (s) => (s * 7 + 13) % 30011
     | k + 1 => (s) =>
@@ -41,7 +41,7 @@ let left(n: Nat) -> (Nat) -> Nat =
         let c = (b * 3 + 19) % 30011;
         left(k)(c)
     end;
-let right(n: Nat) -> (Nat) -> Nat =
+let right(n: Nat) -> (Nat) -> Nat =>
     match n
     | 0 => (s) => (s * 3 + 11) % 30013
     | k + 1 => (s) =>
@@ -50,7 +50,7 @@ let right(n: Nat) -> (Nat) -> Nat =
         let c = (b * 5 + 23) % 30013;
         right(k)(c)
     end;
-let entry() -> /std/Io({}) =
+let entry() -> /std/Io({}) =>
     let n = List/length(Proc/args()!);
     /std/print(Nat/to_str(left(n)(1) + right(n)(2)));
 entry()
@@ -59,7 +59,7 @@ entry()
 pub const CALLS: &str = r#"
 use /std/{Nat, List, Proc};
 induct Side: Type | left(Nat) | right(Nat) end
-let left(side: Side) -> Nat =
+let left(side: Side) -> Nat =>
     let a = match side | left(x) => x | right(x) => x + 1 end;
     let b = a * 3 % 65537;
     let c = b * 5 % 65537;
@@ -67,7 +67,7 @@ let left(side: Side) -> Nat =
     let e = d * 11 % 65537;
     let f = e * 13 % 65537;
     f * 17 % 65537;
-let right(side: Side) -> Nat =
+let right(side: Side) -> Nat =>
     let a = match side | left(x) => x + 2 | right(x) => x end;
     let b = a * 5 % 65539;
     let c = b * 7 % 65539;
@@ -75,7 +75,7 @@ let right(side: Side) -> Nat =
     let e = d * 13 % 65539;
     let f = e * 17 % 65539;
     f * 19 % 65539;
-let entry() -> /std/Io({}) =
+let entry() -> /std/Io({}) =>
     let n = List/length(Proc/args()!);
     let a = left(Side/left(n));
     let b = left(Side/right(n));
@@ -89,11 +89,11 @@ entry()
 
 pub const SCCS: &str = r#"
 use /std/{Nat, List, Proc};
-let walk(op: (Nat) -> Nat, n: Nat, acc: Nat) -> Nat =
+let walk(op: (Nat) -> Nat, n: Nat, acc: Nat) -> Nat =>
     match n | 0 => acc | k + 1 => op(walk(op, k, (acc + n) % 65537)) end;
-let up(n: Nat) -> Nat = (n + 1) % 65537;
-let down(n: Nat) -> Nat = (n * 3 + 2) % 65537;
-let entry() -> /std/Io({}) =
+let up(n: Nat) -> Nat => (n + 1) % 65537;
+let down(n: Nat) -> Nat => (n * 3 + 2) % 65537;
+let entry() -> /std/Io({}) =>
     let n = List/length(Proc/args()!);
     /std/print(Nat/to_str(walk(up, n, 0) + walk(down, n, 1)));
 entry()

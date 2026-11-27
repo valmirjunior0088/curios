@@ -145,7 +145,7 @@ fn a_broken_last_item_reports_itself_rather_than_the_missing_tail() {
 /// A private `let` read to the end of its first member's body is a declaration and nothing else, so the `;` it owes is its own to report, and the items around it are still read.
 #[test]
 fn a_private_let_that_fails_at_its_semicolon_costs_one_item() {
-    for failing in ["let b(n : Nat) -> Nat = n +;\n", "let b : Nat = 1\n"] {
+    for failing in ["let b(n : Nat) -> Nat => n +;\n", "let b : Nat = 1\n"] {
         let items = items(&format!("let a : Nat = 1;\n{failing}let c : Nat = 3;\n"));
 
         let [first, second, third] = items.as_slice() else {
@@ -191,7 +191,7 @@ fn a_private_concept_broken_past_its_label_costs_one_item() {
 /// `concept` stays a contextual word: a program whose tail calls a function of that name holds no broken concept.
 #[test]
 fn a_tail_that_calls_a_function_named_concept_is_still_a_tail() {
-    let entrypoint = "let concept(n : Nat) -> Nat = n;\nconcept(1)"
+    let entrypoint = "let concept(n : Nat) -> Nat => n;\nconcept(1)"
         .parse::<Entrypoint>()
         .unwrap();
 

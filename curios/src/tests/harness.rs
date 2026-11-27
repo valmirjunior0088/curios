@@ -21,14 +21,14 @@ fn the_description_schedules_every_rung() {
         run_tests_program(
             r#"
         use /std/{Nat, Str, Io, Test};
-        let double(n: Nat) -> Nat = n * 2;
-        test a_bool = Test/assert("one and one are two", 1 + 1 == 2);
-        test doubling = Test/equal(double(21), 42);
-        test a_failing_equal = Test/equal(double(2), 5);
-        test an_action =
+        let double(n: Nat) -> Nat => n * 2;
+        test a_bool => Test/assert("one and one are two", 1 + 1 == 2);
+        test doubling => Test/equal(double(21), 42);
+        test a_failing_equal => Test/equal(double(2), 5);
+        test an_action =>
             let s = Io/pure("x")!;
             Test/equal(s, "x");
-        test a_failing_action =
+        test a_failing_action =>
             let _ = Io/pure(())!;
             Test/assert("the action's check fails", false);
         ()
@@ -45,14 +45,14 @@ fn try_runs_a_fallible_action_and_fails_with_the_error_shown() {
         run_tests_program(
             r#"
         use /std/{Nat, Str, Io, Try, Path, fs, Test};
-        let exists() -> Try(Io, Io/Error, Test({})) =
+        let exists() -> Try(Io, Io/Error, Test({})) =>
             let here = fs/exists(Path/of_str("data"))!;
             Try/pure(Test/assert("the file is absent", here == false));
-        let missing() -> Try(Io, Io/Error, Test({})) =
+        let missing() -> Try(Io, Io/Error, Test({})) =>
             let m = fs/stat(Path/of_str("nope"))!;
             Try/pure(Test/assert("the stat answered", true));
-        test an_absent_file = Test/try(exists);
-        test a_missing_file = Test/try(missing);
+        test an_absent_file => Test/try(exists);
+        test a_missing_file => Test/try(missing);
         ()
         "#
         ),
@@ -66,8 +66,8 @@ fn an_index_argument_selects_one_test() {
     let (module, foreigns) = test_program(
         r#"
         use /std/{Nat, Test};
-        test first = Test/assert("the first test holds", true);
-        test second = Test/equal(1 + 1, 3);
+        test first => Test/assert("the first test holds", true);
+        test second => Test/equal(1 + 1, 3);
         ()
         "#,
     )
@@ -114,7 +114,7 @@ fn spelled_strings_are_quoted_and_escaped() {
         run_tests_program(
             r#"
         use /std/{Str, Test};
-        test newline = Test/equal("a\n", "a");
+        test newline => Test/equal("a\n", "a");
         ()
         "#
         ),
@@ -129,14 +129,14 @@ fn a_conjunction_takes_the_weakest_rung_and_reports_every_failure() {
         run_tests_program(
             r#"
         use /std/{Nat, Str, Io, Test};
-        let counter() -> Test({}) =
+        let counter() -> Test({}) =>
             let _ = /std/print("performed\n")!;
             Test/assert("the counter ran", true);
-        test passing = Test/all([Test/equal(1, 1), Test/equal(2, 2)]);
-        test empty = Test/all([]);
-        test first_failure = Test/all([Test/assert("the first case holds", true), Test/equal(2, 3), Test/equal(4, 5)]);
-        test action_then_check = Test/all([counter(), Test/assert("the check after the action holds", true)]);
-        test failure_before_action = Test/all([Test/assert("the first case fails", false), counter()]);
+        test passing => Test/all([Test/equal(1, 1), Test/equal(2, 2)]);
+        test empty => Test/all([]);
+        test first_failure => Test/all([Test/assert("the first case holds", true), Test/equal(2, 3), Test/equal(4, 5)]);
+        test action_then_check => Test/all([counter(), Test/assert("the check after the action holds", true)]);
+        test failure_before_action => Test/all([Test/assert("the first case fails", false), counter()]);
         ()
         "#
         ),
@@ -151,7 +151,7 @@ fn a_failure_is_reported_under_every_step_that_reached_it() {
         run_tests_program(
             r#"
         use /std/{Nat, Test};
-        test nested =
+        test nested =>
             Test/step("parsing", Test/step("headers", Test/all([Test/equal(1, 1), Test/equal(2, 3)])));
         ()
         "#
@@ -167,14 +167,14 @@ fn a_declared_test_applied_to_a_table_is_one_test() {
         run_tests_program(
             r#"
         use /std/{Nat, Str, List, Io, Test};
-        let add_commutes(n: Nat, m: Nat) -> Test({}) =
+        let add_commutes(n: Nat, m: Nat) -> Test({}) =>
             Test/assert("addition commutes", n + m == m + n);
-        let small(n: Nat) -> Test({}) =
+        let small(n: Nat) -> Test({}) =>
             Test/assert("the case is small", n < 3);
         let cases: List({Nat, Nat}) = [(1, 2), (3, 4)];
-        test table =
+        test table =>
             Test/all(List/map(cases, ((a, b)) => add_commutes(a, b)));
-        test failing_table =
+        test failing_table =>
             Test/all(List/map([0, 1, 5], small));
         /std/print("ran\n")
         "#
@@ -204,9 +204,9 @@ fn numerals_and_booleans_spell_as_their_literals() {
     assert_eq!(
         run(r#"
         use /std/{Nat, Int, Bool, Str, Io, Spell, print};
-        let line(s: Str) -> Io({}) = print(Str/concat(s, "\n"));
+        let line(s: Str) -> Io({}) => print(Str/concat(s, "\n"));
         let i: Int = 3;
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let _ = line(Spell/spell(42))!;
             let _ = line(Spell/spell(-7))!;
             let _ = line(Spell/spell(i))!;
@@ -226,8 +226,8 @@ fn floats_and_their_non_finite_values_spell_as_literals() {
     assert_eq!(
         run(r#"
         use /std/{Flt, Str, Io, Spell, print};
-        let line(s: Str) -> Io({}) = print(Str/concat(s, "\n"));
-        let entry() -> /std/Io({}) =
+        let line(s: Str) -> Io({}) => print(Str/concat(s, "\n"));
+        let entry() -> /std/Io({}) =>
             let _ = line(Spell/spell(2.5))!;
             let _ = line(Spell/spell(-2.5))!;
             let _ = line(Spell/spell(100.0))!;
@@ -252,8 +252,8 @@ fn text_spells_quoted_and_escaped() {
     assert_eq!(
         run(r#"
         use /std/{Char, Str, Io, Spell, print};
-        let line(s: Str) -> Io({}) = print(Str/concat(s, "\n"));
-        let entry() -> /std/Io({}) =
+        let line(s: Str) -> Io({}) => print(Str/concat(s, "\n"));
+        let entry() -> /std/Io({}) =>
             let _ = line(Spell/spell('c'))!;
             let _ = line(Spell/spell('\n'))!;
             let _ = line(Spell/spell("a\"b\n"))!;
@@ -269,8 +269,8 @@ fn sequences_spell_as_their_bracketed_literals() {
     assert_eq!(
         run(r#"
         use /std/{Nat, Str, Bytes, List, Io, Spell, print};
-        let line(s: Str) -> Io({}) = print(Str/concat(s, "\n"));
-        let entry() -> /std/Io({}) =
+        let line(s: Str) -> Io({}) => print(Str/concat(s, "\n"));
+        let entry() -> /std/Io({}) =>
             let _ = line(Spell/spell(0x[72, 255]))!;
             let _ = line(Spell/spell([1, 2, 3]))!;
             Io/pure(());
@@ -286,8 +286,8 @@ fn structural_values_spell_as_type_qualified_constructor_paths() {
     assert_eq!(
         run(r#"
         use /std/{Nat, Str, Option, Result, Ordering, Io, Spell, print};
-        let line(s: Str) -> Io({}) = print(Str/concat(s, "\n"));
-        let entry() -> /std/Io({}) =
+        let line(s: Str) -> Io({}) => print(Str/concat(s, "\n"));
+        let entry() -> /std/Io({}) =>
             let _ = line(Spell/spell(Option/some(3)))!;
             let _ = line(Spell/spell(Option/none(@Nat)))!;
             let _ = line(Spell/spell(Result/failure(@Str, @Nat, "why")))!;
@@ -306,7 +306,7 @@ fn a_structural_fixture_compares_and_spells() {
         run_tests_program(
             r#"
         use /std/{Nat, Option, Test};
-        test options = Test/equal(Option/some(3), Option/some(4));
+        test options => Test/equal(Option/some(3), Option/some(4));
         ()
         "#
         ),
@@ -320,7 +320,7 @@ fn a_test_declaration_compiles_beside_the_entry() {
     assert_eq!(
         run(r#"
         use /std/{Nat, Str, Io, Test};
-        test the_answer_holds =
+        test the_answer_holds =>
             Test/assert("the answer holds", 42 == 42);
         /std/print("ran\n")
         "#),
@@ -334,7 +334,7 @@ fn a_test_body_is_checked_against_the_description_type() {
     let error = tests_error(
         r#"
         use /std/{Nat, Str, Io, Test};
-        test nope =
+        test nope =>
             42;
         /std/print("ran\n")
         "#,
@@ -347,8 +347,8 @@ fn a_test_body_is_checked_against_the_description_type() {
 fn a_test_program_is_judged_and_a_build_holds_none_of_its_tests() {
     let source = r#"
         use /std/{Nat, List, Test};
-        test judged =
-            let r(n: Nat) -> Nat =
+        test judged =>
+            let r(n: Nat) -> Nat =>
                 match n
                 | 0 => 0
                 | _ + 1 => List/get([1, 2, 3], r(0))
@@ -374,7 +374,7 @@ fn a_test_body_sequences_assertions_and_lifted_io() {
         run_tests_program(
             r#"
         use /std/{Nat, Io, Test, print};
-        test t =
+        test t =>
             let n = Test/pure(21)!;
             let _ = Test/assert("twenty-one doubles to forty-two", n * 2 == 42)!;
             let _ = print("before|")!;
@@ -406,9 +406,9 @@ fn declared_tests_schedule_through_the_synthesized_tail() {
         use /std/{Nat, Str, Io, Eq, Test};
         mod checks
             use /std/{Nat, Test};
-            test addition_holds = Test/assert("one and one are two", 1 + 1 == 2);
+            test addition_holds => Test/assert("one and one are two", 1 + 1 == 2);
         end
-        test the_answer_holds = Test/assert("twenty-one doubled is forty-two", 21 * 2 == 42);
+        test the_answer_holds => Test/assert("twenty-one doubled is forty-two", 21 * 2 == 42);
         /std/print("ran\n")
         "#
         ),
@@ -429,18 +429,18 @@ fn a_selection_schedules_the_tests_at_or_under_any_of_its_prefixes() {
     // A whole segment at a time: `/Map` selects `/Map` and what is under it, and never `/MapBuilder`. What the tail does not schedule is still declared, and each prefix that selects nothing is named, for a selection meeting nothing to be refused with the paths nearest it.
     let entrypoint = r#"
         use /std/{Test};
-        test Map = Test/assert("it holds", true);
+        test Map => Test/assert("it holds", true);
         mod Map
             use /std/{Test};
-            test inner = Test/assert("it holds", true);
+            test inner => Test/assert("it holds", true);
         end
         mod MapBuilder
             use /std/{Test};
-            test beside = Test/assert("it holds", true);
+            test beside => Test/assert("it holds", true);
         end
         mod Set
             use /std/{Test};
-            test member = Test/assert("it holds", true);
+            test member => Test/assert("it holds", true);
         end
         ()
         "#
@@ -506,7 +506,7 @@ fn the_ordinary_program_holds_no_test_the_test_program_keeps() {
     // The same unit compiles to two programs: the ordinary one is built and holds none of its tests, and the test program's is tested and its tail references every one, which is what keeps them.
     let source = r#"
         use /std/{Nat, Str, Io, Test};
-        test the_answer_holds = Test/assert("the answer holds", 42 == 42);
+        test the_answer_holds => Test/assert("the answer holds", 42 == 42);
         /std/print("ran\n")
         "#;
     assert!(!survives(&anf_optm(source), "/the_answer_holds"));
@@ -521,7 +521,7 @@ fn a_test_program_schedules_only_the_tested_units_tests() {
         unit.insert_root(
             prefix,
             RootKind::Ordinary,
-            format!("use /std/{{Test}};\n\ntest {test} =\n    Test/assert(\"it holds\", true);\n")
+            format!("use /std/{{Test}};\n\ntest {test} =>\n    Test/assert(\"it holds\", true);\n")
                 .parse()
                 .expect("the unit parses"),
         );
@@ -549,9 +549,10 @@ fn a_test_program_schedules_only_the_tested_units_tests() {
         ["/library/the_library_holds"]
     );
 
-    let program = "use /std/{Test};\ntest the_program_holds = Test/assert(\"it holds\", true);\n()"
-        .parse::<Entrypoint>()
-        .expect("the program parses");
+    let program =
+        "use /std/{Test};\ntest the_program_holds => Test/assert(\"it holds\", true);\n()"
+            .parse::<Entrypoint>()
+            .expect("the program parses");
     let built = [
         unit("dependency", "the_dependency_holds"),
         unit("library", "the_library_holds"),
@@ -568,7 +569,7 @@ fn a_test_that_waits_on_nothing_exits_one_beside_the_deadlock_line() {
     let (module, foreigns) = test_program(
         r#"
         use /std/{Io, Test};
-        test waits_forever =
+        test waits_forever =>
             let _ = Io/select(@{}, [])!;
             Test/pure(());
         ()
@@ -591,8 +592,8 @@ fn a_test_that_waits_on_nothing_exits_one_beside_the_deadlock_line() {
 fn a_test_compilation_names_the_runner_no_more_than_a_build_does() {
     let source = r#"
         use /std/{Io, Test};
-        let schedule() -> Io({}) = /test/main([]);
-        test holds = Test/pure(());
+        let schedule() -> Io({}) => /test/main([]);
+        test holds => Test/pure(());
         ()
         "#;
 

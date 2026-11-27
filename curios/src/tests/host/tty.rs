@@ -7,7 +7,7 @@ use {crate::test_support::*, curios_native::test_support::*};
 fn size_reads_the_scripted_dimensions_and_reports_no_terminal_otherwise() {
     let source = r#"
         use /std/{Str, Nat, Show, Try, Io, Tty};
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             match Try/run(Try/scope((s) => Try/bind(Tty/open(s), Tty/size)))!
             | success(s) => /std/print(Show/show(s))
             | failure(e) => match e | other(n) => /std/print(Str/concat("other ", Nat/to_str(n))) | _ => /std/print("error") end
@@ -29,7 +29,7 @@ fn size_reads_the_scripted_dimensions_and_reports_no_terminal_otherwise() {
 fn a_size_past_the_i31_crosses_back_whole() {
     let source = r#"
         use /std/{Show, Try, Io, Tty};
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             match Try/run(Try/scope((s) => Try/bind(Tty/open(s), Tty/size)))!
             | success(s) => /std/print(Show/show(s))
             | failure(e) => /std/print(Show/show(e))
@@ -49,11 +49,11 @@ fn a_size_past_the_i31_crosses_back_whole() {
 fn raw_mode_lasts_the_scope_and_is_restored_as_it_ends() {
     let source = r#"
         use /std/{Nat, Show, Try, Io, Tty};
-        let taken(s: Io/Scope) -> Try(Io, Io/Error, Nat) =
+        let taken(s: Io/Scope) -> Try(Io, Io/Error, Nat) =>
             let t = Tty/open(s)!;
             let _ = Tty/raw(s, t, 0x['<', 'l', '>'])!;
             Try/pure(7);
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             match Try/run(Try/scope(taken))!
             | success(n) => /std/print(Nat/to_str(n))
             | failure(e) => /std/print(Show/show(e))
@@ -74,11 +74,11 @@ fn raw_mode_is_restored_after_a_failing_body_and_refused_without_a_terminal() {
         use /std/{Nat, Show, Try, Io, Tty};
         let body: Try(Io, Io/Error, Nat) =
             Try/raise(Io/Error/connection_refused());
-        let taken(s: Io/Scope) -> Try(Io, Io/Error, Nat) =
+        let taken(s: Io/Scope) -> Try(Io, Io/Error, Nat) =>
             let t = Tty/open(s)!;
             let _ = Tty/raw(s, t, 0x[])!;
             body;
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             match Try/run(Try/scope(taken))!
             | success(n) => /std/print(Nat/to_str(n))
             | failure(e) => /std/print(Show/show(e))
@@ -102,12 +102,12 @@ fn raw_mode_is_restored_after_a_failing_body_and_refused_without_a_terminal() {
 fn raw_mode_lasts_across_a_body_that_suspends() {
     let source = r#"
         use /std/{Nat, Show, Try, Io, Tty};
-        let taken(s: Io/Scope) -> Try(Io, Io/Error, Nat) =
+        let taken(s: Io/Scope) -> Try(Io, Io/Error, Nat) =>
             let t = Tty/open(s)!;
             let _ = Tty/raw(s, t, 0x[])!;
             let _ = Io/yield()!;
             Try/pure(7);
-        let program() -> Io({}) =
+        let program() -> Io({}) =>
             let r = Try/run(Try/scope(taken))!;
             match r
             | success(n) => /std/print(Nat/to_str(n))
@@ -127,14 +127,14 @@ fn raw_mode_lasts_across_a_body_that_suspends() {
 fn the_terminal_is_read_and_written_as_a_stream() {
     let source = r#"
         use /std/{Show, Try, Io, Tty};
-        let echoed(s: Io/Scope) -> Try(Io, Io/Error, {}) =
+        let echoed(s: Io/Scope) -> Try(Io, Io/Error, {}) =>
             let t = Tty/open(s)!;
             let chunk = Io/read(t, 8)!;
             match chunk
             | bytes(b) => Io/write(t, 0x['>', ..b])
             | ended() => Io/write(t, 0x['.'])
             end;
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             match Try/run(Try/scope(echoed))!
             | success(_) => Io/pure(())
             | failure(e) => /std/print(Show/show(e))

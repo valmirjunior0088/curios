@@ -6,11 +6,11 @@ use /std/Map/least/{Among};
 use /std/Bool/{False, Holds};
 
 --- The entry of the greatest key, or `none` of the empty map: the one of the last twig that holds any, at every branch down.
-pub let greatest(@K: Type, use Hash/Key(K), @V: Type, m: Map(K, V)) -> Option({K, V}) =
+pub let greatest(@K: Type, use Hash/Key(K), @V: Type, m: Map(K, V)) -> Option({K, V}) =>
     Node/greatest(m.root);
 
 --- That `found` is an entry whose key is at or above `x` in the keys' order.
-pub let Above(@K: Type, use Hash/Key(K), @V: Type, found: Option({K, V}), x: K) -> Prop =
+pub let Above(@K: Type, use Hash/Key(K), @V: Type, found: Option({K, V}), x: K) -> Prop =>
     match found
     | none() => False
     | some(entry) => Holds(Ord/le_by((a: K, b: K) => Ord/ord(a, b))(x, entry.0))
@@ -21,7 +21,7 @@ pub let among(
     use Hash/Key(K),
     @V: Type,
     m: Map(K, V),
-) -> Among(greatest(m), Map/keys(m)) =
+) -> Among(greatest(m), Map/keys(m)) =>
     Eq/subst(
         (l: List(K)) => Among(Node/greatest(m.root), l),
         Eq/sym(Node/collected(m.root, [])),
@@ -35,7 +35,7 @@ pub let above(
     m: Map(K, V),
     x: K,
     i: Member()(x, Map/keys(m)),
-) -> Above(greatest(m), x) =
+) -> Above(greatest(m), x) =>
     Node/greatest_above(
         m.root,
         m.sound,

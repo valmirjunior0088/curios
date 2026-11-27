@@ -20,7 +20,7 @@ use {
 const QUIET: Duration = SETTLE.saturating_mul(4);
 
 /// The declaration a change adds to a module, a keystroke's worth of a definition.
-const PROBE: &str = "\npub let _probe(a: Nat) -> Nat =\n    a;\n";
+const PROBE: &str = "\npub let _probe(a: Nat) -> Nat =>\n    a;\n";
 
 /// The editor's side of the wire: a server of its own, framed JSON-RPC written to it and read back.
 struct Editor {
@@ -206,9 +206,9 @@ impl Case {
                 for module in 0..12 {
                     let declarations = (0..4)
                         .map(|declaration| match declaration % 3 {
-                            0 => format!("\npub let sum_{declaration}(n: Nat) -> Nat = n + {declaration};\n"),
-                            1 => format!("\npub let count_{declaration}(n: Nat) -> Nat =\n    match n\n    | 0 => 0\n    | m + 1 => count_{declaration}(m) + 1\n    end;\n"),
-                            _ => format!("\npub let zero_{declaration}(n: Nat) -> Eq()(n + 0, n) = Eq/refl();\n"),
+                            0 => format!("\npub let sum_{declaration}(n: Nat) -> Nat => n + {declaration};\n"),
+                            1 => format!("\npub let count_{declaration}(n: Nat) -> Nat =>\n    match n\n    | 0 => 0\n    | m + 1 => count_{declaration}(m) + 1\n    end;\n"),
+                            _ => format!("\npub let zero_{declaration}(n: Nat) -> Eq()(n + 0, n) => Eq/refl();\n"),
                         })
                         .collect::<String>();
                     write(

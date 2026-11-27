@@ -8,7 +8,7 @@ fn a_recursive_call_at_the_predecessor_is_typed_there() {
     control(
         r#"
         use /std/{Nat, Vec, List};
-        let bogus(n : Nat) -> Vec(Nat, n) =
+        let bogus(n : Nat) -> Vec(Nat, n) =>
             match n
             | 0 => Vec/nil()
             | k + 1 => Vec/cons(k, bogus(k))
@@ -19,7 +19,7 @@ fn a_recursive_call_at_the_predecessor_is_typed_there() {
     )
     .refused(&[
         ("{Nat, Vec, List}", "{Nat, Eq}"),
-        ("-> Vec(Nat, n) =", "-> Eq()(n, 0) ="),
+        ("-> Vec(Nat, n) =>", "-> Eq()(n, 0) =>"),
         ("| 0 => Vec/nil()", "| 0 => Eq/refl()"),
         ("Vec/cons(k, bogus(k))", "bogus(k)"),
         ("Nat/to_str(List/get(bogus(3).list, 0))", "\"FORGED\""),
@@ -35,7 +35,7 @@ fn a_dispatch_default_is_checked_at_its_scrutinee() {
     control(
         r#"
         use /std/{Nat, Eq};
-        let bogus(n : Nat) -> Eq()(n, n) =
+        let bogus(n : Nat) -> Eq()(n, n) =>
             match n
             | 0 => Eq/refl()
             | _ => Eq/refl()
@@ -44,7 +44,7 @@ fn a_dispatch_default_is_checked_at_its_scrutinee() {
         "#,
         b"ok",
     )
-    .refused(&[("-> Eq()(n, n) =", "-> Eq()(n, 0) =")])
+    .refused(&[("-> Eq()(n, n) =>", "-> Eq()(n, 0) =>")])
     .by_elaborator_in("/bogus", |error| {
         matches!(error, Error::TypeMismatch { .. })
     });
@@ -56,7 +56,7 @@ fn a_boolean_arm_is_checked_at_its_own_case() {
     control(
         r#"
         use /std/{Bool, Eq};
-        let bogus(b : Bool) -> Eq()(Bool/not(Bool/not(b)), b) =
+        let bogus(b : Bool) -> Eq()(Bool/not(Bool/not(b)), b) =>
             match b
             | true => Eq/refl()
             | false => Eq/refl()
@@ -65,7 +65,10 @@ fn a_boolean_arm_is_checked_at_its_own_case() {
         "#,
         b"ok",
     )
-    .refused(&[("-> Eq()(Bool/not(Bool/not(b)), b) =", "-> Eq()(b, true) =")])
+    .refused(&[(
+        "-> Eq()(Bool/not(Bool/not(b)), b) =>",
+        "-> Eq()(b, true) =>",
+    )])
     .by_elaborator_in("/bogus", |error| {
         matches!(error, Error::TypeMismatch { .. })
     });
@@ -77,7 +80,7 @@ fn a_dispatch_literal_arm_is_checked_at_that_literal() {
     control(
         r#"
         use /std/{Nat, Eq};
-        let bogus(n : Nat) -> Eq()(n, n) =
+        let bogus(n : Nat) -> Eq()(n, n) =>
             match n
             | 0 => Eq/refl()
             | 1 => Eq/refl()
@@ -87,7 +90,7 @@ fn a_dispatch_literal_arm_is_checked_at_that_literal() {
         "#,
         b"ok",
     )
-    .refused(&[("-> Eq()(n, n) =", "-> Eq()(n, 0) =")])
+    .refused(&[("-> Eq()(n, n) =>", "-> Eq()(n, 0) =>")])
     .by_elaborator_in("/bogus", |error| {
         matches!(error, Error::TypeMismatch { .. })
     });
@@ -101,14 +104,14 @@ fn a_guard_at_most_does_not_answer_the_strict_comparison() {
         use /std/{Nat};
         use /std/Bool/{True, Holds};
 
-        let strict(x: Nat, y: Nat, h: Holds(x <= y)) -> Holds(x <= y) =
+        let strict(x: Nat, y: Nat, h: Holds(x <= y)) -> Holds(x <= y) =>
             match x <= y | true => True/qed() | false => match h end end;
 
         /std/print(Nat/to_str(0))
         "#,
         b"0",
     )
-    .refused(&[("-> Holds(x <= y) =", "-> Holds(x < y) =")])
+    .refused(&[("-> Holds(x <= y) =>", "-> Holds(x < y) =>")])
     .by_elaborator_in("/strict", |error| {
         matches!(error, Error::TypeMismatch { .. })
     });
@@ -121,13 +124,13 @@ fn a_classing_made_under_an_arms_equation_answers_nothing_after_the_arm() {
         use /std/{Nat, Eq};
         use /std/Bool/{True, Holds};
 
-        let leak(f: (Nat) -> Nat, h: (Nat) -> Nat, x: Nat) -> True =
+        let leak(f: (Nat) -> Nat, h: (Nat) -> Nat, x: Nat) -> True =>
             let warm: Nat = match h(x) | 0 => let seen: Eq()(f(h(x)) - f(0), 0) = Eq/refl(); 0 | k + 1 => 0 end;
             True/qed();
 
         /std/print(Nat/to_str(0))
         "#, b"0")
-        .refused(&[("-> True =", "-> Holds(f(h(x)) - f(0) == 0) =")])
+        .refused(&[("-> True =>", "-> Holds(f(h(x)) - f(0) == 0) =>")])
         .by_elaborator_in("/leak", |error| matches!(error, Error::TypeMismatch { .. }));
 }
 
@@ -138,8 +141,8 @@ fn a_guard_settled_in_a_lambda_inside_a_split_answers_nothing_after_the_split() 
         use /std/{Nat, Bool};
         use /std/Bool/{True, Holds};
 
-        let F(c: Bool) -> Type = match c | true => {} | false => Nat end;
-        let leak(c: Bool, h: (F(c)) -> Nat, k: (Nat) -> Bool, p: F(c), q: F(c), guard: Holds(match h(p) == h(q) | true => k(0) | false => k(1) end)) -> True =
+        let F(c: Bool) -> Type => match c | true => {} | false => Nat end;
+        let leak(c: Bool, h: (F(c)) -> Nat, k: (Nat) -> Bool, p: F(c), q: F(c), guard: Holds(match h(p) == h(q) | true => k(0) | false => k(1) end)) -> True =>
             match (match h(p) == h(q) | true => k(0) | false => k(1) end)
             | false => match guard end
             | true =>
@@ -149,7 +152,7 @@ fn a_guard_settled_in_a_lambda_inside_a_split_answers_nothing_after_the_split() 
 
         /std/print(Nat/to_str(0))
         "#, b"0")
-        .refused(&[(") -> True =\n", ") -> Holds(k(0)) =\n")])
+        .refused(&[(") -> True =>\n", ") -> Holds(k(0)) =>\n")])
         .by_elaborator_in("/leak", |error| matches!(error, Error::TypeMismatch { .. }));
 }
 
@@ -160,8 +163,8 @@ fn a_guard_settled_in_one_arm_of_a_split_answers_nothing_in_the_other() {
         use /std/{Nat, Bool};
         use /std/Bool/{True, Holds};
 
-        let F(c: Bool) -> Type = match c | false => {} | true => Nat end;
-        let leak(c: Bool, h: (F(c)) -> Nat, k: (Nat) -> Bool, p: F(c), q: F(c), guard: Holds(match h(p) == h(q) | true => k(0) | false => k(1) end)) -> True =
+        let F(c: Bool) -> Type => match c | false => {} | true => Nat end;
+        let leak(c: Bool, h: (F(c)) -> Nat, k: (Nat) -> Bool, p: F(c), q: F(c), guard: Holds(match h(p) == h(q) | true => k(0) | false => k(1) end)) -> True =>
             match (match h(p) == h(q) | true => k(0) | false => k(1) end)
             | false => match guard end
             | true =>
@@ -173,7 +176,7 @@ fn a_guard_settled_in_one_arm_of_a_split_answers_nothing_in_the_other() {
 
         /std/print(Nat/to_str(0))
         "#, b"0")
-        .refused(&[(") -> True =\n", ") -> Holds(k(0)) =\n")])
+        .refused(&[(") -> True =>\n", ") -> Holds(k(0)) =>\n")])
         .by_elaborator_in("/leak", |error| matches!(error, Error::TypeMismatch { .. }));
 }
 
@@ -185,7 +188,7 @@ fn a_float_equality_arm_learns_no_equation_of_its_operands() {
         use /std/{Flt, Eq};
         use /std/Bool/{True, Holds};
 
-        let eq_of_eql(a: Flt, b: Flt, h: Holds(Flt/eql(a, b))) -> Holds(Flt/eql(a, b)) =
+        let eq_of_eql(a: Flt, b: Flt, h: Holds(Flt/eql(a, b))) -> Holds(Flt/eql(a, b)) =>
             match Flt/eql(a, b) | true => True/qed() | false => match h end end;
 
         let _same: Holds(Flt/eql(+0.0, -0.0)) = eq_of_eql(+0.0, -0.0, True/qed());
@@ -195,7 +198,7 @@ fn a_float_equality_arm_learns_no_equation_of_its_operands() {
         b"ok",
     )
     .refused(&[
-        ("-> Holds(Flt/eql(a, b)) =", "-> Eq()(a, b) ="),
+        ("-> Holds(Flt/eql(a, b)) =>", "-> Eq()(a, b) =>"),
         ("| true => True/qed()", "| true => Eq/refl()"),
         ("let _same: Holds(Flt/eql(+0.0, -0.0))", "let _forged: Eq()(+0.0, -0.0)"),
     ])
@@ -213,7 +216,7 @@ fn a_false_float_comparison_arm_learns_no_mirror() {
         use /std/{Nat, Bool};
         use /std/Bool/{True, Holds};
 
-        let mirror(a: Nat, b: Nat, h: Holds(Bool/not(Nat/lt(a, b)))) -> Holds(Nat/le(b, a)) =
+        let mirror(a: Nat, b: Nat, h: Holds(Bool/not(Nat/lt(a, b)))) -> Holds(Nat/le(b, a)) =>
             match Nat/lt(a, b) | true => match h end | false => True/qed() end;
 
         let _mirrored: Holds(Nat/le(1, 2)) = mirror(2, 1, True/qed());
@@ -247,7 +250,7 @@ fn a_literal_dispatch_reads_no_float() {
         r#"
         use /std/{Nat};
 
-        let tag(f: Nat) -> Nat = match f | 0 => 1 | _ => 0 end;
+        let tag(f: Nat) -> Nat => match f | 0 => 1 | _ => 0 end;
 
         /std/print(Nat/to_str(tag(0)))
         "#,
@@ -279,7 +282,7 @@ fn a_case_reads_its_own_familys_parameter_in_a_group() {
         | base()
         end
 
-        let f(x: A(1)) -> Nat = match x | mkA(h, _) => 1 end;
+        let f(x: A(1)) -> Nat => match x | mkA(h, _) => 1 end;
 
         let forged: Nat = f(A/mkA(True/qed(), B/base()));
 
@@ -305,8 +308,8 @@ fn a_guard_settled_under_an_inner_arms_equation_answers_nothing_after_that_arm()
         use /std/{Nat, Bool};
         use /std/Bool/{True, Holds};
 
-        let F(c: Bool) -> Type = match c | true => {} | false => Nat end;
-        let leak(g: (Bool) -> Bool, c: Bool, h: (F(g(c))) -> Nat, k: (Nat) -> Bool, p: F(g(c)), q: F(g(c))) -> True =
+        let F(c: Bool) -> Type => match c | true => {} | false => Nat end;
+        let leak(g: (Bool) -> Bool, c: Bool, h: (F(g(c))) -> Nat, k: (Nat) -> Bool, p: F(g(c)), q: F(g(c))) -> True =>
             match (match h(p) == h(q) | true => k(0) | false => k(1) end)
             | true =>
                 let split: {} = match g(c) | false => () | true => let one: Holds(h(p) + h(q) == h(p) + h(p)) = True/qed(); () end;
@@ -329,7 +332,7 @@ fn a_refused_arm_is_not_withdrawn_by_its_siblings_equation() {
         use /std/{Nat, Bool};
         use /std/Bool/{True, False, Holds};
 
-        let w(g: (Bool) -> Bool, e: Bool, h: Holds(g(e))) -> Holds(g(e)) =
+        let w(g: (Bool) -> Bool, e: Bool, h: Holds(g(e))) -> Holds(g(e)) =>
             match g(e)
             | false => let k: Holds(g(e) == false) = True/qed(); match h end
             | true => True/qed()
@@ -339,7 +342,7 @@ fn a_refused_arm_is_not_withdrawn_by_its_siblings_equation() {
         "#,
         b"0",
     )
-    .refused(&[("-> Holds(g(e)) =", "-> False =")])
+    .refused(&[("-> Holds(g(e)) =>", "-> False =>")])
     .by_elaborator_in("/w", |error| matches!(error, Error::TypeMismatch { .. }));
 }
 
@@ -350,8 +353,8 @@ fn a_guard_restated_in_an_inner_arm_is_settled_nowhere_in_it() {
         use /std/{Nat, Bool};
         use /std/Bool/{True, False, Holds};
 
-        let F(c: Bool) -> Type = match c | true => {} | false => Nat end;
-        let f(P: ((Nat) -> Bool) -> Prop, c: Bool, h: (F(c)) -> Nat, k: (Nat) -> Bool, p: F(c), q: F(c), into: (Holds(k(0) || true)) -> P(k)) -> (Holds(match h(p) == h(q) | true => k(0) | false => k(1) end)) -> P(k) =
+        let F(c: Bool) -> Type => match c | true => {} | false => Nat end;
+        let f(P: ((Nat) -> Bool) -> Prop, c: Bool, h: (F(c)) -> Nat, k: (Nat) -> Bool, p: F(c), q: F(c), into: (Holds(k(0) || true)) -> P(k)) -> (Holds(match h(p) == h(q) | true => k(0) | false => k(1) end)) -> P(k) =>
             match (match h(p) == h(q) | true => k(0) | false => k(1) end)
             | true => (_: Holds(true)) =>
                 let split: {} = match c | false => () | true => let inside: Holds(k(0)) = True/qed(); () end;
@@ -381,8 +384,8 @@ fn a_guard_restated_in_a_nested_split_is_settled_nowhere_in_either_arm() {
         use /std/{Nat, Bool};
         use /std/Bool/{True, Holds};
 
-        let F(c: Bool) -> Type = match c | true => {} | false => Nat end;
-        let f(P: ((Nat) -> Bool) -> Prop, c: Bool, d: Bool, h: (F(c)) -> Nat, k: (Nat) -> Bool, p: F(c), q: F(c), into: (Holds(k(0) || true)) -> P(k)) -> (Holds(match h(p) == h(q) | true => k(0) | false => k(1) end)) -> P(k) =
+        let F(c: Bool) -> Type => match c | true => {} | false => Nat end;
+        let f(P: ((Nat) -> Bool) -> Prop, c: Bool, d: Bool, h: (F(c)) -> Nat, k: (Nat) -> Bool, p: F(c), q: F(c), into: (Holds(k(0) || true)) -> P(k)) -> (Holds(match h(p) == h(q) | true => k(0) | false => k(1) end)) -> P(k) =>
             match (match h(p) == h(q) | true => k(0) | false => k(1) end)
             | true => (_: Holds(true)) =>
                 let split: {} = match c | false => () | true => (match d | true => let inside: Holds(k(0) || true) = True/qed(); () | false => () end) end;
@@ -415,10 +418,10 @@ fn a_float_comparisons_mirror_is_not_read_under_its_false_arm() {
         use /std/{Nat, Bool};
         use /std/Bool/{True, False, Holds};
 
-        pub let M(b: Bool, x: Nat, y: Nat) -> Prop =
+        pub let M(b: Bool, x: Nat, y: Nat) -> Prop =>
             match b | true => True | false => Holds(Nat/le(y, x)) end;
 
-        pub let f(x: Nat, y: Nat) -> M(Nat/lt(x, y), x, y) =
+        pub let f(x: Nat, y: Nat) -> M(Nat/lt(x, y), x, y) =>
             match Nat/lt(x, y) | true => True/qed() | false => True/qed() end;
 
         let forged = f;
@@ -449,7 +452,7 @@ fn a_character_dispatch_default_is_checked_at_its_scrutinee() {
         use /std/{Char};
         use /std/Bool/{True, Holds};
 
-        let bogus(c: Char) -> Holds(c == c) =
+        let bogus(c: Char) -> Holds(c == c) =>
             match c
             | 'a' => True/qed()
             | _ => True/qed()
@@ -459,7 +462,7 @@ fn a_character_dispatch_default_is_checked_at_its_scrutinee() {
         "#,
         b"ok",
     )
-    .refused(&[("-> Holds(c == c) =", "-> Holds(c == 'a') =")])
+    .refused(&[("-> Holds(c == c) =>", "-> Holds(c == 'a') =>")])
     .by_elaborator_in("/bogus", |error| {
         matches!(error, Error::TypeMismatch { .. })
     });
@@ -473,7 +476,7 @@ fn a_string_arm_is_checked_at_the_bytes_it_read() {
         use /std/{Str};
         use /std/Bool/{True, Holds};
 
-        let bogus(s: Str, h: Holds(s == s)) -> Holds(s == s) =
+        let bogus(s: Str, h: Holds(s == s)) -> Holds(s == s) =>
             match s
             | "ab" => True/qed()
             | "a" => True/qed()
@@ -486,7 +489,7 @@ fn a_string_arm_is_checked_at_the_bytes_it_read() {
     )
     .refused(&[
         ("h: Holds(s == s)", "h: Holds(s == \"ab\")"),
-        ("-> Holds(s == s) =", "-> Holds(s == \"ab\") ="),
+        ("-> Holds(s == s) =>", "-> Holds(s == \"ab\") =>"),
     ])
     .by_elaborator_in("/bogus", |error| {
         matches!(error, Error::TypeMismatch { .. })
@@ -501,7 +504,7 @@ fn a_guards_fall_through_is_checked_where_the_guard_failed() {
         use /std/{Char};
         use /std/Bool/{True, Holds};
 
-        let bogus(c: Char) -> Holds(c == c) =
+        let bogus(c: Char) -> Holds(c == c) =>
             match c
             | x, x == 'a' => True/qed()
             | _ => True/qed()
@@ -511,7 +514,7 @@ fn a_guards_fall_through_is_checked_where_the_guard_failed() {
         "#,
         b"ok",
     )
-    .refused(&[("-> Holds(c == c) =", "-> Holds(c == 'a') =")])
+    .refused(&[("-> Holds(c == c) =>", "-> Holds(c == 'a') =>")])
     .by_elaborator_in("/bogus", |error| {
         matches!(error, Error::TypeMismatch { .. })
     });
@@ -525,7 +528,7 @@ fn a_bind_guards_fall_through_is_checked_where_its_string_was_missed() {
         use /std/{Str};
         use /std/Bool/{True, Holds};
 
-        let bogus(s: Str, g: (Str) -> Str) -> Holds(g(s) == g(s)) =
+        let bogus(s: Str, g: (Str) -> Str) -> Holds(g(s) == g(s)) =>
             match s
             | x, "ok" = g(x) => True/qed()
             | _ => True/qed()
@@ -535,7 +538,7 @@ fn a_bind_guards_fall_through_is_checked_where_its_string_was_missed() {
         "#,
         b"ok",
     )
-    .refused(&[("-> Holds(g(s) == g(s)) =", "-> Holds(g(s) == \"ok\") =")])
+    .refused(&[("-> Holds(g(s) == g(s)) =>", "-> Holds(g(s) == \"ok\") =>")])
     .by_elaborator_in("/bogus", |error| {
         matches!(error, Error::TypeMismatch { .. })
     });
@@ -549,9 +552,9 @@ fn a_character_dispatch_on_a_type_an_arm_reduces_is_checked_at_its_scrutinee() {
         use /std/{Bool, Char, Nat};
         use /std/Bool/{True, Holds};
 
-        let T(b: Bool) -> Type = match b | true => Char | false => Nat end;
+        let T(b: Bool) -> Type => match b | true => Char | false => Nat end;
 
-        let bogus(g: (Nat) -> Bool, n: Nat, x: T(g(n))) -> Holds(match g(n) | true => x == x | false => true end) =
+        let bogus(g: (Nat) -> Bool, n: Nat, x: T(g(n))) -> Holds(match g(n) | true => x == x | false => true end) =>
             match g(n)
             | true =>
                 match x
@@ -578,8 +581,8 @@ fn a_guard_settled_under_a_character_arm_answers_nothing_after_that_arm() {
         use /std/{Nat, Bool, Char};
         use /std/Bool/{True, Holds};
 
-        let F(n: Nat) -> Type = match n | 'a' => {} | _ => Nat end;
-        let leak(c: Char, h: (F(Char/to_nat(c))) -> Nat, k: (Nat) -> Bool, p: F(Char/to_nat(c)), q: F(Char/to_nat(c))) -> True =
+        let F(n: Nat) -> Type => match n | 'a' => {} | _ => Nat end;
+        let leak(c: Char, h: (F(Char/to_nat(c))) -> Nat, k: (Nat) -> Bool, p: F(Char/to_nat(c)), q: F(Char/to_nat(c))) -> True =>
             match (match h(p) == h(q) | true => k(0) | false => k(1) end)
             | true =>
                 let split: {} = match c | 'a' => let one: Holds(h(p) + h(q) == h(p) + h(p)) = True/qed(); () | _ => () end;
@@ -602,7 +605,7 @@ fn a_projection_refined_through_a_lets_definition_answers_nothing_in_a_sibling_a
         use /std/{Nat};
         use /std/Bool/{True, Holds};
 
-        let pair(n: Nat, g: (Nat) -> {Nat, Nat}) -> Nat =
+        let pair(n: Nat, g: (Nat) -> {Nat, Nat}) -> Nat =>
             let p = g(n);
             match p
             | (3, _) =>

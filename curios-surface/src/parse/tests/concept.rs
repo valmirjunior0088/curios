@@ -92,7 +92,7 @@ fn concept_out_marker_is_rejected() {
 /// A concept literal admits a `use <term>` fill and a witness body does not, so the word is refused by name there rather than read as a missing label — and the literal beside it, with the same fill, still parses.
 #[test]
 fn a_witness_body_refuses_a_superclass_fill_by_name() {
-    let report = "satisfy Ordered(Nat) { use eql_nat, cmp(a, b) = f(a, b) } u"
+    let report = "satisfy Ordered(Nat) { use eql_nat, cmp(a, b) => f(a, b) } u"
         .parse::<Entrypoint>()
         .unwrap_err()
         .format();
@@ -101,7 +101,7 @@ fn a_witness_body_refuses_a_superclass_fill_by_name() {
         "{report}"
     );
 
-    "let o : Ordered(Nat) = Ordered { use eql_nat, cmp(a, b) = f(a, b) }; u"
+    "let o : Ordered(Nat) = Ordered { use eql_nat, cmp(a, b) => f(a, b) }; u"
         .parse::<Entrypoint>()
         .expect("a concept literal keeps its fill");
 }
@@ -109,7 +109,7 @@ fn a_witness_body_refuses_a_superclass_fill_by_name() {
 /// A witness entry has no positional form, so past its label and `(` its list is the definition sugar's: a list it cannot read is refused where the list fails, and not at the label as what the body's list expects next.
 #[test]
 fn a_witness_entrys_list_is_refused_where_it_fails() {
-    let source = "satisfy Show(Nat) { show(x y) = f(x) } u";
+    let source = "satisfy Show(Nat) { show(x y) => f(x) } u";
     let report = source.parse::<Entrypoint>().unwrap_err().format();
     let column = source.find("y)").expect("the fixture writes it") + 1;
     assert!(report.contains(&format!("1:{column}")), "{report}");
@@ -118,10 +118,10 @@ fn a_witness_entrys_list_is_refused_where_it_fails() {
 
 #[test]
 fn parse_witness_item() {
-    // A premised witness: an `@` binder, a `use` premise, and the definition sugar (`cmp(a, b) = ...`).
+    // A premised witness: an `@` binder, a `use` premise, and the definition sugar (`cmp(a, b) => ...`).
     let source = "\
-        satisfy (@A : Type, use Ordered(A)) => Ordered(List(A)) { \
-            cmp(a, b) = Ordering/lt() \
+        satisfy (@A : Type, use Ordered(A)) -> Ordered(List(A)) { \
+            cmp(a, b) => Ordering/lt() \
         } u";
     let entrypoint = source.parse::<Entrypoint>().unwrap();
     let TopItem::Witness(witnesses) = &entrypoint.module.items[0] else {
@@ -152,7 +152,7 @@ fn parse_witness_item() {
 #[test]
 fn use_parameter_forms() {
     // Two anonymous `use` Π-binders, alongside `@` and plain binders.
-    let TopItem::Let(item) = &"pub let f(@A : Type, use Show(A), use Equal(A), x : A) -> A = x; u"
+    let TopItem::Let(item) = &"pub let f(@A : Type, use Show(A), use Equal(A), x : A) -> A => x; u"
         .parse::<Entrypoint>()
         .unwrap()
         .module
@@ -192,14 +192,14 @@ fn witness_use_round_trip() {
         "pub concept Ordered(A : Type) : Type { use Equal(A), cmp : A } u",
         "concept Convert(A : Type, B : Type) : Type { convert : A } u",
         "satisfy Show(Nat) { show = f } u",
-        "satisfy (@A : Type, use Show(A)) => Show(List(A)) { show = g } u",
+        "satisfy (@A : Type, use Show(A)) -> Show(List(A)) { show = g } u",
         "satisfy Show(Nat) { show = f } and Show(Bool) { show = g } u",
-        "satisfy Show(Nat) { show = f } and (@A : Type, use Show(A)) => Show(List(A)) { show = g } u",
+        "satisfy Show(Nat) { show = f } and (@A : Type, use Show(A)) -> Show(List(A)) { show = g } u",
         "satisfy Show(Nat) { .. } u",
-        "satisfy (@A : Type, use Show(A)) => Show(List(A)) { .. } u",
+        "satisfy (@A : Type, use Show(A)) -> Show(List(A)) { .. } u",
         "satisfy Show(Nat) { .. } and Show(Bool) { .. } u",
         "satisfy Show(Nat) { .. } and Show(Bool) { show = g } u",
-        "satisfy Show(Nat) { show = f } and (@A : Type, use Show(A)) => Show(List(A)) { .. } u",
+        "satisfy Show(Nat) { show = f } and (@A : Type, use Show(A)) -> Show(List(A)) { .. } u",
         "f(use dict, x)",
         "(@A : Type, use Show(A), x : A) -> A",
         "struct Slot(K : Type, use Key(K), V : Type) : Type { key : K } u",
@@ -330,11 +330,11 @@ fn a_declared_parameter_list_is_never_empty() {
 #[test]
 fn parameterized_witness_prints_separator_syntax() {
     // The witness body is an always-broken brace block, so printing canonicalizes the flat source form.
-    let source = "satisfy (@A : Type, use Show(A)) => Show(List(A)) { show = g }\nu";
+    let source = "satisfy (@A : Type, use Show(A)) -> Show(List(A)) { show = g }\nu";
     let entrypoint = source.parse::<Entrypoint>().unwrap();
     assert_eq!(
         entrypoint.printed(&SYNTAX).to_string(),
-        "satisfy (@A: Type, use Show(A)) => Show(List(A)) {\n    show = g,\n}\nu"
+        "satisfy (@A: Type, use Show(A)) -> Show(List(A)) {\n    show = g,\n}\nu"
     );
 }
 
@@ -342,8 +342,8 @@ fn parameterized_witness_prints_separator_syntax() {
 fn witness_telescope_requires_nonempty_separator_form() {
     for source in [
         "satisfy(@A : Type) Show(A) { show = f } u",
-        "satisfy (@A : Type) -> Show(A) { show = f } u",
-        "satisfy () => Show(Nat) { show = f } u",
+        "satisfy (@A : Type) => Show(A) { show = f } u",
+        "satisfy () -> Show(Nat) { show = f } u",
     ] {
         assert!(
             source.parse::<Entrypoint>().is_err(),
@@ -355,7 +355,7 @@ fn witness_telescope_requires_nonempty_separator_form() {
 #[test]
 fn a_derived_witness_records_no_entries_and_prints_the_dots_on_their_own_line() {
     // A block holding `..` alone is the derived form: the AST records no entries, and the printer writes the dots back as a lone entry sits, with no comma.
-    let source = "satisfy (@A : Type, use Show(A)) => Show(List(A)) { .. }\nu";
+    let source = "satisfy (@A : Type, use Show(A)) -> Show(List(A)) { .. }\nu";
     let entrypoint = source.parse::<Entrypoint>().unwrap();
     let TopItem::Witness(witnesses) = &entrypoint.module.items[0] else {
         panic!("expected a witness declaration");
@@ -365,7 +365,7 @@ fn a_derived_witness_records_no_entries_and_prints_the_dots_on_their_own_line() 
     assert_eq!(witnesses[0].params.len(), 2);
     assert_eq!(
         entrypoint.printed(&SYNTAX).to_string(),
-        "satisfy (@A: Type, use Show(A)) => Show(List(A)) {\n    ..\n}\nu"
+        "satisfy (@A: Type, use Show(A)) -> Show(List(A)) {\n    ..\n}\nu"
     );
 }
 

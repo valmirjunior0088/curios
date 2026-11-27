@@ -12,7 +12,7 @@ fn answers(function: &str, calls: &[&str]) -> [Vec<u8>; 2] {
         .join(" + ");
 
     ["0", "Bytes/length(rand/bytes(0)!)"].map(|zero| {
-        run(&fill!("use /std/{Bool, Bytes, List, Nat, Option, rand};\n${function}\nlet main() -> /std/Io({}) = let z = ${zero};\n/std/print(Nat/to_str(${answer}));\nmain()\n", function, zero, answer))
+        run(&fill!("use /std/{Bool, Bytes, List, Nat, Option, rand};\n${function}\nlet main() -> /std/Io({}) => let z = ${zero};\n/std/print(Nat/to_str(${answer}));\nmain()\n", function, zero, answer))
     })
 }
 
@@ -28,12 +28,12 @@ fn a_binder_beside_a_concrete_pattern_answers_as_its_arms_state() {
 
     for (function, calls, expected) in [
         (
-            "let f(a: Option(Nat), b: Option(Nat)) -> Nat =\n    match (a, b) | (some(x), some(y)) => x + y | (_, none()) => 7 | (none(), some(y)) => y end;",
+            "let f(a: Option(Nat), b: Option(Nat)) -> Nat =>\n    match (a, b) | (some(x), some(y)) => x + y | (_, none()) => 7 | (none(), some(y)) => y end;",
             &options[..],
             "7573",
         ),
         (
-            "let f(a: Option(Nat), flag: Bool) -> Nat =\n    match (a, flag) | (_, true) => 1 | (some(x), false) => x | (none(), false) => 0 end;",
+            "let f(a: Option(Nat), flag: Bool) -> Nat =>\n    match (a, flag) | (_, true) => 1 | (some(x), false) => x | (none(), false) => 0 end;",
             &[
                 "f(Option/some(5 + z), z == 0)",
                 "f(Option/none(), z == 0)",
@@ -43,7 +43,7 @@ fn a_binder_beside_a_concrete_pattern_answers_as_its_arms_state() {
             "511",
         ),
         (
-            "let f(p: Bool, q: Bool) -> Nat =\n    match (p, q) | (true, true) => 1 | (_, false) => 2 | (false, true) => 3 end;",
+            "let f(p: Bool, q: Bool) -> Nat =>\n    match (p, q) | (true, true) => 1 | (_, false) => 2 | (false, true) => 3 end;",
             &[
                 "f(z == 0, z == 0)",
                 "f(z == 0, z == 1)",
@@ -53,17 +53,17 @@ fn a_binder_beside_a_concrete_pattern_answers_as_its_arms_state() {
             "3221",
         ),
         (
-            "let f(a: Option(Nat), b: Option(Nat)) -> Nat =\n    match (a, b) | (some(x), some(y)) => x + y | _ => 9 end;",
+            "let f(a: Option(Nat), b: Option(Nat)) -> Nat =>\n    match (a, b) | (some(x), some(y)) => x + y | _ => 9 end;",
             &options[..],
             "9993",
         ),
         (
-            "let f(a: Option(Nat), b: Option(Nat)) -> Nat =\n    match (a, b) | (some(_), _) => 1 | (_, _) => 2 end;",
+            "let f(a: Option(Nat), b: Option(Nat)) -> Nat =>\n    match (a, b) | (some(_), _) => 1 | (_, _) => 2 end;",
             &[options[0], options[3]],
             "21",
         ),
         (
-            "let f(m: Option(Option(Nat))) -> Nat =\n    match m | some(some(x)) => x | some(_) => 7 | none() => 1 end;",
+            "let f(m: Option(Option(Nat))) -> Nat =>\n    match m | some(some(x)) => x | some(_) => 7 | none() => 1 end;",
             &[
                 "f(Option/some(Option/some(3 + z)))",
                 "f(Option/some(Option/none()))",
@@ -72,12 +72,12 @@ fn a_binder_beside_a_concrete_pattern_answers_as_its_arms_state() {
             "173",
         ),
         (
-            "let f(xs: List(Nat), ys: List(Nat)) -> Nat =\n    match (xs, ys) | ([], _) => 1 | ([_, .._], []) => 2 | ([x, .._], [y, .._]) => x + y end;",
+            "let f(xs: List(Nat), ys: List(Nat)) -> Nat =>\n    match (xs, ys) | ([], _) => 1 | ([_, .._], []) => 2 | ([x, .._], [y, .._]) => x + y end;",
             &["f([], [1 + z])", "f([1 + z], [])", "f([3 + z], [4 + z])"],
             "721",
         ),
         (
-            "let f(n: Nat, b: Bool) -> Nat =\n    match (n, b) | (_, true) => 1 | (0, false) => 0 | (k + 1, false) => k end;",
+            "let f(n: Nat, b: Bool) -> Nat =>\n    match (n, b) | (_, true) => 1 | (0, false) => 0 | (k + 1, false) => k end;",
             &[
                 "f(z, z == 0)",
                 "f(4 + z, z == 0)",
@@ -87,7 +87,7 @@ fn a_binder_beside_a_concrete_pattern_answers_as_its_arms_state() {
             "311",
         ),
         (
-            "let f(m: Option(Nat)) -> Nat =\n    match m | some(5) => 1 | some(n) => n | none() => 0 end;",
+            "let f(m: Option(Nat)) -> Nat =>\n    match m | some(5) => 1 | some(n) => n | none() => 0 end;",
             &[
                 "f(Option/some(5 + z))",
                 "f(Option/some(7 + z))",
@@ -96,7 +96,7 @@ fn a_binder_beside_a_concrete_pattern_answers_as_its_arms_state() {
             "71",
         ),
         (
-            "struct P: Type { a: Option(Nat), b: Nat }\nlet f(p: P) -> Nat =\n    match p | P { a = some(x), b } => x + b | q => q.b end;",
+            "struct P: Type { a: Option(Nat), b: Nat }\nlet f(p: P) -> Nat =>\n    match p | P { a = some(x), b } => x + b | q => q.b end;",
             &[
                 "f(P { a = Option/some(1 + z), b = 2 })",
                 "f(P { a = Option/none(), b = 5 + z })",
@@ -118,7 +118,7 @@ fn rows_of_one_constructor_may_write_different_hidden_payloads() {
         | nil(): (0)
         | cons(@k: Nat, head: Nat, tail: V(k)): (k + 1)
         end
-        let f(n: Nat, v: V(n), w: V(n)) -> Nat =
+        let f(n: Nat, v: V(n), w: V(n)) -> Nat =>
             match (v, w)
             | (cons(x, _), cons(@j, y, _)) => x + y + j
             | (nil(), _) => 0
@@ -141,7 +141,7 @@ fn a_binder_row_is_under_no_case_inversion_rules_out() {
         | nil(): (0)
         | cons(@k: Nat, head: Nat, tail: V(k)): (k + 1)
         end
-        let f(n: Nat, v: V(n + 1), b: Bool) -> Nat =
+        let f(n: Nat, v: V(n + 1), b: Bool) -> Nat =>
             match (v, b)
             | (cons(x, _), true) => x
             | (_, false) => 9
@@ -164,8 +164,8 @@ fn a_binder_row_is_under_no_case_inversion_rules_out() {
 fn a_row_rests_on_its_own_case_under_cases_it_does_not_state() {
     let function = r#"
         use /std/Bool/{Holds};
-        let g(c: Bool, @ok: Holds(c)) -> Nat = 1;
-        let f(p: {Option(Nat), Bool}) -> Nat =
+        let g(c: Bool, @ok: Holds(c)) -> Nat => 1;
+        let f(p: {Option(Nat), Bool}) -> Nat =>
             match p
             | (_, true) => g(p.1)
             | (some(x), false) => x
@@ -190,12 +190,12 @@ fn a_row_rests_on_its_own_case_under_cases_it_does_not_state() {
 fn a_binder_the_arms_before_it_leave_one_case_rests_on_that_case() {
     let function = r#"
         use /std/Bool/{Holds};
-        let positive(n: Nat, @ok: Holds(0 < n)) -> Nat = n;
-        let past_one(n: Nat, @ok: Holds(1 < n)) -> Nat = n;
-        let off(b: Bool, @ok: Holds(Bool/not(b))) -> Nat = 7;
-        let f(n: Nat) -> Nat = match n | 0 => 0 | m => positive(m) end;
-        let g(n: Nat) -> Nat = match n | 0 => 0 | p + 1 => match p | 0 => 1 | _ => past_one(n) end end;
-        let h(b: Bool) -> Nat = match b | true => 0 | c => off(c) end;
+        let positive(n: Nat, @ok: Holds(0 < n)) -> Nat => n;
+        let past_one(n: Nat, @ok: Holds(1 < n)) -> Nat => n;
+        let off(b: Bool, @ok: Holds(Bool/not(b))) -> Nat => 7;
+        let f(n: Nat) -> Nat => match n | 0 => 0 | m => positive(m) end;
+        let g(n: Nat) -> Nat => match n | 0 => 0 | p + 1 => match p | 0 => 1 | _ => past_one(n) end end;
+        let h(b: Bool) -> Nat => match b | true => 0 | c => off(c) end;
         "#;
 
     for answer in answers(function, &["f(3 + z)", "g(4 + z)", "h(z == 1)"]) {
@@ -208,7 +208,7 @@ fn a_binder_the_arms_before_it_leave_one_case_rests_on_that_case() {
 fn a_binder_reached_at_several_cases_rests_on_none_of_them() {
     let source = |arms: &str| {
         fill!(
-            "use /std/{Bool, Nat};\n\nlet h(n: Nat) -> Bool = match n | 0 => true | _ + 1 => true end;\nlet pin(n: Nat, @ok: Bool/Holds(h(n))) -> Nat = n;\nlet f(n: Nat) -> Nat = ${arms};\n\n/std/print(Nat/to_str(f(5)))\n",
+            "use /std/{Bool, Nat};\n\nlet h(n: Nat) -> Bool => match n | 0 => true | _ + 1 => true end;\nlet pin(n: Nat, @ok: Bool/Holds(h(n))) -> Nat => n;\nlet f(n: Nat) -> Nat => ${arms};\n\n/std/print(Nat/to_str(f(5)))\n",
             arms
         )
     };
@@ -249,7 +249,7 @@ fn a_value_no_arm_matches_is_reported_as_its_pattern() {
         ),
     ] {
         let source = fill!(
-            "use /std/{Bool, Bytes, List, Nat, Option};\nlet f(${signature}) -> Nat =\n    ${arms};\n/std/print(\"\")\n",
+            "use /std/{Bool, Bytes, List, Nat, Option};\nlet f(${signature}) -> Nat =>\n    ${arms};\n/std/print(\"\")\n",
             signature,
             arms
         );
@@ -267,15 +267,15 @@ fn a_value_no_arm_matches_is_reported_as_its_pattern() {
 fn an_arm_no_value_reaches_is_refused() {
     for (source, arm) in [
         (
-            "use /std/{Nat, Option};\n\nlet f(m: Option(Option(Nat))) -> Nat =\n    match m\n    | some(_) => 0\n    | some(some(x)) => x\n    | none() => 1\n    end;\n\n/std/print(Nat/to_str(f(Option/none())))\n",
+            "use /std/{Nat, Option};\n\nlet f(m: Option(Option(Nat))) -> Nat =>\n    match m\n    | some(_) => 0\n    | some(some(x)) => x\n    | none() => 1\n    end;\n\n/std/print(Nat/to_str(f(Option/none())))\n",
             "│  6 │     | some(some(x)) => x\n│    │       ^^^^^^^^^^^^^",
         ),
         (
-            "use /std/{Bool, Nat};\n\nlet f(b: Bool) -> Nat =\n    match b\n    | true => 1\n    | false => 0\n    | _ => 2\n    end;\n\n/std/print(Nat/to_str(f(true)))\n",
+            "use /std/{Bool, Nat};\n\nlet f(b: Bool) -> Nat =>\n    match b\n    | true => 1\n    | false => 0\n    | _ => 2\n    end;\n\n/std/print(Nat/to_str(f(true)))\n",
             "│  7 │     | _ => 2\n│    │       ^",
         ),
         (
-            "use /std/{Nat, Option};\n\nlet f(o: Option(Nat)) -> Nat =\n    match o\n    | x => 0\n    | some(y) => y\n    end;\n\n/std/print(Nat/to_str(f(Option/some(3))))\n",
+            "use /std/{Nat, Option};\n\nlet f(o: Option(Nat)) -> Nat =>\n    match o\n    | x => 0\n    | some(y) => y\n    end;\n\n/std/print(Nat/to_str(f(Option/some(3))))\n",
             "│  6 │     | some(y) => y\n│    │       ^^^^^^^",
         ),
     ] {
@@ -292,7 +292,7 @@ fn an_arm_no_value_reaches_is_refused() {
 fn two_arms_that_meet_are_refused_with_the_value_they_share() {
     let source = r#"
         use /std/{Bool, Nat};
-        let f(p: Bool, q: Bool) -> Nat =
+        let f(p: Bool, q: Bool) -> Nat =>
             match (p, q) | (true, _) => 1 | (_, true) => 2 | (false, false) => 3 end;
         /std/print(Nat/to_str(f(true, true)))
         "#;
@@ -311,7 +311,7 @@ fn a_struct_pattern_names_the_structure_of_its_scrutinee() {
         use /std/{Nat};
         struct A: Type { x: Nat }
         struct B: Type { x: Nat }
-        let f(a: A) -> Nat =
+        let f(a: A) -> Nat =>
             match a | B { x } => x end;
         /std/print(Nat/to_str(f(A { x = 1 })))
         "#;
@@ -328,8 +328,8 @@ fn a_struct_pattern_names_the_structure_of_its_scrutinee() {
 fn a_tuple_written_at_the_head_is_matched_value_by_value() {
     let function = r#"
         use /std/Bool/{Holds};
-        let g(c: Bool, @ok: Holds(c)) -> Nat = 1;
-        let f(m: Option(Nat), c: Bool) -> Nat =
+        let g(c: Bool, @ok: Holds(c)) -> Nat => 1;
+        let f(m: Option(Nat), c: Bool) -> Nat =>
             match (m, c)
             | (_, true) => g(c)
             | (some(x), false) => x
@@ -366,8 +366,8 @@ fn a_struct_pattern_names_its_structure_at_every_binder() {
     };
     // Each binder position, its head written `HEAD`, beside what the program prints under the structure's own name.
     let binders: [(&str, &[u8]); 2] = [
-        ("let f(a: A) -> Nat = let HEAD { x } = a; x;", b"3"),
-        ("let f(HEAD { x }: A) -> Nat = x;", b"3"),
+        ("let f(a: A) -> Nat => let HEAD { x } = a; x;", b"3"),
+        ("let f(HEAD { x }: A) -> Nat => x;", b"3"),
     ];
 
     for (written, answer) in binders {
@@ -398,11 +398,11 @@ fn a_tuple_pattern_takes_apart_every_field_of_its_tuple() {
         )
     };
     let binders = [
-        "let f(t: {Nat, Nat, Nat}) -> Nat = let PATTERN = t; a;",
-        "let f(PATTERN: {Nat, Nat, Nat}) -> Nat = a;",
-        "let f(t: {Nat, Nat, Nat}) -> Nat = let g = (PATTERN: {Nat, Nat, Nat}) => a; g(t);",
-        "let f(t: {Nat, Nat, Nat}) -> Nat = match t | PATTERN => a end;",
-        "let f(t: {Nat, Nat, Nat}) -> Nat = match (t.0, t) | (0, _) => 0 | (_, PATTERN) => a end;",
+        "let f(t: {Nat, Nat, Nat}) -> Nat => let PATTERN = t; a;",
+        "let f(PATTERN: {Nat, Nat, Nat}) -> Nat => a;",
+        "let f(t: {Nat, Nat, Nat}) -> Nat => let g = (PATTERN: {Nat, Nat, Nat}) => a; g(t);",
+        "let f(t: {Nat, Nat, Nat}) -> Nat => match t | PATTERN => a end;",
+        "let f(t: {Nat, Nat, Nat}) -> Nat => match (t.0, t) | (0, _) => 0 | (_, PATTERN) => a end;",
     ];
 
     for written in binders {
@@ -422,7 +422,7 @@ fn a_tuple_pattern_takes_apart_every_field_of_its_tuple() {
 
     // Over a value that is no tuple, the refusal says what the value is and asks for no field it does not have.
     let error = error(&program(
-        "let f(t: {Nat, Nat, Nat}) -> Nat = let (a, _) = t.0; a;",
+        "let f(t: {Nat, Nat, Nat}) -> Nat => let (a, _) = t.0; a;",
     ));
     assert!(
         error.contains(
@@ -441,22 +441,22 @@ fn a_tuple_pattern_takes_apart_every_field_of_its_tuple() {
 fn the_pattern_of_no_fields_takes_apart_the_unit_alone() {
     let source = r#"
         use /std/{Nat};
-        let at_let(u: {}) -> Nat = let () = u; 1;
-        let at_parameter((): {}) -> Nat = 2;
-        let at_lambda(u: {}) -> Nat = let g: ({}) -> Nat = (()) => 3; g(u);
-        let at_arm(u: {}) -> Nat = match u | () => 4 end;
+        let at_let(u: {}) -> Nat => let () = u; 1;
+        let at_parameter((): {}) -> Nat => 2;
+        let at_lambda(u: {}) -> Nat => let g: ({}) -> Nat = (()) => 3; g(u);
+        let at_arm(u: {}) -> Nat => match u | () => 4 end;
         /std/print(Nat/to_str(at_let(()) * 1000 + at_parameter(()) * 100 + at_lambda(()) * 10 + at_arm(())))
         "#;
     assert_eq!(run(source), b"1234");
 
     // Under a binder the refusal stands at the `()` it is about, which has no name of its own to stand on; an arm's stands at its `match`, as a struct pattern's head does.
     for (written, at) in [
-        ("let f(n: Nat) -> Nat = let () = n; n;", "()"),
+        ("let f(n: Nat) -> Nat => let () = n; n;", "()"),
         (
-            "let f(n: Nat) -> Nat = let g: (Nat) -> Nat = (()) => 0; g(n);",
+            "let f(n: Nat) -> Nat => let g: (Nat) -> Nat = (()) => 0; g(n);",
             "()",
         ),
-        ("let f(n: Nat) -> Nat = match n | () => 0 end;", "match"),
+        ("let f(n: Nat) -> Nat => match n | () => 0 end;", "match"),
     ] {
         let error = error(&fill!(
             "use /std/{Nat};\n${written}\n/std/print(Nat/to_str(f(1)))\n",
@@ -483,7 +483,7 @@ fn a_pattern_of_the_wrong_shape_is_refused_whatever_arm_reads_it() {
             use /std/{Nat};
             struct A: Type { x: Nat }
             struct B: Type { x: Nat }
-            let f(a: A, t: {Nat, Nat, Nat}) -> Nat =
+            let f(a: A, t: {Nat, Nat, Nat}) -> Nat =>
                 match (0, a, t) | (1, _, _) => 0 | (_, ${pattern}) => x end;
             /std/print(Nat/to_str(f(A { x = 1 }, (1, 2, 3))))
             "#,
@@ -514,10 +514,10 @@ fn a_pattern_of_the_wrong_shape_is_refused_whatever_arm_reads_it() {
 fn a_binder_beside_zero_alone_is_the_successors_arm() {
     let source = r#"
         use /std/{Nat, Eq};
-        let defaulted(n: Nat) -> Nat = match n | 0 => 5 | _ => 7 end;
-        let peeled(n: Nat) -> Nat = match n | 0 => 5 | _ + 1 => 7 end;
-        let same(n: Nat) -> Eq()(defaulted(n), peeled(n)) = Eq/refl();
-        let past_zero(m: Nat) -> Eq()(defaulted(m + 1), 7) = Eq/refl();
+        let defaulted(n: Nat) -> Nat => match n | 0 => 5 | _ => 7 end;
+        let peeled(n: Nat) -> Nat => match n | 0 => 5 | _ + 1 => 7 end;
+        let same(n: Nat) -> Eq()(defaulted(n), peeled(n)) => Eq/refl();
+        let past_zero(m: Nat) -> Eq()(defaulted(m + 1), 7) => Eq/refl();
         /std/print("ok")
         "#;
 

@@ -35,7 +35,7 @@ end
 pub use Error/*;
 
 satisfy Show(Error) {
-    show(e) =
+    show(e) =>
         match e
         | not_found() => "not_found"
         | permission_denied() => "permission_denied"

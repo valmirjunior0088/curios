@@ -42,7 +42,7 @@ fn every_stage_is_observed_once_in_names_order() {
 fn meta_free_prelude_program_compiles_without_overflow() {
     // A meta-free entrypoint (no holes) compiled over the whole prelude: an N-deep nested term would overflow the stack during construction and in every pass, and the flat `curios_core::Definitions`/`curios_anf::Module` representation lowers it end-to-end to wasm without overflow.
     let source = r#"
-        let id(A : Type, a : A) -> A = a;
+        let id(A : Type, a : A) -> A => a;
         let subject : /std/Nat = id(/std/Nat, 5);
         /std/Io/pure(())
     "#;
@@ -172,7 +172,7 @@ fn a_method_call_erases_to_the_projection_it_is() {
             twice(A) -> A,
         }
         satisfy Twice(Nat) {
-            twice(n) = n + n,
+            twice(n) => n + n,
         }
         let subject : /std/Nat = Twice/twice(21);
         /std/Io/pure(())
@@ -194,19 +194,19 @@ fn a_method_call_erases_to_the_projection_it_is() {
 /// A unit of two values its erasure gives up on: `counted`, a count down by a definition the certifier judges total, and `climbed`, a count up to a bound by one it does not, reached through `outer`.
 const COUNTS: &str = "use /std/{Nat};
 
-let count(n: Nat, acc: Nat) -> Nat =
+let count(n: Nat, acc: Nat) -> Nat =>
     match n
     | 0 => acc
     | p + 1 => count(p, acc + 1)
     end;
 
-let up(i: Nat, n: Nat) -> Nat =
+let up(i: Nat, n: Nat) -> Nat =>
     match i < n
     | true => up(i + 1, n)
     | false => i
     end;
 
-let outer(i: Nat) -> Nat = up(i, 10000000);
+let outer(i: Nat) -> Nat => up(i, 10000000);
 
 pub let counted: Nat = count(10000000, 0);
 

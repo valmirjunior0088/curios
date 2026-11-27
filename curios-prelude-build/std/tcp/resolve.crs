@@ -5,7 +5,7 @@ use /std/internal/{Status};
 foreign dns_lookup(Bytes, Nat) -> {status: Nat, addresses: List(Bytes)};
 
 --- The first address `host` resolves to, with `port`, as the socket operations take it. The lookup waits by suspending. A name that resolves to no address names nothing a socket can reach, and is `not_found`, as a name that resolves to nothing at all is.
-pub let resolve(host: Str, port: Nat) -> Try(Io, Io/Error, Bytes) =
+pub let resolve(host: Str, port: Nat) -> Try(Io, Io/Error, Bytes) =>
     let reply = dns_lookup(Str/to_bytes(host), port)!;
     let () = Status/succeeded(reply.status)!;
     match reply.addresses

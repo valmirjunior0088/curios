@@ -1,15 +1,15 @@
 use /std/{Str, Nat, Bool, List, Option, Cli, Fmt};
 use /std/Cli/{Command, Field, Positional, Positionals, Failure};
 
-let words(parts: List(Str)) -> Str =
+let words(parts: List(Str)) -> Str =>
     Str/join(" ", List/filter(parts, (part) => part != ""));
 
-let bracket(s: Str) -> Str =
+let bracket(s: Str) -> Str =>
     match s | "" => "" | _ => Fmt/render("[%]")(s) end;
 
 -- The command `path` names, the root's own name first: the deepest one the path reaches.
-let at(c: Command, path: List(Str)) -> Command =
-    let descend(c: Command, path: List(Str)) -> Command =
+let at(c: Command, path: List(Str)) -> Command =>
+    let descend(c: Command, path: List(Str)) -> Command =>
         match path
         | [] => c
         | [next, ..more] =>
@@ -24,10 +24,10 @@ let at(c: Command, path: List(Str)) -> Command =
         end;
     match path | [_, ..beneath] => descend(c, beneath) | [] => c end;
 
-let visible(options: List(Field)) -> List(Field) =
+let visible(options: List(Field)) -> List(Field) =>
     List/filter(options, (f) => Bool/not(f.hidden));
 
-let field_synopsis(f: Field) -> Str =
+let field_synopsis(f: Field) -> Str =>
     let long = Str/concat("--", f.long);
     match f.kind
     | flag() => bracket(long)
@@ -45,16 +45,16 @@ let field_synopsis(f: Field) -> Str =
         end
     end;
 
-let required_synopsis(p: Positional) -> Str =
+let required_synopsis(p: Positional) -> Str =>
     Fmt/render("<%>")(Str/to_upper(p.name));
 
-let optional_synopsis(p: Positional) -> Str =
+let optional_synopsis(p: Positional) -> Str =>
     bracket(Str/to_upper(p.name));
 
-let rest_synopsis(p: Positional) -> Str =
+let rest_synopsis(p: Positional) -> Str =>
     Str/concat(bracket(Str/to_upper(p.name)), "...");
 
-let synopsis(c: Command) -> List(Str) =
+let synopsis(c: Command) -> List(Str) =>
     match c
     | leaf(_, _, options, ps) =>
         [
@@ -66,10 +66,10 @@ let synopsis(c: Command) -> List(Str) =
     end;
 
 --- The usage line of the command `path` names.
-pub let usage(c: Command, path: List(Str)) -> Str =
+pub let usage(c: Command, path: List(Str)) -> Str =>
     Str/concat("Usage: ", words([Str/join(" ", path), ..synopsis(at(c, path))]));
 
-let section(heading: Str, rows: List({Str, Str})) -> Str =
+let section(heading: Str, rows: List({Str, Str})) -> Str =>
     match rows
     | [] => ""
     | [_, .._] =>
@@ -82,7 +82,7 @@ let section(heading: Str, rows: List({Str, Str})) -> Str =
     end;
 
 -- What help adds after an option's own: its default, the values it takes, the variable that stands for it, and its other names.
-let notes(f: Field) -> List(Str) =
+let notes(f: Field) -> List(Str) =>
     [
         ..match f.kind
         | option(v, presence) =>
@@ -114,7 +114,7 @@ let notes(f: Field) -> List(Str) =
                     Str/join(", ", List/map(f.aliases, (n) => Str/concat("--", n))))]
         end];
 
-let field_rows(f: Field) -> List({Str, Str}) =
+let field_rows(f: Field) -> List({Str, Str}) =>
     let short =
         match f.short
         | none() => "    "
@@ -129,7 +129,7 @@ let field_rows(f: Field) -> List({Str, Str}) =
     | _ => [(Fmt/render("%--%")(short)(f.long), described)]
     end;
 
-let builtin_rows(version: Option(Str)) -> List({Str, Str}) =
+let builtin_rows(version: Option(Str)) -> List({Str, Str}) =>
     [
         ("-h, --help", "Print help"),
         ..match version
@@ -137,7 +137,7 @@ let builtin_rows(version: Option(Str)) -> List({Str, Str}) =
         | some(_) => [("    --version", "Print version")]
         end];
 
-let positional_rows(ps: Positionals) -> List({Str, Str}) =
+let positional_rows(ps: Positionals) -> List({Str, Str}) =>
     [
         ..List/map(ps.required, (p) => (required_synopsis(p), p.help)),
         ..List/map(ps.optional, (p) => (optional_synopsis(p), p.help)),
@@ -147,9 +147,9 @@ let positional_rows(ps: Positionals) -> List({Str, Str}) =
         end];
 
 --- The help of the command `path` names: what it does, its usage line, and its arguments, its options and its commands.
-pub let help(c: Command, version: Option(Str), path: List(Str)) -> Str =
+pub let help(c: Command, version: Option(Str), path: List(Str)) -> Str =>
     let target = at(c, path);
-    let options(fields: List(Field)) -> Str =
+    let options(fields: List(Field)) -> Str =>
         section("Options:", [
             ..List/concat_map(visible(fields), field_rows),
             ..builtin_rows(version)]);
@@ -171,13 +171,13 @@ pub let help(c: Command, version: Option(Str), path: List(Str)) -> Str =
         match target | leaf(_, a, _, _) | group(_, a, _, _) => a end;
     Fmt/render("%\n\n%\n\n%")(about)(usage(c, path))(sections);
 
-let tip(near: Option(Str), what: Str) -> Str =
+let tip(near: Option(Str), what: Str) -> Str =>
     match near
     | none() => ""
     | some(n) => Fmt/render("\n\n  tip: a similar % exists: '%'")(what)(n)
     end;
 
-let complaint(f: Failure) -> Str =
+let complaint(f: Failure) -> Str =>
     match f
     | unknown_option(t, near) => Fmt/render("unexpected argument '%'%")(t)(tip(near, "argument"))
     | missing_value(n) => Fmt/render("a value is required for '%'")(n)
@@ -195,7 +195,7 @@ let complaint(f: Failure) -> Str =
     end;
 
 --- A refusal: what the line got wrong, the usage line of the command `path` names, and where help is.
-pub let report(c: Command, path: List(Str), f: Failure) -> Str =
+pub let report(c: Command, path: List(Str), f: Failure) -> Str =>
     Fmt/render("error: %\n\n%\n\nFor more information, try '--help'.\n")(
         complaint(f))(
         usage(c, path));

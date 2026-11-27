@@ -6,7 +6,7 @@ use /std/Tui/{Style, Frame, Pane, Key, Input, Event, Directive};
 let counter: Tui(Nat, Nat) =
     Tui {
         init = (0, Directive/none()),
-        update(model, event) =
+        update(model, event) =>
             match event
             | input(key(k)) =>
                 match k.code
@@ -23,12 +23,12 @@ let counter: Tui(Nat, Nat) =
             | custom(n) => (n, Directive/none())
             | _ => (model, Directive/none())
             end,
-        view(model) = Pane/paragraph(Style/plain, Nat/to_str(model)) };
+        view(model) => Pane/paragraph(Style/plain, Nat/to_str(model)) };
 
-let press(c: Char) -> Event(Nat) =
+let press(c: Char) -> Event(Nat) =>
     Event/input(Input/key(Key/plain(Key/Code/char(c))));
 
-test the_fold_runs_every_event_through_update =
+test the_fold_runs_every_event_through_update =>
     let d = Tui/drive(counter, 3, 1, [press('+'), press('+'), press('-')]);
     Test/all([
         Test/equal(d.model, 1),
@@ -36,22 +36,22 @@ test the_fold_runs_every_event_through_update =
         Test/equal(Frame/to_lines(Frame/of_view(d.view)), ["1  "])]);
 
 -- `quit` stops the fold where it is issued; the events after it are not seen.
-test quit_stops_the_fold_early =
+test quit_stops_the_fold_early =>
     let d = Tui/drive(counter, 3, 1, [press('+'), press('q'), press('+')]);
     Test/all([Test/equal(d.model, 1), Test/equal(d.quit, true)]);
 
 -- A `perform` comes back unrun, for the test to run or to count.
-test a_perform_comes_back_pending =
+test a_perform_comes_back_pending =>
     let d = Tui/drive(counter, 3, 1, [press('+'), press('!')]);
     Test/equal(List/length(d.pending), 1);
 
 -- A `custom` event is the program's own, and reaches `update` like any other.
-test a_custom_event_reaches_update =
+test a_custom_event_reaches_update =>
     let d = Tui/drive(counter, 3, 1, [Event/custom(7)]);
     Test/equal(d.model, 7);
 
 -- A resize moves the fold to the size it reports, and the view is drawn there.
-test the_view_follows_a_resize_the_fold_meets =
+test the_view_follows_a_resize_the_fold_meets =>
     let d = Tui/drive(counter, 3, 1, [Event/input(Input/resize(Tty/Size { w = 4, h = 2 }))]);
     Test/all([
         Test/equal(d.size, Tty/Size { w = 4, h = 2 }),

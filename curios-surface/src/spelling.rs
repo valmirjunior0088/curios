@@ -107,7 +107,7 @@ pub struct Spelling {
     only: Option<Rc<BTreeSet<Global>>>,
 }
 
-/// What a form that implies a definition is made against beside its own text: the syntax registry its terms name the compiler's declarations through, and the entries of the units it is read over, by their formers' names. A printer handed one writes a test and a foreign row in their forms, `test /t = …;` and `foreign /f(Bytes) -> Bytes;`, and a reader of Curios/Core is handed the same to make their definitions from ([`Definition::test`], [`Definition::foreign`]).
+/// What a form that implies a definition is made against beside its own text: the syntax registry its terms name the compiler's declarations through, and the entries of the units it is read over, by their formers' names. A printer handed one writes a test and a foreign row in their forms, `test /t => …;` and `foreign /f(Bytes) -> Bytes;`, and a reader of Curios/Core is handed the same to make their definitions from ([`Definition::test`], [`Definition::foreign`]).
 pub struct FormScope {
     pub syntax: SyntaxRegistry,
     pub entries: HashMap<Global, Rc<Nominal>>,
@@ -2359,7 +2359,7 @@ fn foreign_declared<D: Rendered>(
     }
 }
 
-/// A test in its form, `test /t = value`, where it is the definition the form makes against the scope the spelling holds: `None` where the spelling holds none, or the test is another.
+/// A test in its form, `test /t => value`, where it is the definition the form makes against the scope the spelling holds: `None` where the spelling holds none, or the test is another.
 fn test_declared<D: Rendered>(
     definition: &Definition,
     spelling: &Rc<Spelling>,

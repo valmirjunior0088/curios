@@ -25,7 +25,7 @@ pub fn edits() -> [Edit; 2] {
         Edit {
             label: "leaf",
             file: "Nat.crs",
-            edit: |text| format!("{text}\npub let _census_probe(a: Nat) -> Nat =\n    a;\n"),
+            edit: |text| format!("{text}\npub let _census_probe(a: Nat) -> Nat =>\n    a;\n"),
         },
         Edit {
             label: "hub",

@@ -6,11 +6,11 @@ use /std/Bool/{Holds};
 --- `l` sorted by `T`'s order, stably.
 ---
 --- `sort_by` at `Ord/ord`, with `sort_by`'s theorems read at it beneath.
-pub let sort(@T: Type, use Ord(T), l: List(T)) -> List(T) =
+pub let sort(@T: Type, use Ord(T), l: List(T)) -> List(T) =>
     sort_by(l, (a, b) => Ord/ord(a, b));
 
 --- The sort's answer is its input rearranged.
-pub let permuted(@T: Type, use Ord(T), l: List(T)) -> Permutation()(l, sort(l)) =
+pub let permuted(@T: Type, use Ord(T), l: List(T)) -> Permutation()(l, sort(l)) =>
     sort_by/permuted(l, (a, b) => Ord/ord(a, b));
 
 --- Over a list in order by `second` at every pair, the sort's answer is in order by `T`'s order and then by `second`.
@@ -20,7 +20,7 @@ pub let ordered(
     second: (T, T) -> Bool,
     l: List(T),
     given: Pairwise(second)(l),
-) -> Holds(List/ordered(sort(l), Ord/then((a: T, b: T) => Ord/ord(a, b), second))) =
+) -> Holds(List/ordered(sort(l), Ord/then((a: T, b: T) => Ord/ord(a, b), second))) =>
     sort_by/ordered((a, b) => Ord/ord(a, b), (a, b) => Ord/flips(a, b), second, l, given);
 
 --- The sort's answer is in order.
@@ -28,5 +28,5 @@ pub let sorted(
     @T: Type,
     use Ord(T),
     l: List(T),
-) -> Holds(List/ordered(sort(l), Ord/le_by((a: T, b: T) => Ord/ord(a, b)))) =
+) -> Holds(List/ordered(sort(l), Ord/le_by((a: T, b: T) => Ord/ord(a, b)))) =>
     sort_by/sorted((a, b) => Ord/ord(a, b), (a, b) => Ord/flips(a, b), l);

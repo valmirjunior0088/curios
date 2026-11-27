@@ -7,10 +7,10 @@ use {crate::test_support::*, curios_common::fill};
 fn a_local_recursive_definition_computes_in_a_type_where_it_is_declared() {
     let source = r#"
         use /std/{Nat, Eq};
-        let through(n : Nat) -> Nat =
-            let go(k : Nat) -> Nat = match k | 0 => 0 | p + 1 => go(p) + 2 end;
-            let halve(k : Nat) -> Nat = match 0 < k | true => halve(k / 2) + 1 | false => 0 end;
-            let again(k : Nat) -> Nat = match 0 < k | true => again(k / 2) + 1 | false => 0 end;
+        let through(n : Nat) -> Nat =>
+            let go(k : Nat) -> Nat => match k | 0 => 0 | p + 1 => go(p) + 2 end;
+            let halve(k : Nat) -> Nat => match 0 < k | true => halve(k / 2) + 1 | false => 0 end;
+            let again(k : Nat) -> Nat => match 0 < k | true => again(k / 2) + 1 | false => 0 end;
             let _closed : Eq()(go(3), 6) = Eq/refl();
             let _one_step : Eq()(go(n + 1), go(n) + 2) = Eq/refl();
             let _guarded : Eq()(halve(4), 3) = Eq/refl();
@@ -29,12 +29,12 @@ fn a_recursive_call_applied_past_its_parameters_computes_in_a_type() {
     let source = r#"
         use /std/{Nat, Eq};
         use /std/Bool/{True};
-        let top(n : Nat) -> (Nat) -> Nat =
+        let top(n : Nat) -> (Nat) -> Nat =>
             match n | 0 => (x) => x | p + 1 => (x) => top(p)(x) + 1 end;
-        let nested(n : Nat) -> (Nat) -> Nat =
-            let go(m : Nat) -> (Nat) -> Nat = match m | 0 => (x) => x | p + 1 => (x) => go(p)(x) + 1 end;
+        let nested(n : Nat) -> (Nat) -> Nat =>
+            let go(m : Nat) -> (Nat) -> Nat => match m | 0 => (x) => x | p + 1 => (x) => go(p)(x) + 1 end;
             go(n);
-        let measured(n : Nat, k : Nat) -> Nat =
+        let measured(n : Nat, k : Nat) -> Nat =>
             Nat/descend(
                 (x : Nat) => x,
                 (_ : Nat) => (k : Nat) -> Nat,
@@ -43,7 +43,7 @@ fn a_recursive_call_applied_past_its_parameters_computes_in_a_type() {
         let _top : Eq()(top(3)(1), 4) = Eq/refl();
         let _nested : Eq()(nested(3)(1), 4) = Eq/refl();
         let _measured : Eq()(measured(3, 10), 13) = Eq/refl();
-        let _symbolic(k : Nat) -> Eq()(top(2)(k), k + 2) = Eq/refl();
+        let _symbolic(k : Nat) -> Eq()(top(2)(k), k + 2) => Eq/refl();
         /std/print(Nat/to_str(measured(3, 10)))
         "#;
 
@@ -55,7 +55,7 @@ fn a_recursive_call_applied_past_its_parameters_computes_in_a_type() {
 fn an_indexed_family_at_its_parameters_is_a_relation() {
     let source = r#"
         use /std/{Nat, Eq};
-        let diagonal(R: (Nat, Nat) -> Prop) -> Prop = (n: Nat) -> R(n, n);
+        let diagonal(R: (Nat, Nat) -> Prop) -> Prop => (n: Nat) -> R(n, n);
         let _reflexive: diagonal(Eq(@Nat)) = (n) => Eq/refl();
         /std/print("ok")
         "#;
@@ -91,14 +91,14 @@ fn a_rec_group_over_a_dependent_family_closes_without_expanding_its_own_members(
           ): ([s, ..rest], h1 + h2)
         end
 
-        let split(s: Shape, h: Nat) -> Sizes(s, h) =
+        let split(s: Shape, h: Nat) -> Sizes(s, h) =>
             match s
             | leaf() => Sizes/one(h)
             | node(ps) =>
                 let made = split_column(ps, h);
                 Sizes/fitted(h, Sizes/many(made.col))
             end
-        and split_column(ps: List(Shape), h: Nat) -> {th: Nat, col: Column(ps, th)} =
+        and split_column(ps: List(Shape), h: Nat) -> {th: Nat, col: Column(ps, th)} =>
             match ps
             | [] => (th = 0, col = Column/stop())
             | [child, ..rest] =>
@@ -106,15 +106,15 @@ fn a_rec_group_over_a_dependent_family_closes_without_expanding_its_own_members(
                 (th = h + below.th, col = Column/part(split(child, h), below.col))
             end;
 
-        let local(root: Shape, avail: Nat) -> Nat =
-            let inner(s: Shape, h: Nat) -> Sizes(s, h) =
+        let local(root: Shape, avail: Nat) -> Nat =>
+            let inner(s: Shape, h: Nat) -> Sizes(s, h) =>
                 match s
                 | leaf() => Sizes/one(h)
                 | node(ps) =>
                     let made = inner_column(ps, h);
                     Sizes/fitted(h, Sizes/many(made.col))
                 end
-            and inner_column(ps: List(Shape), h: Nat) -> {th: Nat, col: Column(ps, th)} =
+            and inner_column(ps: List(Shape), h: Nat) -> {th: Nat, col: Column(ps, th)} =>
                 match ps
                 | [] => (th = 0, col = Column/stop())
                 | [child, ..rest] =>
@@ -152,17 +152,17 @@ fn no_judgment_inside_a_group_reads_a_member_withheld_from_it() {
 
     bounded(
         "f",
-        "let f(n: Nat) -> Nat = match n | 0 => 0 | _ + 1 => List/get([1, 2, 3], f(0)) end;",
+        "let f(n: Nat) -> Nat => match n | 0 => 0 | _ + 1 => List/get([1, 2, 3], f(0)) end;",
     );
     bounded(
         "h",
-        "let g(n: Nat) -> Nat = match n | 0 => 0 | _ + 1 => List/get([1, 2, 3], h(0)) end
-        and h(n: Nat) -> Nat = match n | 0 => 0 | k + 1 => g(k) end;",
+        "let g(n: Nat) -> Nat => match n | 0 => 0 | _ + 1 => List/get([1, 2, 3], h(0)) end
+        and h(n: Nat) -> Nat => match n | 0 => 0 | k + 1 => g(k) end;",
     );
     bounded(
         "r",
-        "let outer(m: Nat) -> Nat =
-            let r(n: Nat) -> Nat = match n | 0 => 0 | _ + 1 => List/get([1, 2, 3], r(0)) end;
+        "let outer(m: Nat) -> Nat =>
+            let r(n: Nat) -> Nat => match n | 0 => 0 | _ + 1 => List/get([1, 2, 3], r(0)) end;
             r(m);",
     );
 }
@@ -175,9 +175,9 @@ fn a_member_known_before_its_cycle_closes_is_read_by_value() {
             r#"
             use /std/{Nat, List};
             use /std/Bool/{True, Holds};
-            let need(n: Nat, p: Holds(n == 0)) -> Nat = n;
-            let g(n: Nat) -> Nat = match n | 0 => 0 | k + 1 => h(k) end
-            and h(n: Nat) -> Nat = match n | 0 => 0 | _ + 1 => ${read} end;
+            let need(n: Nat, p: Holds(n == 0)) -> Nat => n;
+            let g(n: Nat) -> Nat => match n | 0 => 0 | k + 1 => h(k) end
+            and h(n: Nat) -> Nat => match n | 0 => 0 | _ + 1 => ${read} end;
             /std/print(Nat/to_str(h(1)))
             "#,
             read,
@@ -195,8 +195,8 @@ fn a_member_typed_at_a_sibling_reads_it_by_value() {
         fill!(
             r#"
             use /std/{Nat};
-            let outer(n: Nat) -> Nat =
-                let T(m: Nat) -> Type = match m | 0 => Nat | k + 1 => T(k) end
+            let outer(n: Nat) -> Nat =>
+                let T(m: Nat) -> Type => match m | 0 => Nat | k + 1 => T(k) end
                 ${group}
             /std/print(Nat/to_str(outer(41)))
             "#,
@@ -209,7 +209,7 @@ fn a_member_typed_at_a_sibling_reads_it_by_value() {
             let x: T(2) = n;
             x)();
         val + 1;",
-        "and f(x: T(0)) -> T(0) = x;
+        "and f(x: T(0)) -> T(0) => x;
         f(n) + 1;",
         "and f: (x: T(0)) -> T(0) = (x) => x;
         f(n) + 1;",
@@ -223,10 +223,10 @@ fn a_member_typed_at_a_sibling_reads_it_by_value() {
 fn a_group_signature_reads_its_members_bodies() {
     let source = r#"
         use /std/{Nat};
-        let outer(taint: Nat) -> Nat =
-            let T(n: Nat) -> Type = match n | 0 => Nat | k + 1 => T(k) end
+        let outer(taint: Nat) -> Nat =>
+            let T(n: Nat) -> Type => match n | 0 => Nat | k + 1 => T(k) end
             and val: T(2) = taint
-            and after(n: Nat) -> Nat = match n | 0 => val + 1 | k + 1 => after(k) end;
+            and after(n: Nat) -> Nat => match n | 0 => val + 1 | k + 1 => after(k) end;
             after(1);
         /std/print(Nat/to_str(outer(2)))
         "#;
@@ -241,7 +241,7 @@ fn a_group_member_type_cannot_fold_to_a_proposition() {
         r#"
         use /std/{Nat};
         use /std/Bool/{True, Holds};
-        let T(n: Nat) -> Type = match n | 0 => Holds(true) | k + 1 => T(k) end
+        let T(n: Nat) -> Type => match n | 0 => Holds(true) | k + 1 => T(k) end
         and val: T(2) = True/qed();
         /std/print("")
         "#,
@@ -261,7 +261,7 @@ fn a_slot_reached_from_its_own_solution_is_judged() {
         fill!(
             r#"
             use /std/{Nat};
-            let id(@A: Type, a: A) -> A = a;
+            let id(@A: Type, a: A) -> A => a;
             ${groups}
             /std/print(Nat/to_str(${tail}))
             "#,
@@ -279,8 +279,8 @@ fn a_slot_reached_from_its_own_solution_is_judged() {
 
     assert_eq!(
         run(&program(
-            "let outer(m: Nat) -> Nat =
-            let T(n: Nat) -> Type = match n | 0 => (Nat) -> Nat | k + 1 => T(k) end
+            "let outer(m: Nat) -> Nat =>
+            let T(n: Nat) -> Type => match n | 0 => (Nat) -> Nat | k + 1 => T(k) end
             and val: T(2) = id((x) => x + 1);
             val(m);",
             "outer(3)",
@@ -288,15 +288,15 @@ fn a_slot_reached_from_its_own_solution_is_judged() {
         b"4"
     );
     refused(
-        "let outer(m: Nat) -> Nat =
-            let T(n: Nat) -> Type = match n | 0 => (Nat) -> Nat | k + 1 => T(k) end
+        "let outer(m: Nat) -> Nat =>
+            let T(n: Nat) -> Type => match n | 0 => (Nat) -> Nat | k + 1 => T(k) end
             and val: T(2) = id(@T(2), m);
             val(m);",
         "outer(3)",
         "expected: `(Nat) -> Nat`",
     );
     refused(
-        "let T(n: Nat) -> Type = match n | 0 => (Nat) -> Nat | k + 1 => let _w = val; T(k) end
+        "let T(n: Nat) -> Type => match n | 0 => (Nat) -> Nat | k + 1 => let _w = val; T(k) end
         and val: T(2) = id((x) => x + 1);",
         "val(3)",
         "is a type position\n│  it does not terminate on every input",
@@ -313,9 +313,9 @@ fn two_members_met_again_where_one_takes_a_constructor_apart_convert() {
             r#"
             use /std/{Nat, List, Eq};
             induct T: Type | nil() | leaf(n: Nat) | node(kids: List(T)) end
-            let first(t: T) -> Nat =
+            let first(t: T) -> Nat =>
                 match t | nil() => 0 | leaf(n) => n | node(kids) => first_in(kids) end
-            and first_in(l: List(T)) -> Nat =
+            and first_in(l: List(T)) -> Nat =>
                 match l
                 | [] => 0
                 | [h, ..r] => match h | nil() => first_in(r) | leaf(_) => first(h) | node(_) => first(h) end
@@ -329,13 +329,13 @@ fn two_members_met_again_where_one_takes_a_constructor_apart_convert() {
 
     assert_eq!(
         typecheck(&program(
-            "let open(kids: List(T), r: List(T)) -> Eq()(first_in([T/node(kids), ..r]), first(T/node(kids))) = Eq/refl();"
+            "let open(kids: List(T), r: List(T)) -> Eq()(first_in([T/node(kids), ..r]), first(T/node(kids))) => Eq/refl();"
         )),
         Ok(())
     );
     assert_eq!(
         typecheck(&program(
-            "let closed() -> Eq()(first_in([T/node([])]), first(T/node([]))) = Eq/refl();"
+            "let closed() -> Eq()(first_in([T/node([])]), first(T/node([]))) => Eq/refl();"
         )),
         Ok(())
     );

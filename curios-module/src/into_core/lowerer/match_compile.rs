@@ -195,14 +195,17 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
         let mut lowered = Vec::with_capacity(guards.len());
         for guard in guards {
             lowered.push(match guard {
-                Guard::Holds(condition) => {
-                    curios_core::Guard::Holds(self.function(&binders, condition, leaf)?)
-                }
+                Guard::Holds(condition) => curios_core::Guard::Holds(
+                    self.lowerer
+                        .guard(|| self.function(&binders, condition, leaf))?,
+                ),
                 Guard::Binds { pattern, value } => {
                     if !takes_apart(&pattern.pattern) {
                         return Err(placed(Error::BindCannotFail, pattern.span.as_ref()));
                     }
-                    let value = self.function(&binders, value, leaf)?;
+                    let value = self
+                        .lowerer
+                        .guard(|| self.function(&binders, value, leaf))?;
                     let pattern = self.whole(&pattern.pattern, &mut binders)?;
 
                     curios_core::Guard::Binds { pattern, value }

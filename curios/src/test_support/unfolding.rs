@@ -74,7 +74,7 @@ pub fn grammar(rules: usize, inner: Inner) -> String {
 }
 
 /// The entry every grammar shares: a runtime-tainted input, so nothing folds the parse away.
-pub const ENTRY: &str = r#"let entry() -> /std/Io({}) =
+pub const ENTRY: &str = r#"let entry() -> /std/Io({}) =>
 let standard_input = /std/Io/Reader/new(/std/Proc/stdin)!;
 let input = /std/Result/unwrap_or(/std/Try/run(/std/Io/Reader/line(standard_input))!, /std/Option/none());
 match input
@@ -140,18 +140,18 @@ pub enum Consumed {
 /// The declaration that consumes a web named `top{suffix}`, which is the only thing that differs between the arms of both measurements below.
 pub fn consumer(suffix: &str, consumed: Consumed) -> String {
     match consumed {
-        Consumed::Applied => format!("let probe{suffix}(n: Nat) -> Bool = top{suffix}(n);\n\n"),
+        Consumed::Applied => format!("let probe{suffix}(n: Nat) -> Bool => top{suffix}(n);\n\n"),
         Consumed::Scrutinized => format!(
-            "let probe{suffix}(n: Nat) -> Str =\n    match top{suffix}(n) | true => \"y\" | false => \"n\" end;\n\n"
+            "let probe{suffix}(n: Nat) -> Str =>\n    match top{suffix}(n) | true => \"y\" | false => \"n\" end;\n\n"
         ),
         Consumed::ScrutinizedClosed => format!(
-            "let probe{suffix}(n: Nat) -> Str =\n    match top{suffix}(7) | true => \"y\" | false => \"n\" end;\n\n"
+            "let probe{suffix}(n: Nat) -> Str =>\n    match top{suffix}(7) | true => \"y\" | false => \"n\" end;\n\n"
         ),
         Consumed::Proved => format!(
-            "let probe{suffix}(n: Nat, e: Eq()(top{suffix}(n), true)) -> Str =\n    match e | refl(@z) => \"y\" end;\n\n"
+            "let probe{suffix}(n: Nat, e: Eq()(top{suffix}(n), true)) -> Str =>\n    match e | refl(@z) => \"y\" end;\n\n"
         ),
         Consumed::Compared => format!(
-            "let probe{suffix}(n: Nat, m: Nat, k: Nat) -> Str =
+            "let probe{suffix}(n: Nat, m: Nat, k: Nat) -> Str =>
     match top{suffix}(n)
     | true =>
         let _: Eq()(top{suffix}(m) || top{suffix}(k), top{suffix}(m) || top{suffix}(k)) = Eq/refl();
@@ -170,8 +170,8 @@ pub fn predicates(rules: usize, consumed: Consumed, twice: bool) -> String {
     let mut source = String::from(
         "use /std/{Str, Nat, Bool, Eq};\n\n\
          let Pred: Type = (x: Nat) -> Bool;\n\
-         let both(p: Pred, q: Pred) -> Pred = (x) => p(x) && q(x);\n\
-         let anyof(p: Pred, q: Pred) -> Pred = (x) => p(x) || q(x);\n\
+         let both(p: Pred, q: Pred) -> Pred => (x) => p(x) && q(x);\n\
+         let anyof(p: Pred, q: Pred) -> Pred => (x) => p(x) || q(x);\n\
          let base: Pred = (x) => x % 2 == 0;\n\
          let other: Pred = (x) => x % 3 == 0;\n\n",
     );
@@ -218,7 +218,7 @@ pub fn compile_only(source: &str) -> Result<(), String> {
 pub fn numerics(rules: usize) -> String {
     let mut source = numeric_web(rules, "use /std/{Str, Nat, Eq};\n\n");
     source.push_str(
-        "let probe(n: Nat, e: Eq()(top(n), 0)) -> Str =\n    match e | refl(@z) => \"y\" end;\n\n",
+        "let probe(n: Nat, e: Eq()(top(n), 0)) -> Str =>\n    match e | refl(@z) => \"y\" end;\n\n",
     );
     source.push_str(TAIL);
     source
@@ -229,8 +229,8 @@ pub fn numeric_web(rules: usize, imports: &str) -> String {
     let mut source = String::from(imports);
     source.push_str(
         "let Fn: Type = (x: Nat) -> Nat;\n\
-         let both(p: Fn, q: Fn) -> Fn = (x) => p(x) + q(x);\n\
-         let anyof(p: Fn, q: Fn) -> Fn = (x) => p(x) * q(x);\n\
+         let both(p: Fn, q: Fn) -> Fn => (x) => p(x) + q(x);\n\
+         let anyof(p: Fn, q: Fn) -> Fn => (x) => p(x) * q(x);\n\
          let base: Fn = (x) => x % 2;\n\
          let other: Fn = (x) => x % 3;\n\n",
     );

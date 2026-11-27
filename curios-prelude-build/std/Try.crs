@@ -9,11 +9,11 @@ pub struct Try(M: (Type) -> Type, E: Type, A: Type): Type {
 }
 
 --- `a` as a success.
-pub let pure(@M: (Type) -> Type, @E: Type, @A: Type, use Monad(M), a: A) -> Try(M, E, A) =
+pub let pure(@M: (Type) -> Type, @E: Type, @A: Type, use Monad(M), a: A) -> Try(M, E, A) =>
     Try { Monad/pure(Result/success(a)) };
 
 --- `e` as a failure, which stops the region.
-pub let raise(@M: (Type) -> Type, @E: Type, @A: Type, use Monad(M), e: E) -> Try(M, E, A) =
+pub let raise(@M: (Type) -> Type, @E: Type, @A: Type, use Monad(M), e: E) -> Try(M, E, A) =>
     Try { Monad/pure(Result/failure(e)) };
 
 --- `f` on the value of a success; a failure passes through.
@@ -25,7 +25,7 @@ pub let bind(
     use Monad(M),
     m: Try(M, E, A),
     f: (A) -> Try(M, E, B),
-) -> Try(M, E, B) =
+) -> Try(M, E, B) =>
     Try {
         Monad/bind(m.0, (r: Result(E, A)) =>
             match r
@@ -34,19 +34,19 @@ pub let bind(
             end) };
 
 --- An `M(Result(E, A))` as a `Try`.
-pub let attempt(@M: (Type) -> Type, @E: Type, @A: Type, m: M(Result(E, A))) -> Try(M, E, A) =
+pub let attempt(@M: (Type) -> Type, @E: Type, @A: Type, m: M(Result(E, A))) -> Try(M, E, A) =>
     Try { m };
 
 --- The base action with its outcome as data.
-pub let run(@M: (Type) -> Type, @E: Type, @A: Type, m: Try(M, E, A)) -> M(Result(E, A)) =
+pub let run(@M: (Type) -> Type, @E: Type, @A: Type, m: Try(M, E, A)) -> M(Result(E, A)) =>
     m.0;
 
 --- `body` run with a scope, as `Io/scope` runs one: its children cancelled and its resources released before the scope answers, its failure among the answers it may give.
-pub let scope(@E: Type, @A: Type, body: (Io/Scope) -> Try(Io, E, A)) -> Try(Io, E, A) =
+pub let scope(@E: Type, @A: Type, body: (Io/Scope) -> Try(Io, E, A)) -> Try(Io, E, A) =>
     Try { Io/scope((s) => run(body(s))) };
 
 -- What `x` answers, or where it fails, its failure left in `failed` and then no answer at all: a branch of `both` or `all` the first failure stops the rest of.
-let guarded(@E: Type, @A: Type, failed: Future(E), x: Try(Io, E, A)) -> Io(A) =
+let guarded(@E: Type, @A: Type, failed: Future(E), x: Try(Io, E, A)) -> Io(A) =>
     Io/bind(
         run(x),
         (r: Result(E, A)) =>
@@ -56,7 +56,7 @@ let guarded(@E: Type, @A: Type, failed: Future(E), x: Try(Io, E, A)) -> Io(A) =
             end);
 
 -- What `answers` answers, or the failure `failed` is filled with first, the branches then cancelled where they wait.
-let first_failure(@E: Type, @A: Type, failed: Future(E), answers: Io(A)) -> Try(Io, E, A) =
+let first_failure(@E: Type, @A: Type, failed: Future(E), answers: Io(A)) -> Try(Io, E, A) =>
     Try {
         Io/select([
             Io/bind(answers, (a: A) => Io/pure(Result/success(a))),
@@ -69,7 +69,7 @@ pub let both(
     @B: Type,
     a: Try(Io, E, A),
     b: Try(Io, E, B),
-) -> Try(Io, E, {A, B}) =
+) -> Try(Io, E, {A, B}) =>
     let failed: Future(E) = Future/new()!;
     first_failure(failed, Io/both(guarded(failed, a), guarded(failed, b)));
 
@@ -78,7 +78,7 @@ pub let all(
     @E: Type,
     @A: Type,
     actions: List(Try(Io, E, A)),
-) -> Try(Io, E, Vec(A, List/length(actions))) =
+) -> Try(Io, E, Vec(A, List/length(actions))) =>
     let failed: Future(E) = Future/new()!;
     first_failure(failed, Io/all(List/map(actions, (x: Try(Io, E, A)) => guarded(failed, x))));
 
@@ -90,7 +90,7 @@ pub let rescue(
     use Monad(M),
     m: Try(M, E, A),
     handler: (E) -> Try(M, E, A),
-) -> Try(M, E, A) =
+) -> Try(M, E, A) =>
     Try {
         Monad/bind(m.0, (r: Result(E, A)) =>
             match r | success(_) => Monad/pure(r) | failure(e) => handler(e).0 end) };
@@ -104,12 +104,12 @@ pub let map_failure(
     use Monad(M),
     m: Try(M, E, A),
     f: (E) -> F,
-) -> Try(M, F, A) =
+) -> Try(M, F, A) =>
     Try { Monad/bind(m.0, (r: Result(E, A)) => Monad/pure(Result/map_failure(r, f))) };
 
-satisfy (@M: (Type) -> Type, @E: Type, use Monad(M)) => Monad((A: Type) => Try(M, E, A)) {
-    pure(@_, a) = pure(a),
-    bind(@_, @_, m, f) = bind(m, f),
+satisfy (@M: (Type) -> Type, @E: Type, use Monad(M)) -> Monad((A: Type) => Try(M, E, A)) {
+    pure(@_, a) => pure(a),
+    bind(@_, @_, m, f) => bind(m, f),
 }
 
 --- A bare `Result` in a `Try` region is early return.
@@ -117,8 +117,8 @@ satisfy (
     @M: (Type) -> Type,
     @E: Type,
     use Monad(M),
-) => Monad/Lift((A: Type) => Result(E, A), (A: Type) => Try(M, E, A)) {
-    lift(@_, r) = Try { Monad/pure(r) },
+) -> Monad/Lift((A: Type) => Result(E, A), (A: Type) => Try(M, E, A)) {
+    lift(@_, r) => Try { Monad/pure(r) },
 }
 
 --- An `Io` action in a `Try` region over any base that admits one.
@@ -127,8 +127,8 @@ satisfy (
     @E: Type,
     use Monad(M),
     use Monad/Lift(Io, M),
-) => Monad/Lift(Io, (A: Type) => Try(M, E, A)) {
-    lift(@A, m) = Try { Monad/bind(Monad/lift(m), (a: A) => Monad/pure(Result/success(a))) },
+) -> Monad/Lift(Io, (A: Type) => Try(M, E, A)) {
+    lift(@A, m) => Try { Monad/bind(Monad/lift(m), (a: A) => Monad/pure(Result/success(a))) },
 }
 
 --- A `Try` over one base in a `Try` over another the first embeds in.
@@ -139,13 +139,13 @@ satisfy (
     use Monad(M),
     use Monad(N),
     use Monad/Lift(M, N),
-) => Monad/Lift((A: Type) => Try(M, E, A), (A: Type) => Try(N, E, A)) {
-    lift(@_, m) = Try { Monad/lift(m.0) },
+) -> Monad/Lift((A: Type) => Try(M, E, A), (A: Type) => Try(N, E, A)) {
+    lift(@_, m) => Try { Monad/lift(m.0) },
 }
 
 --- A description that may fail is run: a failure is written to standard error as it is shown, and the program ends with status `1`.
-satisfy (@E: Type, use Show(E)) => Program(Try(Io, E, {})) {
-    execute(program) =
+satisfy (@E: Type, use Show(E)) -> Program(Try(Io, E, {})) {
+    execute(program) =>
         let outcome = run(program)!;
         match outcome
         | success(()) => Io/pure(())

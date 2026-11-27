@@ -7,20 +7,20 @@ end
 pub use Eq/*;
 
 --- Symmetry.
-pub let sym(@A: Sort, @x: A, @y: A, p: Eq()(x, y)) -> Eq()(y, x) =
+pub let sym(@A: Sort, @x: A, @y: A, p: Eq()(x, y)) -> Eq()(y, x) =>
     let refl() = p;
     Eq/refl();
 
 --- Transitivity.
-pub let trans(@A: Sort, @x: A, @y: A, @z: A, p: Eq()(x, y), q: Eq()(y, z)) -> Eq()(x, z) =
+pub let trans(@A: Sort, @x: A, @y: A, @z: A, p: Eq()(x, y), q: Eq()(y, z)) -> Eq()(x, z) =>
     let refl() = q;
     p;
 
 --- Equal arguments give equal results under any `f`.
-pub let cong(@A: Sort, @B: Sort, @x: A, @y: A, f: (A) -> B, p: Eq()(x, y)) -> Eq()(f(x), f(y)) =
+pub let cong(@A: Sort, @B: Sort, @x: A, @y: A, f: (A) -> B, p: Eq()(x, y)) -> Eq()(f(x), f(y)) =>
     let refl() = p;
     Eq/refl();
 
 --- A `P(x)` carried to `P(y)` along an equality: a proof where `P` is a family of propositions, and a value where it is one of types.
-pub let subst(@A: Sort, @x: A, @y: A, P: (A) -> Sort, p: Eq()(x, y), v: P(x)) -> P(y) =
+pub let subst(@A: Sort, @x: A, @y: A, P: (A) -> Sort, p: Eq()(x, y), v: P(x)) -> P(y) =>
     match p | refl() => v end;

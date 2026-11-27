@@ -4,9 +4,9 @@ use /std/Bool/{True, Holds};
 
 --- A bytes parser walks its input as it is, and its positions lie within it.
 satisfy Input(Bytes) {
-    Admits(input, offset) = Holds(offset <= Bytes/length(input)),
-    bytes(input) = input,
-    start(_) = True/qed(),
+    Admits(input, offset) => Holds(offset <= Bytes/length(input)),
+    bytes(input) => input,
+    start(_) => True/qed(),
 }
 
 --- The position past `at`, which holds a byte: still within the input.
@@ -14,20 +14,20 @@ let step(
     @input: Bytes,
     at: Pos(Bytes, input),
     ok: Holds(at.offset < Bytes/length(input)),
-) -> Pos(Bytes, input) =
+) -> Pos(Bytes, input) =>
     At { offset = at.offset + 1, holds = ok };
 
 --- The next byte; declines at the end of the input.
-pub let byte() -> Parse(Bytes, Byte) =
+pub let byte() -> Parse(Bytes, Byte) =>
     Of {
-        run(input, at) =
+        run(input, at) =>
             match Bool/holds(at.offset < Bytes/length(input))
             | none() => Result/failure(Error/declined("unexpected end of input", at.offset))
             | some(ok) => Result/success((step(at, ok), Bytes/get(input, at.offset, @ok)))
             end };
 
 --- The next byte when `pred` accepts it; declines otherwise, consuming nothing.
-pub let byte_if(pred: (Byte) -> Bool) -> Parse(Bytes, Byte) =
+pub let byte_if(pred: (Byte) -> Bool) -> Parse(Bytes, Byte) =>
     Parse/bind(
         byte(),
         (b) =>
@@ -37,19 +37,19 @@ pub let byte_if(pred: (Byte) -> Bool) -> Parse(Bytes, Byte) =
             end);
 
 --- The next byte without consuming it; declines at the end of the input.
-pub let peek_byte() -> Parse(Bytes, Byte) =
+pub let peek_byte() -> Parse(Bytes, Byte) =>
     Of {
-        run(input, at) =
+        run(input, at) =>
             match Bool/holds(at.offset < Bytes/length(input))
             | none() => Result/failure(Error/declined("unexpected end of input", at.offset))
             | some(ok) => Result/success((at, Bytes/get(input, at.offset, @ok)))
             end };
 
 --- The next byte without consuming it, or `none` at the end of the input.
-pub let peek() -> Parse(Bytes, Option(Byte)) =
+pub let peek() -> Parse(Bytes, Option(Byte)) =>
     Parse/or(Parse/map(peek_byte(), (b) => Option/some(b)), Parse/pure(Option/none()));
 
-let byte_spelling(b: Byte) -> Str =
+let byte_spelling(b: Byte) -> Str =>
     let numbered = Str/concat("byte ", Nat/to_str(Byte/to_nat(b)));
     match Char/of_ascii(b)
     | some(c), Nat/in_range(Byte/to_nat(b), '!', '~') => Fmt/render("'%'")(c)
@@ -57,10 +57,10 @@ let byte_spelling(b: Byte) -> Str =
     end;
 
 --- The byte `expected`; declines on any other.
-pub let expect(expected: Byte) -> Parse(Bytes, Byte) =
+pub let expect(expected: Byte) -> Parse(Bytes, Byte) =>
     let message = Str/concat("expected ", byte_spelling(expected));
     Of {
-        run(input, at) =
+        run(input, at) =>
             match Bool/holds(at.offset < Bytes/length(input))
             | none() => Result/failure(Error/declined("unexpected end of input", at.offset))
             | some(ok) =>
@@ -72,7 +72,7 @@ pub let expect(expected: Byte) -> Parse(Bytes, Byte) =
             end };
 
 --- The position past `lit` read from `at`, byte by byte, or `none` where the input is not it.
-let literal_past(@input: Bytes, lit: Bytes, at: Pos(Bytes, input)) -> Option(Pos(Bytes, input)) =
+let literal_past(@input: Bytes, lit: Bytes, at: Pos(Bytes, input)) -> Option(Pos(Bytes, input)) =>
     match lit
     | 0x[] => Option/some(at)
     | 0x[h, ..t] =>
@@ -83,17 +83,17 @@ let literal_past(@input: Bytes, lit: Bytes, at: Pos(Bytes, input)) -> Option(Pos
     end;
 
 --- The bytes of `lit`, exactly; declines on anything else.
-pub let literal(lit: Str) -> Parse(Bytes, {}) =
+pub let literal(lit: Str) -> Parse(Bytes, {}) =>
     let message = Fmt/render("expected \"%\"")(lit);
     Of {
-        run(_, at) =
+        run(_, at) =>
             match literal_past(Str/to_bytes(lit), at)
             | some(stop) => Result/success((stop, ()))
             | none() => Result/failure(Error/declined(message, at.offset))
             end };
 
 --- `taken` and how many bytes at the front of `rest` `pred` accepts: a walk over the bytes it reads, which stops at the first one refused.
-let leading(rest: Bytes, pred: (Byte) -> Bool, taken: Nat) -> Nat =
+let leading(rest: Bytes, pred: (Byte) -> Bool, taken: Nat) -> Nat =>
     match rest
     | 0x[h, ..t], pred(h) => leading(t, pred, taken + 1)
     | _ => taken
@@ -104,7 +104,7 @@ let leading_within(
     rest: Bytes,
     pred: (Byte) -> Bool,
     taken: Nat,
-) -> Holds(leading(rest, pred, taken) <= taken + Bytes/length(rest)) =
+) -> Holds(leading(rest, pred, taken) <= taken + Bytes/length(rest)) =>
     match rest
     | 0x[] => proved()
     | 0x[h, ..t] =>
@@ -115,9 +115,9 @@ let leading_within(
     end;
 
 --- The longest run of bytes `pred` accepts, possibly empty.
-pub let take_while(pred: (Byte) -> Bool) -> Parse(Bytes, Bytes) =
+pub let take_while(pred: (Byte) -> Bool) -> Parse(Bytes, Bytes) =>
     Of {
-        run(input, at) =
+        run(input, at) =>
             let rest = Bytes/drop(input, at.offset, @at.holds);
             let taken = leading(rest, pred, 0);
             let fits = leading_within(rest, pred, 0);
@@ -126,17 +126,17 @@ pub let take_while(pred: (Byte) -> Bool) -> Parse(Bytes, Bytes) =
                 Bytes/slice(input, at.offset, taken))) };
 
 --- Everything from the current position to the end of the input.
-pub let rest() -> Parse(Bytes, Bytes) =
+pub let rest() -> Parse(Bytes, Bytes) =>
     Of {
-        run(input, at) =
+        run(input, at) =>
             Result/success((
                 At { offset = Bytes/length(input), holds = Nat/le/refl(Bytes/length(input)) },
                 Bytes/drop(input, at.offset, @at.holds))) };
 
 --- The next `n` bytes, or everything that remains when fewer are left.
-pub let take(n: Nat) -> Parse(Bytes, Bytes) =
+pub let take(n: Nat) -> Parse(Bytes, Bytes) =>
     Of {
-        run(input, at) =
+        run(input, at) =>
             match Bool/holds(at.offset + n <= Bytes/length(input))
             | some(within) =>
                 Result/success((

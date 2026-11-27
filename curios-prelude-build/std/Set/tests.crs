@@ -4,7 +4,7 @@ use /std/ops/{Ord};
 use /std/Bool/{True};
 
 -- A `Set(K)` is a structure over `Map(K, {})`, whose leaves hold the keys themselves, so `to_list` hands the elements back typed — `List(Str)` here, joined without a decoder.
-test a_set_stores_its_keys_typed_and_unions =
+test a_set_stores_its_keys_typed_and_unions =>
     let s = Set/of_list(["b", "a", "c", "a"]);
     let u = Set/union(s, Set/insert(Set/of_list(["d"]), "a"));
     Test/all([
@@ -18,7 +18,7 @@ test a_set_stores_its_keys_typed_and_unions =
             6)]);
 
 -- An intersection keeps the first set's elements the second has, and a difference the rest, as their maps' do.
-test intersection_and_difference_part_the_first_set_by_the_seconds_elements =
+test intersection_and_difference_part_the_first_set_by_the_seconds_elements =>
     let s = Set/of_list(["a", "b", "c"]);
     let t = Set/of_list(["b", "c", "d"]);
     Test/all([
@@ -30,7 +30,7 @@ let _a_sets_elements_are_in_their_order(
     @K: Type,
     use Hash/Key(K),
     s: Set(K),
-) -> List/Pairwise(Ord/lt_by((a: K, b: K) => Ord/ord(a, b)))(Set/to_list(s)) =
+) -> List/Pairwise(Ord/lt_by((a: K, b: K) => Ord/ord(a, b)))(Set/to_list(s)) =>
     Set/to_list/pairwise(s);
 
 -- Inserting an element twice is inserting it once, for every set: the two have the same elements, which `Set/has/extensional` takes to the sets.
@@ -39,7 +39,7 @@ let _an_element_inserted_twice_is_inserted_once(
     use Hash/Key(K),
     s: Set(K),
     k: K,
-) -> Eq()(Set/insert(Set/insert(s, k), k), Set/insert(s, k)) =
+) -> Eq()(Set/insert(Set/insert(s, k), k), Set/insert(s, k)) =>
     Set/has/extensional(
         Set/insert(Set/insert(s, k), k),
         Set/insert(s, k),
@@ -70,8 +70,8 @@ let _an_intersection_and_a_difference_share_no_element(
     a: Set(K),
     b: Set(K),
     k: K,
-) -> Eq()(Set/has(Set/intersection(a, b), k) && Set/has(Set/difference(a, b), k), false) =
-    let apart(x: Bool, y: Bool) -> Eq()(x && y && (x && Bool/not(y)), false) =
+) -> Eq()(Set/has(Set/intersection(a, b), k) && Set/has(Set/difference(a, b), k), false) =>
+    let apart(x: Bool, y: Bool) -> Eq()(x && y && (x && Bool/not(y)), false) =>
         match x
         | true | false => match y | true | false => Eq/refl() end
         end;

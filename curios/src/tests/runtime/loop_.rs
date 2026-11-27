@@ -23,12 +23,12 @@ fn accumulation_loops_are_linear_by_construction() {
     assert_eq!(
         run(r#"
         use /std/{Bytes, Nat, Str, Io, Try, Proc};
-        let go(i : Nat, acc : Bytes) -> Bytes =
+        let go(i : Nat, acc : Bytes) -> Bytes =>
             match i
             | 0 => acc
             | k + 1 => go(k, 0x[..acc, ..Str/to_bytes("0123456789")])
             end;
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let built = go(25000, 0x[]);
             let head = Bytes/slice(built, 0, 10);
             let _ = Try/run(Io/write(Proc/stdout, head))!;
@@ -46,15 +46,15 @@ fn peel_loops_are_linear_by_construction() {
     assert_eq!(
         run(r#"
         use /std/{Byte, Bytes, Nat, Str, Box, Io};
-        let build(i : Nat, acc : Bytes) -> Bytes =
+        let build(i : Nat, acc : Bytes) -> Bytes =>
             match i
             | 0 => acc
             | k + 1 => build(k, 0x[..acc, ..Str/to_bytes("0123456789")])
             end;
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let built = build(10000, 0x[]);
             let c = Box/new(built)!;
-            let drain(c: Box(Bytes), fuel : Nat, acc : Nat) -> Io(Nat) =
+            let drain(c: Box(Bytes), fuel : Nat, acc : Nat) -> Io(Nat) =>
                 match fuel
                 | 0 => Io/pure(acc)
                 | f + 1 =>
@@ -90,7 +90,7 @@ fn a_collapsed_wrapper_survives_storage_and_retrieval() {
         induct Only : Type
         | only()
         end
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let standard_input = /std/Io/Reader/new(/std/Proc/stdin)!;
             let input = /std/Result/unwrap_or(/std/Try/run(/std/Io/Reader/line(standard_input))!, /std/Option/none());
             match input
@@ -141,17 +141,17 @@ fn an_immediate_leaf_tree_builds_and_sums_at_runtime() {
         | leaf(Nat)
         | node(Nat, Tree, Tree)
         end
-        let build(d : Nat, v : Nat) -> Tree =
+        let build(d : Nat, v : Nat) -> Tree =>
             match d
             | 0 => Tree/leaf(v)
             | dp + 1 => Tree/node(v, build(dp, v * 2), build(dp, v * 2 + 1))
             end;
-        let sum(t : Tree) -> Nat =
+        let sum(t : Tree) -> Nat =>
             match t
             | leaf(n) => n % 1000003
             | node(n, l, r) => (n + sum(l) + sum(r)) % 1000003
             end;
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let standard_input = /std/Io/Reader/new(/std/Proc/stdin)!;
             let input = /std/Result/unwrap_or(/std/Try/run(/std/Io/Reader/line(standard_input))!, /std/Option/none());
             match input
@@ -182,9 +182,9 @@ fn a_nan_default_on_a_runtime_option_converges() {
     assert_eq!(
         run(r#"
         use /std/{Nat, Flt, Str, Bytes, Option};
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let taint = Bytes/length(/std/rand/bytes(3)!);
-            let f(s : Str) -> Option(Flt) =
+            let f(s : Str) -> Option(Flt) =>
                 let n = Nat/of_str(s)!;
                 Option/some(Nat/to_flt(n));
             /std/print(Nat/to_str(
@@ -200,12 +200,12 @@ fn a_nan_default_on_a_runtime_option_converges() {
 fn arena_pure_computation_hugs_a_host_effect() {
     let source = r#"
         use /std/{Nat, Str, Io};
-        let triangle(n : Nat) -> Nat =
+        let triangle(n : Nat) -> Nat =>
             match n
             | 0 => 0
             | p + 1 => n + triangle(p)
             end;
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let before = /std/print("a")!;
             let pure = triangle(100);
             let after = /std/print(Nat/to_str(pure))!;
@@ -229,17 +229,17 @@ fn arena_deferred_context_recursion_is_stack_safe_at_depth() {
         fill!(
             r#"
         use /std/{Nat, Str, Bytes, Io};
-        let count(b : Bytes) -> Nat =
+        let count(b : Bytes) -> Nat =>
             match b
             | 0x[] => 0
             | 0x[h, ..t] => count(t) + 1
             end;
-        let build(n : Nat, acc : Bytes) -> Bytes =
+        let build(n : Nat, acc : Bytes) -> Bytes =>
             match n
             | 0 => acc
             | p + 1 => build(p, 0x[0x61, ..acc])
             end;
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let _ = /std/print(Nat/to_str(count(build(${depth}, 0x[]))))!;
             /std/Io/pure(());
         entry()
@@ -270,7 +270,7 @@ fn a_span_builds_its_answer_where_its_walk_stops() {
         r#"
         use /std/{Str, Nat, Char, Option, Result, Io};
         use /std/Str/{At};
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let standard_input = /std/Io/Reader/new(/std/Proc/stdin)!;
             let input = /std/Result/unwrap_or(/std/Try/run(/std/Io/Reader/line(standard_input))!, /std/Option/none());
             match input
@@ -397,11 +397,11 @@ fn a_recursion_as_deep_as_its_data_runs() {
         | stop()
         | link(Chain)
         end
-        let build(n: Nat) -> Chain =
+        let build(n: Nat) -> Chain =>
             match n | 0 => Chain/stop() | k + 1 => Chain/link(build(k)) end;
-        let length(c: Chain) -> Nat =
+        let length(c: Chain) -> Nat =>
             match c | stop() => 0 | link(rest) => length(rest) + 1 end;
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let walked = List/traverse(List/range(0, 100000), (n: Nat) => Io/pure(n + 1))!;
             let _ = /std/print(Nat/to_str(length(build(100000))))!;
             let _ = /std/print(" ")!;
@@ -418,9 +418,9 @@ fn a_recursion_as_deep_as_its_data_runs() {
 fn a_sequence_built_under_its_recursion_is_a_loop() {
     let source = r#"
         use /std/{Nat, List, Str, Bytes, Io};
-        let twice(n: Nat) -> Str =
+        let twice(n: Nat) -> Str =>
             match n | 0 => "" | k + 1 => Str/concat("ab", twice(k)) end;
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let numbers = List/range(0, 100000);
             let pairs = List/zip(numbers, List/take(numbers, 100000));
             let below = List/take_while(numbers, (n: Nat) => n < 100000);
@@ -460,9 +460,9 @@ fn a_live_set_past_the_heap_it_was_given_stops_on_the_engines_refusal() {
     let compiled = compile(
         r#"
         use /std/{Nat, List, Io};
-        let build(n: Nat) -> List(Nat) =
+        let build(n: Nat) -> List(Nat) =>
             match n | 0 => [] | m + 1 => [n, ..build(m)] end;
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let first = match build(8000000) | [] => 0 | [n, .._] => n end;
             let _ = /std/print(Nat/to_str(first))!;
             /std/Io/pure(());
@@ -487,7 +487,7 @@ fn a_numbers_text_holds_no_level_of_the_number_across_the_rest() {
     let compiled = compile(
         r#"
         use /std/{Nat, Str, List, Proc, Io};
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let arguments = Proc/args()!;
             let digits = Str/length(Nat/to_str(Nat/pow(10, List/length(arguments) * 20000)));
             let _ = /std/print(Nat/to_str(digits))!;
@@ -512,10 +512,10 @@ fn a_recursion_with_no_end_stops_on_the_heap_it_was_given() {
         | stop()
         | link(Chain)
         end
-        let forever(n: Nat) -> Chain = Chain/link(forever(n + 1));
-        let length(c: Chain) -> Nat =
+        let forever(n: Nat) -> Chain => Chain/link(forever(n + 1));
+        let length(c: Chain) -> Nat =>
             match c | stop() => 0 | link(rest) => length(rest) + 1 end;
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let _ = /std/print(Nat/to_str(length(forever(0))))!;
             /std/Io/pure(());
         entry()

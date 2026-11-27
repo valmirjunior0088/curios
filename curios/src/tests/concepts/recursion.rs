@@ -37,8 +37,8 @@ fn a_witness_reading_another_of_its_methods_is_no_group() {
         concept Same(A: Type): Type { same(A, A) -> Bool, apart(A, A) -> Bool, }
         pub struct Box: pub Type { value: Nat }
         satisfy Same(Box) {
-            same(a, b) = a.value == b.value,
-            apart(a, b) = Bool/not(Same/same(a, b)),
+            same(a, b) => a.value == b.value,
+            apart(a, b) => Bool/not(Same/same(a, b)),
         }
         /std/print(Bool/to_str(Same/apart(Box { value = 1 }, Box { value = 2 })))
         "#;
@@ -59,9 +59,9 @@ fn a_parameterized_witness_reading_another_of_its_methods_is_no_group() {
         use /std/ops/{Eql};
         concept Same(A: Type): Type { same(A, A) -> Bool, apart(A, A) -> Bool, }
         pub struct Wrap(A: Type): pub Type { value: A }
-        satisfy (@A: Type, use Eql(A)) => Same(Wrap(A)) {
-            same(a, b) = a.value == b.value,
-            apart(a, b) = Bool/not(Same/same(a, b)),
+        satisfy (@A: Type, use Eql(A)) -> Same(Wrap(A)) {
+            same(a, b) => a.value == b.value,
+            apart(a, b) => Bool/not(Same/same(a, b)),
         }
         /std/print(Bool/to_str(Same/apart(Wrap { value = 1 }, Wrap { value = 1 })))
         "#;
@@ -82,12 +82,12 @@ fn a_method_reading_one_that_recurses_stays_in_its_group() {
         concept Same(A: Type): Type { same(A, A) -> Bool, apart(A, A) -> Bool, }
         induct Chain: pub Type | end_of() | link(Nat, Chain) end
         satisfy Same(Chain) {
-            same(a, b) =
+            same(a, b) =>
                 match a
                 | end_of() => match b | end_of() => true | link(_, _) => false end
                 | link(x, xs) => match b | end_of() => false | link(y, ys) => x == y && Same/same(xs, ys) end
                 end,
-            apart(a, b) = Bool/not(Same/same(a, b)),
+            apart(a, b) => Bool/not(Same/same(a, b)),
         }
         let one = Chain/link(1, Chain/link(2, Chain/end_of()));
         let other = Chain/link(1, Chain/link(3, Chain/end_of()));
@@ -109,7 +109,7 @@ fn a_witness_resolves_through_its_own_entry() {
         use /std/{Nat, Str, Show};
         induct Tree : pub Type | leaf(Nat) | node(Tree, Tree) end
         satisfy Show(Tree) {
-            show(t) =
+            show(t) =>
                 match t
                 | leaf(n) => Nat/to_str(n)
                 | node(l, r) =>
@@ -129,7 +129,7 @@ fn a_witness_recurses_through_another_formers_witness() {
         use /std/{Nat, Str, List, Show};
         induct Rose : pub Type | rose(Nat, List(Rose)) end
         satisfy Show(Rose) {
-            show(r) =
+            show(r) =>
                 match r
                 | rose(n, kids) =>
                     Str/concat(Nat/to_str(n), Str/concat("[", Str/concat(Show/show(kids), "]")))
@@ -148,8 +148,8 @@ fn a_witness_naming_a_later_witness_is_ordered_not_refused() {
         use /std/{Nat, Str, Show};
         induct P : pub Type | p(Nat) end
         induct Q : pub Type | q(Nat) end
-        satisfy Show(P) { show(x) = match x | p(n) => Show/show(Q/q(n)) end, }
-        satisfy Show(Q) { show(x) = match x | q(n) => Nat/to_str(n) end, }
+        satisfy Show(P) { show(x) => match x | p(n) => Show/show(Q/q(n)) end, }
+        satisfy Show(Q) { show(x) => match x | q(n) => Nat/to_str(n) end, }
         /std/print(Show/show(P/p(4)))
         "#;
 
@@ -162,8 +162,8 @@ fn two_witnesses_resolving_each_other_are_refused_with_the_way_out() {
     let source = r#"
         use /std/{Nat, Str, Show};
         induct A : pub Type | a(Nat) | ab(B) and B : pub Type | b(Nat) | ba(A) end
-        satisfy Show(A) { show(x) = match x | a(n) => Nat/to_str(n) | ab(y) => Show/show(y) end, }
-        satisfy Show(B) { show(x) = match x | b(n) => Nat/to_str(n) | ba(y) => Show/show(y) end, }
+        satisfy Show(A) { show(x) => match x | a(n) => Nat/to_str(n) | ab(y) => Show/show(y) end, }
+        satisfy Show(B) { show(x) => match x | b(n) => Nat/to_str(n) | ba(y) => Show/show(y) end, }
         /std/print(Show/show(A/ab(B/ba(A/a(5)))))
         "#;
 
@@ -188,8 +188,8 @@ fn two_witnesses_resolving_each_other_are_refused_with_the_way_out() {
 // A definition and the witness it resolves to, each needing the other, are a cycle like two witnesses': `describe`'s goal resolves to `Show(Box)`, whose `show` calls `describe`. Refused by name in either order they are written in — where the elaborator once accepted both and certifier refusal `/describe` for ``unbound name `/witness~0` ``.
 #[test]
 fn a_definition_and_the_witness_it_resolves_to_are_refused_as_a_cycle_in_either_order() {
-    let describe = "let describe(b: Box) -> Str = Show/show(b);";
-    let witness = r#"satisfy Show(Box) { show(b) = match b.value | 0 => "empty" | _ => describe(Box { value = 0 }) end }"#;
+    let describe = "let describe(b: Box) -> Str => Show/show(b);";
+    let witness = r#"satisfy Show(Box) { show(b) => match b.value | 0 => "empty" | _ => describe(Box { value = 0 }) end }"#;
     let program = |first: &str, second: &str| {
         fill!(
             r#"
@@ -232,12 +232,12 @@ fn mutual_recursion_hoisted_into_one_group_is_admitted() {
     let source = r#"
         use /std/{Nat, Str, Show};
         induct A : pub Type | a(Nat) | ab(B) and B : pub Type | b(Nat) | ba(A) end
-        let show_a(x : A) -> Str =
+        let show_a(x : A) -> Str =>
             match x | a(n) => Nat/to_str(n) | ab(y) => show_b(y) end
-        and show_b(x : B) -> Str =
+        and show_b(x : B) -> Str =>
             match x | b(n) => Nat/to_str(n) | ba(y) => show_a(y) end;
-        satisfy Show(A) { show(x) = show_a(x), }
-        satisfy Show(B) { show(x) = show_b(x), }
+        satisfy Show(A) { show(x) => show_a(x), }
+        satisfy Show(B) { show(x) => show_b(x), }
         /std/print(Show/show(A/ab(B/ba(A/a(5)))))
         "#;
 
@@ -250,8 +250,8 @@ fn a_witness_group_resolves_its_members_through_the_table() {
     let source = r#"
         use /std/{Nat, Str, Show};
         induct A : pub Type | a(Nat) | ab(B) and B : pub Type | b(Nat) | ba(A) end
-        satisfy Show(A) { show(x) = match x | a(n) => Nat/to_str(n) | ab(y) => Show/show(y) end, }
-        and Show(B) { show(x) = match x | b(n) => Nat/to_str(n) | ba(y) => Show/show(y) end, }
+        satisfy Show(A) { show(x) => match x | a(n) => Nat/to_str(n) | ab(y) => Show/show(y) end, }
+        and Show(B) { show(x) => match x | b(n) => Nat/to_str(n) | ba(y) => Show/show(y) end, }
         /std/print(Show/show(A/ab(B/ba(A/a(5)))))
         "#;
 
@@ -265,11 +265,11 @@ fn a_parameterized_witness_group_resolves_under_its_premises() {
         use /std/{Nat, Str, Show};
         induct Tree(A : Type) : pub Type | node(A, Forest(A))
         and Forest(A : Type) : pub Type | nil() | cons(Tree(A), Forest(A)) end
-        satisfy (@A : Type, use Show(A)) => Show(Tree(A)) {
-            show(t) = match t | node(a, f) => Str/concat(Show/show(a), Str/concat("[", Str/concat(Show/show(f), "]"))) end,
+        satisfy (@A : Type, use Show(A)) -> Show(Tree(A)) {
+            show(t) => match t | node(a, f) => Str/concat(Show/show(a), Str/concat("[", Str/concat(Show/show(f), "]"))) end,
         }
-        and (@A : Type, use Show(A)) => Show(Forest(A)) {
-            show(f) = match f | nil() => "" | cons(t, rest) => Str/concat(Show/show(t), Show/show(rest)) end,
+        and (@A : Type, use Show(A)) -> Show(Forest(A)) {
+            show(f) => match f | nil() => "" | cons(t, rest) => Str/concat(Show/show(t), Show/show(rest)) end,
         }
         /std/print(Show/show(Tree/node(1, Forest/cons(Tree/node(2, Forest/nil()), Forest/nil()))))
         "#;
@@ -284,9 +284,9 @@ fn a_group_member_also_resolves_through_its_own_entry() {
         use /std/{Nat, Str, Show};
         induct A : pub Type | a(Nat) | aa(A) | ab(B) and B : pub Type | b(Nat) | ba(A) end
         satisfy Show(A) {
-            show(x) = match x | a(n) => Nat/to_str(n) | aa(y) => Str/concat("(", Str/concat(Show/show(y), ")")) | ab(y) => Show/show(y) end,
+            show(x) => match x | a(n) => Nat/to_str(n) | aa(y) => Str/concat("(", Str/concat(Show/show(y), ")")) | ab(y) => Show/show(y) end,
         }
-        and Show(B) { show(x) = match x | b(n) => Nat/to_str(n) | ba(y) => Show/show(y) end, }
+        and Show(B) { show(x) => match x | b(n) => Nat/to_str(n) | ba(y) => Show/show(y) end, }
         /std/print(Show/show(A/aa(A/ab(B/ba(A/a(7))))))
         "#;
 
@@ -299,10 +299,10 @@ use /std/{Nat, Eq, print};
 induct Tree: pub Type | leaf(Nat) | node(Forest) and Forest: pub Type | nil() | cons(Tree, Forest) end
 pub concept Base(A: Type): pub Type { size(a: A) -> Nat, }
 pub concept Law(A: Type): pub Type { use Base(A), same(a: A) -> Eq()(Base/size(a), Base/size(a)), }
-satisfy Base(Tree) { size(t) = match t | leaf(n) => n | node(f) => Base/size(f) end, }
-and Base(Forest) { size(f) = match f | nil() => 0 | cons(t, rest) => Base/size(t) + Base/size(rest) end, }
+satisfy Base(Tree) { size(t) => match t | leaf(n) => n | node(f) => Base/size(f) end, }
+and Base(Forest) { size(f) => match f | nil() => 0 | cons(t, rest) => Base/size(t) + Base/size(rest) end, }
 satisfy Law(Tree) {
-    same(t) =
+    same(t) =>
         match t
         | leaf(_) => Eq/refl()
         | node(f) =>
@@ -311,7 +311,7 @@ satisfy Law(Tree) {
         end,
 }
 and Law(Forest) {
-    same(f) =
+    same(f) =>
         match f
         | nil() => Eq/refl()
         | cons(t, rest) =>
@@ -354,7 +354,7 @@ fn a_written_key_recurses_through_its_own_entry_over_its_superclasses() {
         satisfy Ord(Tree) { .. }
         satisfy Hash(Tree) { .. }
         satisfy Hash/Key(Tree) {
-            mono(a, b) =
+            mono(a, b) =>
                 match a
                 | leaf(n) =>
                     match b
@@ -401,21 +401,21 @@ fn a_witness_reads_its_own_method_through_its_entry_as_written() {
         use /std/ops/{Eql, Ord};
         induct Two: pub Type | low() | high() end
         satisfy Eql(Two) { .. }
-        let reversed(x: Two, y: Two) -> Ordering =
+        let reversed(x: Two, y: Two) -> Ordering =>
             match x
             | low() => match y | low() => Ordering/eq() | high() => Ordering/gt() end
             | high() => match y | low() => Ordering/lt() | high() => Ordering/eq() end
             end;
         satisfy Ord(Two) {
             ord = reversed,
-            lt(x, y) = Ordering/is_lt(Ord/ord(x, y)),
-            le(x, y) = Ordering/is_le(Ord/ord(x, y)),
-            flips(x, y) =
+            lt(x, y) => Ordering/is_lt(Ord/ord(x, y)),
+            le(x, y) => Ordering/is_le(Ord/ord(x, y)),
+            flips(x, y) =>
                 match x
                 | low() => match y | low() => Eq/refl() | high() => Eq/refl() end
                 | high() => match y | low() => Eq/refl() | high() => Eq/refl() end
                 end,
-            trans(x, y, z, p, q) =
+            trans(x, y, z, p, q) =>
                 match x
                 | high() => match z | low() => /std/Bool/True/qed() | high() => /std/Bool/True/qed() end
                 | low() =>
@@ -424,13 +424,13 @@ fn a_witness_reads_its_own_method_through_its_entry_as_written() {
                     | high() => match y | low() => match q end | high() => match p end end
                     end
                 end,
-            eq(x, y, h) =
+            eq(x, y, h) =>
                 match x
                 | low() => match y | low() => Eq/refl() | high() => match h end end
                 | high() => match y | low() => match h end | high() => Eq/refl() end
                 end,
-            is_lt(_, _) = Eq/refl(),
-            is_le(_, _) = Eq/refl(),
+            is_lt(_, _) => Eq/refl(),
+            is_le(_, _) => Eq/refl(),
         }
         print(match Ord/lt(Two/high(), Two/low()) | true => "reversed" | false => "declared" end)
         "#;
@@ -446,9 +446,9 @@ fn a_lone_witness_not_known_to_terminate_reads_nothing_through_its_entry() {
         induct Tree: pub Type | leaf(Nat) | node(Tree, Tree) end
         pub concept Base(A: Type): pub Type { size(a: A) -> Nat, }
         pub concept Law(A: Type): pub Type { use Base(A), same(a: A) -> Eq()(Base/size(a), Base/size(a)), }
-        satisfy Base(Tree) { size(t) = match t | leaf(n) => n | node(l, r) => Base/size(l) + Base/size(r) end, }
+        satisfy Base(Tree) { size(t) => match t | leaf(n) => n | node(l, r) => Base/size(l) + Base/size(r) end, }
         satisfy Law(Tree) {
-            same(t) =
+            same(t) =>
                 match t
                 | leaf(_) => Eq/refl()
                 | node(_, _) =>

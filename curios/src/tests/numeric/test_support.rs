@@ -24,7 +24,7 @@ pub fn table(rows: &[&str], taint: bool) -> String {
     fill!(
         r#"
         use /std/{Nat, Int, Flt, Byte, Bytes, Str, Option, Io, Try, Proc};
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
         let bytes = match Try/run(Io/read(Proc/stdin, 16))!
             | success(bytes(b, @_)) => b
             | success(ended()) => 0x[]
@@ -32,7 +32,7 @@ pub fn table(rows: &[&str], taint: bool) -> String {
             end;
         let n = ${zero};
         let i = Nat/to_int(n);
-        let to_nat_or(x : Int, d : Nat) -> Nat =
+        let to_nat_or(x : Int, d : Nat) -> Nat =>
             match x >= +0 | true => Int/to_nat(x) | false => d end;
         let row = Nat/sub(Byte/to_nat(Option/unwrap_or(Bytes/try_get(bytes, 1), 0)), 32);
         match row

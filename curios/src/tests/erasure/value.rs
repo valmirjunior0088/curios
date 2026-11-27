@@ -13,34 +13,34 @@ fn every_printed_value_is_the_one_its_proof_states() {
         use /std/Bool/{Holds};
 
         -- `refl(@z) : (z, z)` pins its payload twice; the payload is the index.
-        let z_of(@a: Nat, @b: Nat, e: Eq()(a, b)) -> Nat = match e | refl(@z) => z + 1 end;
+        let z_of(@a: Nat, @b: Nat, e: Eq()(a, b)) -> Nat => match e | refl(@z) => z + 1 end;
 
         -- Targets that swap their binders: each payload is read from its own position.
         induct Swap: (Nat, Nat) -> pub Prop
         | mk(@x: Nat, @y: Nat): (y, x)
         end
-        let digits(@a: Nat, @b: Nat, s: Swap(a, b)) -> Nat = match s | mk(@x, @y) => x * 10 + y end;
+        let digits(@a: Nat, @b: Nat, s: Swap(a, b)) -> Nat => match s | mk(@x, @y) => x * 10 + y end;
 
         -- A payload pinned by a later index alone is read from the position that pins it.
         induct Later: (Nat, Nat) -> pub Prop
         | mk(@z: Nat): (z + 1, z)
         end
-        let tens(@a: Nat, @b: Nat, l: Later(a, b)) -> Nat = match l | mk(@z) => z * 10 end;
+        let tens(@a: Nat, @b: Nat, l: Later(a, b)) -> Nat => match l | mk(@z) => z * 10 end;
 
         -- A pinned payload that is a tuple, one that is a function, and one stated by an index the algebra computes.
-        let pair(@t: {Nat, Nat}, e: Eq()(t, (3, 4))) -> Nat = match e | refl(@z) => z.0 * 100 + z.1 end;
-        let apply(@f: (Nat) -> Nat, @g: (Nat) -> Nat, e: Eq()(f, g)) -> Nat = match e | refl(@h) => h(5) end;
-        let both(@x: Nat, @y: Nat, e: Eq()(x * 2, y + y)) -> Nat = match e | refl(@z) => z + 1 end;
+        let pair(@t: {Nat, Nat}, e: Eq()(t, (3, 4))) -> Nat => match e | refl(@z) => z.0 * 100 + z.1 end;
+        let apply(@f: (Nat) -> Nat, @g: (Nat) -> Nat, e: Eq()(f, g)) -> Nat => match e | refl(@h) => h(5) end;
+        let both(@x: Nat, @y: Nat, e: Eq()(x * 2, y + y)) -> Nat => match e | refl(@z) => z + 1 end;
 
         -- A type and a proof parameter, erased beside the data they do not affect.
-        let pick(T: Type, p: Eq()(1, 1), n: Nat) -> Nat = n + 1;
+        let pick(T: Type, p: Eq()(1, 1), n: Nat) -> Nat => n + 1;
 
         -- An erased field beside a kept one.
         struct Bounded: pub Type { n: Nat, ok: Holds(n < 100) }
 
         -- A proof-valued callee, applied and dropped.
-        let lemma(n: Nat) -> Holds(n <= n) = le/refl(n);
-        let keep(n: Nat, _p: Holds(n <= n)) -> Nat = n + 1;
+        let lemma(n: Nat) -> Holds(n <= n) => le/refl(n);
+        let keep(n: Nat, _p: Holds(n <= n)) -> Nat => n + 1;
 
         let _refl_payload: Eq()(z_of(Eq/refl(@Nat, @41)), 42) = Eq/refl();
         let _swapped_payloads: Eq()(digits(Swap/mk(@2, @1)), 21) = Eq/refl();
@@ -52,9 +52,9 @@ fn every_printed_value_is_the_one_its_proof_states() {
         let _erased_field: Eq()(Bounded { n = 41, ok = /std/Bool/True/qed() }.n + 1, 42) = Eq/refl();
         let _proof_valued_callee: Eq()(keep(41, lemma(41)), 42) = Eq/refl();
 
-        let show(n: Nat) -> Io({}) = print(Str/concat(Nat/to_str(n), "\n"));
+        let show(n: Nat) -> Io({}) => print(Str/concat(Nat/to_str(n), "\n"));
 
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let _ = show(z_of(Eq/refl(@Nat, @41)))!;
             let _ = show(digits(Swap/mk(@2, @1)))!;
             let _ = show(tens(Later/mk(@4)))!;

@@ -11,8 +11,8 @@ fn a_member_known_to_terminate_is_read_by_value_in_its_groups_bodies() {
         use /std/{Bool, print};
         use /std/Bool/{True, False, Holds};
 
-        pub let outer(_: Bool) -> Holds(true) =
-            let Flip(b: Bool) -> Prop = match b | false => True | true => False end
+        pub let outer(_: Bool) -> Holds(true) =>
+            let Flip(b: Bool) -> Prop => match b | false => True | true => False end
             and claimed: Holds(true) = (() =>
                 let _: Flip(false) = True/qed();
                 True/qed())();
@@ -26,8 +26,8 @@ fn a_member_known_to_terminate_is_read_by_value_in_its_groups_bodies() {
         use /std/{Bool, print};
         use /std/Bool/{True, False, Holds};
 
-        pub let outer(_: Bool) -> Holds(true) =
-            let Flip(b: Bool) -> Prop = match b | false => True | true => False end
+        pub let outer(_: Bool) -> Holds(true) =>
+            let Flip(b: Bool) -> Prop => match b | false => True | true => False end
             and stated: Flip(false) = True/qed();
             let _ = stated;
             True/qed();
@@ -44,7 +44,7 @@ fn a_member_of_a_group_that_owes_no_descent_is_read_once_known_to_terminate() {
         use /std/{Bool, print};
         use /std/Bool/{True, Holds};
 
-        pub let outer(_: Bool) -> Bool =
+        pub let outer(_: Bool) -> Bool =>
             let b: Bool = true
             and c: Bool = (() =>
                 let _: Holds(b) = True/qed();
@@ -64,8 +64,8 @@ fn a_member_on_a_cycle_that_does_not_descend_stands_for_nothing_in_its_bodies() 
         use /std/{Bool, Nat, print};
         use /std/Bool/{True, Holds};
 
-        pub let outer(_: Nat) -> Bool =
-            let b(n: Nat) -> Bool = match n | 0 => true | k + 1 => b(k) end
+        pub let outer(_: Nat) -> Bool =>
+            let b(n: Nat) -> Bool => match n | 0 => true | k + 1 => b(k) end
             and c: Bool = (() =>
                 let _: Holds(b(0)) = True/qed();
                 false)();
@@ -90,7 +90,7 @@ fn a_group_listing_itself_is_refused_for_not_descending() {
         r#"
         use /std/{List, Nat, print};
 
-        pub let outer(n: Nat) -> Nat =
+        pub let outer(n: Nat) -> Nat =>
             let b: Type = List(Nat);
             let c: b = [];
             n;
@@ -115,10 +115,10 @@ fn two_members_reading_each_other_below_their_arguments_stand() {
         use /std/{Nat, print};
         use /std/Bool/{True, Holds};
 
-        pub let outer(n: Nat) -> Nat =
-            let T(m: Nat) -> Type = match m | 0 => Nat | k + 1 => T(k) end
-            and f(m: Nat) -> {Nat, Nat} = (m, match m | 0 => 0 | k + 1 => let _: Holds(g(k).0 == k) = True/qed(); g(k).1 end)
-            and g(m: Nat) -> {Nat, Nat} = (m, match m | 0 => 0 | k + 1 => let _: Holds(f(k).0 == k) = True/qed(); f(k).1 end);
+        pub let outer(n: Nat) -> Nat =>
+            let T(m: Nat) -> Type => match m | 0 => Nat | k + 1 => T(k) end
+            and f(m: Nat) -> {Nat, Nat} => (m, match m | 0 => 0 | k + 1 => let _: Holds(g(k).0 == k) = True/qed(); g(k).1 end)
+            and g(m: Nat) -> {Nat, Nat} => (m, match m | 0 => 0 | k + 1 => let _: Holds(f(k).0 == k) = True/qed(); f(k).1 end);
             f(n).1 + 42;
 
         print(Nat/to_str(outer(3)))
@@ -134,10 +134,10 @@ fn a_member_read_in_an_arm_reads_what_the_arm_bound() {
         use /std/{Nat, Bool};
         use /std/Bool/{True, Holds};
 
-        let f(c: Bool) -> Nat =
-            let g(i: Nat) -> Nat =
+        let f(c: Bool) -> Nat =>
+            let g(i: Nat) -> Nat =>
                 match c | true => 7 | false => i end
-            and m(_u: {}) -> Nat =
+            and m(_u: {}) -> Nat =>
                 match c
                 | true =>
                     let _h: Holds(g(3) == 7) = True/qed();

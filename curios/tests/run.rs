@@ -16,11 +16,11 @@ use {
 
 const ECHO: &str = r#"
 use /std/{List, Str, Nat, Bytes};
-let render(b: Bytes) -> Str = match Str/of_bytes(b)
+let render(b: Bytes) -> Str => match Str/of_bytes(b)
     | success(s) => s
     | failure(_) => Str/concat("bytes:", Nat/to_str(Bytes/to_nat(b)))
     end;
-let entry() -> /std/Io({}) =
+let entry() -> /std/Io({}) =>
     let args = /std/Proc/args()!;
     let tail = match args | [] => [] | [_, ..rest] => rest end;
     /std/print(Str/join("|", List/map(tail, render)));
@@ -169,7 +169,7 @@ fn single(root: &Path, program: &str) {
 
 const FINISHED: &str = r#"
 use /std/{Str, Try, Io, Proc};
-let entry() -> Io({}) =
+let entry() -> Io({}) =>
     let _ = Try/run(Io/write(Proc/stdout, Str/to_bytes("before\n")))!;
     let _ = Try/run(Io/finish(Proc/stdout))!;
     let input = Io/Reader/new(Proc/stdin)!;
@@ -208,7 +208,7 @@ fn finishing_standard_output_gives_its_reader_the_end_while_the_program_runs() {
 
 const PRINTED_AFTER: &str = r#"
 use /std/{Try, Io, Proc, print};
-let entry() -> Io({}) =
+let entry() -> Io({}) =>
     let _ = Try/run(Io/finish(Proc/stdout))!;
     print("after");
 entry()
@@ -237,8 +237,8 @@ fn a_print_after_standard_output_is_finished_ends_the_program_saying_why() {
 const CUT_LAST: &str = r#"
 use /std/{Nat, Bytes, Str, Try, Io, Proc};
 use /std/time/{Duration};
-let grown(b: Bytes, n: Nat) -> Bytes = match n | 0 => b | m + 1 => grown(0x[..b, ..b], m) end;
-let entry() -> Io({}) =
+let grown(b: Bytes, n: Nat) -> Bytes => match n | 0 => b | m + 1 => grown(0x[..b, ..b], m) end;
+let entry() -> Io({}) =>
     let timed = Io/timeout(Duration/of_millis(10), Try/run(Io/write(Proc/stdout, grown(0x[0x61], 20))))!;
     let said = match timed | none() => "cut\n" | some(_) => "all\n" end;
     let _ = Try/run(Io/write(Proc/stderr, Str/to_bytes(said)))!;

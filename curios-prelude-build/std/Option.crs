@@ -6,63 +6,63 @@ use /std/ops/{Ord, Eql};
 use /std/Bool/{True, False};
 
 --- `f` on the value, or `none`.
-pub let bind(@A: Sort, @B: Sort, m: Option(A), f: (A) -> Option(B)) -> Option(B) =
+pub let bind(@A: Sort, @B: Sort, m: Option(A), f: (A) -> Option(B)) -> Option(B) =>
     match m | some(a) => f(a) | none() => none() end;
 
 --- `f` on the value, kept as an option.
-pub let map(@A: Sort, @B: Sort, m: Option(A), f: (A) -> B) -> Option(B) =
+pub let map(@A: Sort, @B: Sort, m: Option(A), f: (A) -> B) -> Option(B) =>
     match m | some(a) => some(f(a)) | none() => none() end;
 
 --- The value, or `default` when there is none.
-pub let unwrap_or(@A: Sort, m: Option(A), default: A) -> A =
+pub let unwrap_or(@A: Sort, m: Option(A), default: A) -> A =>
     match m | some(a) => a | none() => default end;
 
 --- Whether a value is present.
-pub let is_some(@A: Sort, m: Option(A)) -> Bool =
+pub let is_some(@A: Sort, m: Option(A)) -> Bool =>
     match m | some(_) => true | none() => false end;
 
 --- Whether no value is present.
-pub let is_none(@A: Sort, m: Option(A)) -> Bool =
+pub let is_none(@A: Sort, m: Option(A)) -> Bool =>
     match m | some(_) => false | none() => true end;
 
 --- `m` when it holds a value, `other` otherwise.
-pub let or(@A: Sort, m: Option(A), other: Option(A)) -> Option(A) =
+pub let or(@A: Sort, m: Option(A), other: Option(A)) -> Option(A) =>
     match m | some(a) => some(a) | none() => other end;
 
 --- `m` when it holds a value, otherwise what `other` answers.
-pub let or_else(@A: Sort, m: Option(A), other: () -> Option(A)) -> Option(A) =
+pub let or_else(@A: Sort, m: Option(A), other: () -> Option(A)) -> Option(A) =>
     match m | some(a) => some(a) | none() => other() end;
 
 --- The value when `pred` accepts it, `none` otherwise or when there is none.
-pub let filter(@A: Sort, m: Option(A), pred: (A) -> Bool) -> Option(A) =
+pub let filter(@A: Sort, m: Option(A), pred: (A) -> Bool) -> Option(A) =>
     match m
     | some(a), pred(a) => some(a)
     | _ => none()
     end;
 
 --- An option of an option collapsed to one.
-pub let flatten(@A: Sort, m: Option(Option(A))) -> Option(A) =
+pub let flatten(@A: Sort, m: Option(Option(A))) -> Option(A) =>
     match m | some(inner) => inner | none() => none() end;
 
 --- The value as a success, or `e` as the failure.
-pub let to_result(@A: Type, @E: Type, m: Option(A), e: E) -> Result(E, A) =
+pub let to_result(@A: Type, @E: Type, m: Option(A), e: E) -> Result(E, A) =>
     match m
     | some(a) => Result/success(a)
     | none() => Result/failure(e)
     end;
 
 --- The value, or what `default` answers when there is none.
-pub let unwrap_or_else(@A: Sort, m: Option(A), default: () -> A) -> A =
+pub let unwrap_or_else(@A: Sort, m: Option(A), default: () -> A) -> A =>
     match m | some(a) => a | none() => default() end;
 
 --- Whether `m` holds a value, as a decided proposition: `True` at `some` and `False` at `none`.
 ---
 --- A literal discharges it by reduction, and an option a guard has refined discharges it with nothing written.
-pub let IsSome(@A: Sort, m: Option(A)) -> Prop =
+pub let IsSome(@A: Sort, m: Option(A)) -> Prop =>
     match m | some(_) => True | none() => False end;
 
 --- The value, under the evidence that there is one.
-pub let get(@A: Sort, m: Option(A), @ok: IsSome(m)) -> A =
+pub let get(@A: Sort, m: Option(A), @ok: IsSome(m)) -> A =>
     match m
     | some(a) => a
     | none() => match ok end
@@ -71,19 +71,19 @@ pub let get(@A: Sort, m: Option(A), @ok: IsSome(m)) -> A =
 --- `some` is injective: two equal options that each hold a value hold one value.
 ---
 --- What lets a decoder take an encoding apart without inventing a value: a reader that answers an option is a function, so `Eq/cong` turns an equation between two encodings into one between the options read, and this turns that into one between the values.
-pub let some_inj(@A: Sort, @x: A, @y: A, same: Eq()(some(x), some(y))) -> Eq()(x, y) =
+pub let some_inj(@A: Sort, @x: A, @y: A, same: Eq()(some(x), some(y))) -> Eq()(x, y) =>
     match same | refl() => Eq/refl() end;
 
-satisfy (@A: Type, use Eql(A)) => Eql(Option(A)) {
+satisfy (@A: Type, use Eql(A)) -> Eql(Option(A)) {
     ..
 }
 
-satisfy (@A: Type, use Show(A)) => Show(Option(A)) {
-    show(m) =
+satisfy (@A: Type, use Show(A)) -> Show(Option(A)) {
+    show(m) =>
         match m | some(x) => Fmt/render("some(%)")(x) | none() => "none()" end,
 }
 
-satisfy (@A: Type, use Spell(A)) => Spell(Option(A)) {
+satisfy (@A: Type, use Spell(A)) -> Spell(Option(A)) {
     ..
 }
 
@@ -93,14 +93,14 @@ satisfy Monad(Option) {
 }
 
 --- `none` below `some`, and two values by `A`'s order.
-satisfy (@A: Type, use Ord(A)) => Ord(Option(A)) {
+satisfy (@A: Type, use Ord(A)) -> Ord(Option(A)) {
     ..
 }
 
-satisfy (@A: Type, use Hash(A)) => Hash(Option(A)) {
+satisfy (@A: Type, use Hash(A)) -> Hash(Option(A)) {
     ..
 }
 
-satisfy (@A: Type, use Hash/Key(A)) => Hash/Key(Option(A)) {
+satisfy (@A: Type, use Hash/Key(A)) -> Hash/Key(Option(A)) {
     ..
 }

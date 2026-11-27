@@ -24,7 +24,7 @@ satisfy Eql(Rounding) {
 }
 
 satisfy Show(Rounding) {
-    show(r) =
+    show(r) =>
         match r
         | ties_to_even() => "ties_to_even"
         | ties_to_away() => "ties_to_away"

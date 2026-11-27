@@ -10,10 +10,10 @@ struct Outer: Type {
     a: Inner,
 }
 
-let hold(g: (Nat) -> Outer) -> Inner =
-    Inner { step(k) = g(k).a.step(k) };
+let hold(g: (Nat) -> Outer) -> Inner =>
+    Inner { step(k) => g(k).a.step(k) };
 
-let m(n: Nat) -> Outer =
+let m(n: Nat) -> Outer =>
     Outer { a = hold((j) => m(j)) };
 
 m(0).a.step(0)

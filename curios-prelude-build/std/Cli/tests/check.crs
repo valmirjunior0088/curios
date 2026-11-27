@@ -1,17 +1,17 @@
 -- What a declaration is refused for, as `checked` reports it at run time: the same problems `declare` is refused by where it is written.
 use /std/{Cli, Str, Option, List, Show, Test};
 
-let problems(command: Cli/Command, version: Option(Str)) -> Str =
+let problems(command: Cli/Command, version: Option(Str)) -> Str =>
     match Cli/checked(command, version)
     | success(_) => "well formed"
     | failure(ps) => Str/join("; ", List/map(ps, Show/show))
     end;
 
-let leaf(options: List(Cli/Field), ps: List(Cli/Positional)) -> Cli/Command =
+let leaf(options: List(Cli/Field), ps: List(Cli/Positional)) -> Cli/Command =>
     Cli/leaf("tool", "A tool", options, Cli/positionals(ps));
 
 -- Two options answering to one name, an option answering to a built-in, and a switch's negation meeting an option of that name are each refused by the name.
-test a_name_two_options_answer_to_is_refused_by_it =
+test a_name_two_options_answer_to_is_refused_by_it =>
     Test/all([
         Test/equal(
             problems(
@@ -38,7 +38,7 @@ test a_name_two_options_answer_to_is_refused_by_it =
             "duplicate name --no-color")]);
 
 -- An option and a positional read by one name are refused, since `get` could reach only one of them.
-test two_arguments_read_by_one_name_are_refused =
+test two_arguments_read_by_one_name_are_refused =>
     Test/equal(
         problems(
             leaf([Cli/flag("root", "Root")], [Cli/positional("root", Cli/str, "Root")]),
@@ -46,7 +46,7 @@ test two_arguments_read_by_one_name_are_refused =
         "two arguments read by \"root\"");
 
 -- A name no line can write, a digit as a short name, and a variable no host can set are refused.
-test a_name_no_line_can_write_is_refused =
+test a_name_no_line_can_write_is_refused =>
     Test/all([
         Test/equal(
             problems(leaf([Cli/flag("-v", "Dash")], []), Option/none()),
@@ -66,7 +66,7 @@ test a_name_no_line_can_write_is_refused =
             "invalid name \"A=B\"")]);
 
 -- A group refuses two commands of one name and an invalid command beneath it, which is reported within the command that holds it.
-test a_group_is_refused_for_what_is_beneath_it =
+test a_group_is_refused_for_what_is_beneath_it =>
     Test/all([
         Test/equal(
             problems(Cli/group("deps", "D", [], [leaf([], []), leaf([], [])]), Option/none()),

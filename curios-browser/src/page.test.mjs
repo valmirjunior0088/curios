@@ -108,7 +108,7 @@ const started = async (
 
 const DOUBLE = "pub foreign double(Nat) -> Nat;\n";
 
-const DOUBLED = `let main() -> /std/Io({}) =
+const DOUBLED = `let main() -> /std/Io({}) =>
     let n = /app/double(21)!;
     /std/print(/std/Nat/to_str(n));
 main()
@@ -200,7 +200,7 @@ test("an export that is no function is refused before the program runs, naming t
 test("the program's arguments are its name, then each arg= of the query, percent-decoded to bytes", async (t) => {
   const root = tree(t, {
     "app/curios.toml": `compiler = "${version}"\nname = "app"\n`,
-    "app/exe.crs": `let main() -> /std/Io({}) =
+    "app/exe.crs": `let main() -> /std/Io({}) =>
     let args = /std/Proc/args()!;
     let _ = /std/Try/run(/std/Io/write(/std/Proc/stdout, /std/Bytes/join(0x[124], args)))!;
     /std/Io/pure(());
@@ -230,7 +230,7 @@ test("a dependency's files stand under its name, and a static entry's at its pag
       rest: '\n[dependencies]\nchart = { path = "../chart" }\n',
     }),
     "app/lib.crs": DOUBLE,
-    "app/exe.crs": `let main() -> /std/Io({}) =
+    "app/exe.crs": `let main() -> /std/Io({}) =>
     let n = /chart/half(/app/double(21)!)!;
     /std/print(/std/Nat/to_str(n));
 main()
@@ -351,7 +351,7 @@ test("a test page served by the command answers its word through its gateway, po
       gateway,
       answers: { double: "twice" },
     }),
-    "app/lib.crs": `use /std/{Nat, Test};\n\n${DOUBLE}\ntest doubling = Test/equal(double(21)!, 42);\n\ntest halving = Test/equal(double(1)!, 3);\n`,
+    "app/lib.crs": `use /std/{Nat, Test};\n\n${DOUBLE}\ntest doubling => Test/equal(double(21)!, 42);\n\ntest halving => Test/equal(double(1)!, 3);\n`,
     "app/exe.crs": DOUBLED,
     "app/web/dom.js": gateway,
   });

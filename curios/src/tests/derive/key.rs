@@ -56,10 +56,10 @@ fn a_key_derives_under_a_premise_on_its_payloads_type() {
         use /std/{Str, Hash, Map, print};
         use /std/ops/{Eql, Ord};
         induct Box(A: Type): pub Type | wrap(A) end
-        satisfy (@A: Type, use Eql(A)) => Eql(Box(A)) { .. }
-        satisfy (@A: Type, use Ord(A)) => Ord(Box(A)) { .. }
-        satisfy (@A: Type, use Hash(A)) => Hash(Box(A)) { .. }
-        satisfy (@A: Type, use Hash/Key(A)) => Hash/Key(Box(A)) { .. }
+        satisfy (@A: Type, use Eql(A)) -> Eql(Box(A)) { .. }
+        satisfy (@A: Type, use Ord(A)) -> Ord(Box(A)) { .. }
+        satisfy (@A: Type, use Hash(A)) -> Hash(Box(A)) { .. }
+        satisfy (@A: Type, use Hash/Key(A)) -> Hash/Key(Box(A)) { .. }
         let m = Map/of_list([(Box/wrap("b"), "2"), (Box/wrap("a"), "1")]);
         print(Str/join(" ", Map/values(m)))
         "#;
@@ -95,10 +95,10 @@ fn a_family_holding_itself_through_another_keys_type_derives_its_key() {
         use /std/{Nat, Str, Hash, Map, print};
         use /std/ops/{Eql, Ord};
         induct Box(A: Type): pub Type | wrap(A) end
-        satisfy (@A: Type, use Eql(A)) => Eql(Box(A)) { .. }
-        satisfy (@A: Type, use Ord(A)) => Ord(Box(A)) { .. }
-        satisfy (@A: Type, use Hash(A)) => Hash(Box(A)) { .. }
-        satisfy (@A: Type, use Hash/Key(A)) => Hash/Key(Box(A)) { .. }
+        satisfy (@A: Type, use Eql(A)) -> Eql(Box(A)) { .. }
+        satisfy (@A: Type, use Ord(A)) -> Ord(Box(A)) { .. }
+        satisfy (@A: Type, use Hash(A)) -> Hash(Box(A)) { .. }
+        satisfy (@A: Type, use Hash/Key(A)) -> Hash/Key(Box(A)) { .. }
         induct Tree: pub Type | leaf(Nat) | node(Box(Tree)) end
         satisfy Eql(Tree) { .. }
         satisfy Ord(Tree) { .. }
@@ -149,21 +149,21 @@ fn a_key_over_a_written_order_is_refused_naming_the_order() {
         use /std/ops/{Eql, Ord};
         induct Two: pub Type | low() | high() end
         satisfy Eql(Two) { .. }
-        let reversed(x: Two, y: Two) -> Ordering =
+        let reversed(x: Two, y: Two) -> Ordering =>
             match x
             | low() => match y | low() => Ordering/eq() | high() => Ordering/gt() end
             | high() => match y | low() => Ordering/lt() | high() => Ordering/eq() end
             end;
         satisfy Ord(Two) {
             ord = reversed,
-            lt(x, y) = Ordering/is_lt(reversed(x, y)),
-            le(x, y) = Ordering/is_le(reversed(x, y)),
-            flips(x, y) =
+            lt(x, y) => Ordering/is_lt(reversed(x, y)),
+            le(x, y) => Ordering/is_le(reversed(x, y)),
+            flips(x, y) =>
                 match x
                 | low() => match y | low() => Eq/refl() | high() => Eq/refl() end
                 | high() => match y | low() => Eq/refl() | high() => Eq/refl() end
                 end,
-            trans(x, y, z, p, q) =
+            trans(x, y, z, p, q) =>
                 match x
                 | high() => match z | low() => /std/Bool/True/qed() | high() => /std/Bool/True/qed() end
                 | low() =>
@@ -172,13 +172,13 @@ fn a_key_over_a_written_order_is_refused_naming_the_order() {
                     | high() => match y | low() => match q end | high() => match p end end
                     end
                 end,
-            eq(x, y, h) =
+            eq(x, y, h) =>
                 match x
                 | low() => match y | low() => Eq/refl() | high() => match h end end
                 | high() => match y | low() => match h end | high() => Eq/refl() end
                 end,
-            is_lt(_, _) = Eq/refl(),
-            is_le(_, _) = Eq/refl(),
+            is_lt(_, _) => Eq/refl(),
+            is_le(_, _) => Eq/refl(),
         }
         satisfy Hash(Two) { .. }
         satisfy Hash/Key(Two) { .. }
@@ -204,7 +204,7 @@ fn a_key_over_a_written_encoding_is_refused_naming_the_encoding() {
         satisfy Eql(Two) { .. }
         satisfy Ord(Two) { .. }
         satisfy Hash(Two) {
-            hash(t) = match t | low() => 0x[0x2] | high() => 0x[0x1] end,
+            hash(t) => match t | low() => 0x[0x2] | high() => 0x[0x1] end,
         }
         satisfy Hash/Key(Two) { .. }
         /std/print("")
@@ -228,7 +228,7 @@ fn a_written_encoding_that_writes_the_derived_one_keys_a_derived_key() {
         satisfy Eql(Point) { .. }
         satisfy Ord(Point) { .. }
         satisfy Hash(Point) {
-            hash(p) = 0x[..Hash/delimited(Hash/hash(p.x)), ..Hash/hash(p.y)],
+            hash(p) => 0x[..Hash/delimited(Hash/hash(p.x)), ..Hash/hash(p.y)],
         }
         satisfy Hash/Key(Point) { .. }
         let m = Map/of_list([(Point { x = 1, y = 0 }, "2"), (Point { x = 0, y = 7 }, "1")]);

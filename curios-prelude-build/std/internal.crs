@@ -14,7 +14,7 @@ pub let invalid: Io/Error =
     Io/Error/other(/sys/errno/inval);
 
 -- The system's temporary directory: the one `TMPDIR` names, or `/tmp` where it names none or is empty, as POSIX reads it.
-let temporary_directory() -> Io(Path) =
+let temporary_directory() -> Io(Path) =>
     let named = Proc/env("TMPDIR")!;
     let directory =
         match named
@@ -28,7 +28,7 @@ let temporary_directory() -> Io(Path) =
     Io/pure(directory);
 
 --- A name for a temporary file or directory that no other is likely to hold yet: `prefix` and sixteen hexadecimal digits of eight random bytes, under the system's temporary directory.
-pub let temporary_path(prefix: Str) -> Io(Path) =
+pub let temporary_path(prefix: Str) -> Io(Path) =>
     let directory = temporary_directory()!;
     let drawn = rand/bytes(8)!;
     Io/pure(Path/join(directory, Path/of_str(Str/concat(prefix, Show/show(drawn)))));
@@ -41,19 +41,19 @@ pub struct Waiting: pub Type {
 }
 
 --- A wait on latches alone, which made nothing to release.
-pub let on_tripped(latches: List(Latch)) -> Waiting =
+pub let on_tripped(latches: List(Latch)) -> Waiting =>
     Waiting { on = [], tripped = latches, release = Io/pure(()) };
 
 --- Until something `w` waits on has moved: a suspension that releases what `w` made, whether it ends or is cancelled.
-pub let suspend_on(w: Waiting) -> Io({}) =
+pub let suspend_on(w: Waiting) -> Io({}) =>
     /sys/Io/suspend(w.on, w.tripped, w.release, w.release);
 
 --- Until a latch of `latches` is tripped: a suspension that cancels nothing and goes on with nothing. Only the program trips a latch, so what waits on latches alone at the top of a program is a deadlock the host reports, and so is a wait on none.
-pub let wait_tripped(latches: List(Latch)) -> Io({}) =
+pub let wait_tripped(latches: List(Latch)) -> Io({}) =>
     suspend_on(on_tripped(latches));
 
 --- What `attempt` answers, asked again each time something `wait` names has moved while it declines: the one loop every wait goes through, on the program's own state and on a handle's readiness alike. Nothing runs between an attempt that declines and the suspension but `wait`, which never suspends, so no change made between them is missed; an attempt takes nothing unless it answers.
-pub let until(@A: Type, attempt: Io(Option(A)), wait: Io(Waiting)) -> Io(A) =
+pub let until(@A: Type, attempt: Io(Option(A)), wait: Io(Waiting)) -> Io(A) =>
     let got = attempt!;
     match got
     | some(a) => Io/pure(a)
@@ -64,8 +64,8 @@ pub let until(@A: Type, attempt: Io(Option(A)), wait: Io(Waiting)) -> Io(A) =
     end;
 
 --- Everything `s` yields up to the end of the stream, for a caller whose stream no one else reads, so what a cancel or a failure drops is lost to no one: a stream another may read on is read through `/std/Io/Reader/rest`, which keeps what it read in its reader. Every chunk holds a byte, so every read short of the end is progress.
-pub let read_to_end(@S: Type, use Io/Read(S), s: S) -> Try(Io, Io/Error, Bytes) =
-    let go(acc: Bytes) -> Try(Io, Io/Error, Bytes) =
+pub let read_to_end(@S: Type, use Io/Read(S), s: S) -> Try(Io, Io/Error, Bytes) =>
+    let go(acc: Bytes) -> Try(Io, Io/Error, Bytes) =>
         let c = Io/read(@S, s, 4096)!;
         match c
         | bytes(b) => go(0x[..acc, ..b])

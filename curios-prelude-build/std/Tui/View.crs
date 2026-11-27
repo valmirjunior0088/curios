@@ -30,7 +30,7 @@ end
 pub use View/*;
 
 --- How many columns `v` takes.
-pub let width(v: View) -> Nat =
+pub let width(v: View) -> Nat =>
     match v
     | filled(_, _, w, _) => w
     | line(_, l) => Line/width(l)
@@ -43,7 +43,7 @@ pub let width(v: View) -> Nat =
     end;
 
 --- How many rows `v` takes.
-pub let height(v: View) -> Nat =
+pub let height(v: View) -> Nat =>
     match v
     | filled(_, _, _, h) => h
     | line(_, _) => 1
@@ -56,11 +56,11 @@ pub let height(v: View) -> Nat =
     end;
 
 --- `w` by `h` of blanks.
-pub let blank(w: Nat, h: Nat) -> View =
+pub let blank(w: Nat, h: Nat) -> View =>
     View/filled(Glyph/space, Style/plain, w, h);
 
 --- `s` as one line in `style`, every character it holds shown, as `Line/of_str` shows it.
-pub let text(style: Style, s: Str) -> View =
+pub let text(style: Style, s: Str) -> View =>
     View/line(style, Line/of_str(s));
 
 --- A view of exactly `w` by `h`, built by `fit`: what a pane answers for the room it is given.
@@ -69,23 +69,23 @@ pub struct Sized(w: Nat, h: Nat): Type {
 }
 
 --- `v` at `w` by `h`, cropped where it overflows and padded with blanks where it falls short.
-pub let fit(v: View, w: Nat, h: Nat) -> Sized(w, h) =
+pub let fit(v: View, w: Nat, h: Nat) -> Sized(w, h) =>
     Sized(w, h) { view = View/sized(v, w, h) };
 
 --- What `s` shows.
-pub let shown(@w: Nat, @h: Nat, s: Sized(w, h)) -> View =
+pub let shown(@w: Nat, @h: Nat, s: Sized(w, h)) -> View =>
     s.view;
 
 -- `p`, moved by `dx` and `dy`.
-let shifted(p: Point, dx: Nat, dy: Nat) -> Point =
+let shifted(p: Point, dx: Nat, dy: Nat) -> Point =>
     Point { x = p.x + dx, y = p.y + dy };
 
 -- The first of the two that holds a value.
-let either(@A: Type, first: Option(A), second: Option(A)) -> Option(A) =
+let either(@A: Type, first: Option(A), second: Option(A)) -> Option(A) =>
     match first | some(_) => first | none() => second end;
 
 --- Where `v` asks for the terminal's cursor, or `none`. A request belongs to the view it is made over; an overlay's wins over its base's, and of two views beside or above each other, the later one's is taken.
-pub let cursor(v: View) -> Option(Point) =
+pub let cursor(v: View) -> Option(Point) =>
     match v
     | filled(_, _, _, _) | line(_, _) => Option/none()
     | beside(left, right) =>

@@ -14,10 +14,10 @@ const MARKER: &str = "-- MARK";
 ///
 /// Unbound names are deliberate — formatting is syntax-only, so these need to parse and nothing more.
 const POSITIONS: [&str; 12] = [
-    "use /std/{Bool, Str, Option};\n\npub let of_str(s: Str) -> Option(Bool) =\n    match\n    | s == \"true\" => Option/some(true)\n    | _ => Option/none()\n    end;\n",
-    "use /std/{Nat};\n\n--- Doubles.\npub let double(n: Nat) -> Nat =\n    n + n;\n\n--- Nothing.\nlet zero: Nat =\n    0\n--- One more.\nand one: Nat =\n    1;\n",
+    "use /std/{Bool, Str, Option};\n\npub let of_str(s: Str) -> Option(Bool) =>\n    match\n    | s == \"true\" => Option/some(true)\n    | _ => Option/none()\n    end;\n",
+    "use /std/{Nat};\n\n--- Doubles.\npub let double(n: Nat) -> Nat =>\n    n + n;\n\n--- Nothing.\nlet zero: Nat =\n    0\n--- One more.\nand one: Nat =\n    1;\n",
     "--- Shapes.\npub induct Shape: pub Type\n--- Round.\n| circle(Nat)\n| square(Nat)\nend\n\n--- A point.\nstruct Point: pub Type {\n    --- Across.\n    x: Nat,\n    y: Nat,\n}\n",
-    "use /std/{Bool, Str};\n\npub let to_str(b: Bool) -> Str =\n    let x: Str = \"y\";\n    match b | true => x | false => \"false\" end;\n",
+    "use /std/{Bool, Str};\n\npub let to_str(b: Bool) -> Str =>\n    let x: Str = \"y\";\n    match b | true => x | false => \"false\" end;\n",
     "pub induct Ordering: pub Type\n| lt()\n| eq()\n| gt()\nend\n",
     "use /std/{Equal, Ordering};\n\npub concept Ordered(A: Type): pub Type {\n    use Equal(A),\n    cmp(A, A) -> Ordering,\n}\n",
     "use /std/{Equal, Bool};\n\nsatisfy Equal(Bool) {\n    eql = eql,\n    neq = xor,\n}\n",
@@ -45,7 +45,7 @@ const POSITIONS: [&str; 12] = [
         "        first_field_name = some_long_function_name(argument_one, argument_two),\n",
         "        second_field_name = another_long_function_name(argument_three, argument_four) };\n",
         "\n",
-        "let run(queue: Queue, resumed: Job) -> Io(Queue) =\n",
+        "let run(queue: Queue, resumed: Job) -> Io(Queue) =>\n",
         "    let widened = (queue + resumed) * some_long_function_name(argument_one, argument_two);\n",
         "    Io/pure(\n",
         "        enqueue(\n",
@@ -69,7 +69,7 @@ const POSITIONS: [&str; 12] = [
         "    first_parameter_name: Some/Long/Type/Name(Nat),\n",
         "    second_parameter_name: Another/Long/Type/Name(Nat),\n",
         "    step: (Nat, Nat) -> Nat,\n",
-        ") -> Nat =\n",
+        ") -> Nat =>\n",
         "    step(first_parameter_name, second_parameter_name);\n",
         "\n",
         "satisfy (\n",
@@ -77,8 +77,8 @@ const POSITIONS: [&str; 12] = [
         "    @E: Type,\n",
         "    use Monad(M),\n",
         "    use Monad/Lift(Io, M),\n",
-        ") => Monad/Lift(Io, (A: Type) => Carrier(M, E, A)) {\n",
-        "    lift(@A, m) = m,\n",
+        ") -> Monad/Lift(Io, (A: Type) => Carrier(M, E, A)) {\n",
+        "    lift(@A, m) => m,\n",
         "}\n",
         "\n",
         "satisfy Spell(Inner/Marker) {\n",
@@ -346,14 +346,14 @@ fn a_comment_keeps_its_place_in_the_sources_of_the_tree_at_every_width() {
 /// A comment written under an arm's arrow, on a line of its own, stays there: between `=>` and the body it leads.
 #[test]
 fn a_comment_under_an_arms_arrow_stays_under_it() {
-    let source = "let f(n: /std/Nat) -> /std/Nat =\n    match n\n    | 0 => 1\n    | p + 1 =>\n        -- what the successor case does\n        p\n    end;\n\nf(1)\n";
+    let source = "let f(n: /std/Nat) -> /std/Nat =>\n    match n\n    | 0 => 1\n    | p + 1 =>\n        -- what the successor case does\n        p\n    end;\n\nf(1)\n";
     assert_eq!(formatted(source), source);
 }
 
 /// A comment riding an arm's arrow stays on the arm it was written on, and the body it pushed down goes one level in.
 #[test]
 fn a_comment_riding_an_arms_arrow_stays_on_its_arm() {
-    let source = "let f(o: /std/Option(/std/Nat)) -> /std/Nat =\n    match o\n    | some(x) => -- the value\n        x\n    | none() => -- nothing\n        0\n    end;\n\nf(o)\n";
+    let source = "let f(o: /std/Option(/std/Nat)) -> /std/Nat =>\n    match o\n    | some(x) => -- the value\n        x\n    | none() => -- nothing\n        0\n    end;\n\nf(o)\n";
     assert_eq!(formatted(source), source);
 }
 
@@ -438,7 +438,7 @@ fn a_comment_before_a_closer_stays_at_its_members_column() {
         "let fold(\n",
         "    first: Nat,\n",
         "    -- second: Nat,\n",
-        ") -> Nat =\n",
+        ") -> Nat =>\n",
         "    first\n",
         "    -- before the terminator\n",
         ";\n",
@@ -501,7 +501,7 @@ fn a_comment_before_a_closer_stays_at_its_members_column() {
         "        -- no arguments yet\n",
         "    );\n",
         "\n",
-        "let matched(o: Option(Nat)) -> Nat =\n",
+        "let matched(o: Option(Nat)) -> Nat =>\n",
         "    match o\n",
         "    | some(x) => x\n",
         "    | none() => 0\n",
@@ -519,7 +519,7 @@ fn a_comment_beside_what_the_printer_respells_or_leaves_out_keeps_its_line() {
         "    ((first + second)) -- after the redundant pair\n",
         "        * third;\n",
         "\n",
-        "let dispatched(c: Nat) -> Nat =\n",
+        "let dispatched(c: Nat) -> Nat =>\n",
         "    match c\n",
         "    | 0x3e => -- after a numeral\n",
         "        1\n",
@@ -547,7 +547,7 @@ fn a_comment_beside_what_the_printer_respells_or_leaves_out_keeps_its_line() {
         "    (first + second) -- after the redundant pair\n",
         "        * third;\n",
         "\n",
-        "let dispatched(c: Nat) -> Nat =\n",
+        "let dispatched(c: Nat) -> Nat =>\n",
         "    match c\n",
         "    | 0x3E => -- after a numeral\n",
         "        1\n",

@@ -361,7 +361,7 @@ fn a_declaration_lowered_now_exposing_a_private_name_is_refused() {
     let (over, whole) = refusals(
         &root,
         "a.crs",
-        "let hidden: Type = Type;\n\npub let shown(x: hidden) -> Type = Type;\n",
+        "let hidden: Type = Type;\n\npub let shown(x: hidden) -> Type => Type;\n",
         &baseline,
     );
 
@@ -373,14 +373,14 @@ fn a_declaration_lowered_now_exposing_a_private_name_is_refused() {
 fn a_name_made_private_refuses_what_exposes_it() {
     let root = written(
         "hidden",
-        "pub let hidden: Type = Type;\n\npub let shown(x: hidden) -> Type = Type;\n",
+        "pub let hidden: Type = Type;\n\npub let shown(x: hidden) -> Type => Type;\n",
     );
     let baseline = into_core_unit(&UnitSource::mounted(&library(&root)), &[], syntax()).unwrap();
 
     let (over, whole) = refusals(
         &root,
         "a.crs",
-        "let hidden: Type = Type;\n\npub let shown(x: hidden) -> Type = Type;\n",
+        "let hidden: Type = Type;\n\npub let shown(x: hidden) -> Type => Type;\n",
         &baseline,
     );
 
@@ -529,10 +529,10 @@ fn a_declaration_its_reader_drops_becomes_unused() {
 fn a_cycle_nothing_reaches_is_unused() {
     same_zeros(
         "lint-cycle",
-        "let even(n: Type) -> Type = odd(n);\n\nlet odd(n: Type) -> Type = even(n);\n\npub let x: Type = even(Type);\n",
+        "let even(n: Type) -> Type => odd(n);\n\nlet odd(n: Type) -> Type => even(n);\n\npub let x: Type = even(Type);\n",
         &[
-            "let even(n: Type) -> Type = odd(n);\n\nlet odd(n: Type) -> Type = even(n);\n\npub let x: Type = Type;\n",
-            "let even(n: Type) -> Type = odd(n);\n\nlet odd(n: Type) -> Type = even(n);\n\npub let x: Type = odd(Type);\n",
+            "let even(n: Type) -> Type => odd(n);\n\nlet odd(n: Type) -> Type => even(n);\n\npub let x: Type = Type;\n",
+            "let even(n: Type) -> Type => odd(n);\n\nlet odd(n: Type) -> Type => even(n);\n\npub let x: Type = odd(Type);\n",
         ],
     );
 }
@@ -602,13 +602,13 @@ fn outcomes(root: &Path, path: &str, text: &str, baseline: &PreparedText) -> (St
 fn an_alias_lowered_again_is_audited_with_the_whole_unit() {
     let root = written(
         "alias",
-        "struct Hidden: Type { }\n\npub struct Shown: pub Type { }\n\npub let Alias: Type = Shown;\n\npub let used(x: Alias) -> Type = Type;\n",
+        "struct Hidden: Type { }\n\npub struct Shown: pub Type { }\n\npub let Alias: Type = Shown;\n\npub let used(x: Alias) -> Type => Type;\n",
     );
     let baseline = into_core_unit(&UnitSource::mounted(&library(&root)), &[], syntax()).unwrap();
 
     for text in [
-        "struct Hidden: Type { }\n\npub struct Shown: pub Type { }\n\npub let Alias: Type = Hidden;\n\npub let used(x: Alias) -> Type = Type;\n",
-        "struct Hidden: Type { }\n\npub struct Shown: pub Type { }\n\npub let Alias: Type = Shown;\n\npub let used(x: Alias) -> Type = Type;\n\npub let more(x: Alias) -> Type = Type;\n",
+        "struct Hidden: Type { }\n\npub struct Shown: pub Type { }\n\npub let Alias: Type = Hidden;\n\npub let used(x: Alias) -> Type => Type;\n",
+        "struct Hidden: Type { }\n\npub struct Shown: pub Type { }\n\npub let Alias: Type = Shown;\n\npub let used(x: Alias) -> Type => Type;\n\npub let more(x: Alias) -> Type => Type;\n",
     ] {
         let (over, whole) = outcomes(&root, "a.crs", text, &baseline);
         assert_eq!(over, whole, "after writing {text:?}");

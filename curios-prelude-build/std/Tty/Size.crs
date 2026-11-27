@@ -16,5 +16,5 @@ satisfy Spell(Size) {
 }
 
 satisfy Show(Size) {
-    show(s) = Fmt/render("%x%")(s.w)(s.h),
+    show(s) => Fmt/render("%x%")(s.w)(s.h),
 }

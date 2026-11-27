@@ -10,14 +10,14 @@ fn functions_entrypoints_and_witness_methods_sequence_in_their_expected_monads()
     for source in [
         r#"
         use /std/{Io, print};
-        let task() -> Io({}) = let _ = print("a")!; print("b");
+        let task() -> Io({}) => let _ = print("a")!; print("b");
         let _ = task()!;
         print("c")
         "#,
         r#"
         use /std/{Nat, Io, print};
         concept Task(A: Type): pub Type { action() -> Io(A) }
-        satisfy Task(Nat) { action() = let _ = print("a")!; let _ = print("b")!; Io/pure(3) }
+        satisfy Task(Nat) { action() => let _ = print("a")!; let _ = print("b")!; Io/pure(3) }
         let _ = Task/action(@Nat)!;
         print("c")
         "#,
@@ -39,12 +39,12 @@ fn dispatches_through_a_user_monad_witness() {
         use /std/{Nat, Str, Monad};
         pub struct Box(A : Type) : pub Type { unbox : A }
         satisfy Monad(Box) {
-            pure(@A, x) = Box { unbox = x },
-            bind(@A, @B, m, f) = f(m.unbox)
+            pure(@A, x) => Box { unbox = x },
+            bind(@A, @B, m, f) => f(m.unbox)
         }
         let a : Box(Nat) = Box { unbox = 3 };
         let b : Box(Nat) = Box { unbox = 4 };
-        let result() -> Box(Nat) = Monad/pure(Nat/add(a!, b!));
+        let result() -> Box(Nat) => Monad/pure(Nat/add(a!, b!));
         /std/print(Nat/to_str(result().unbox))
         "#;
 
@@ -57,7 +57,7 @@ fn std_parse_threads_bangs_left_to_right() {
     let source = r#"
         use /std/{Parse, Byte, Bytes, Nat, Result};
 
-        let parser() -> Parse/Parse(Bytes, Nat) =
+        let parser() -> Parse/Parse(Bytes, Nat) =>
             Parse/pure(Nat/sub(Byte/to_nat(Parse/bytes/byte()!), Byte/to_nat(Parse/bytes/byte()!)));
 
         match Parse/run(parser(), /std/Str/to_bytes("BA"))
@@ -85,7 +85,7 @@ fn region_mixes_action_types() {
 
         let is_a : (Byte) -> Bool = (b) => b == 0x41;
 
-        let parser() -> Parse/Parse(Bytes, Bytes) =
+        let parser() -> Parse/Parse(Bytes, Bytes) =>
             Parse/pure(0x[..Parse/bytes/take_while(is_a)!, Parse/bytes/byte()!]);
 
         match Parse/run(parser(), /std/Str/to_bytes("AB"))
@@ -113,7 +113,7 @@ fn region_mixes_action_types() {
 fn a_failure_inside_an_argument_stops_the_enclosing_result_computation() {
     let source = r#"
         use /std/{Result, Str, Nat, print};
-        let result() -> Result(Str, Nat) =
+        let result() -> Result(Str, Nat) =>
             Result/success(Nat/add(Result/failure(@Str, @Nat, "failed")!, 1));
         match result()
         | success(n) => print(Nat/to_str(n))
@@ -127,9 +127,9 @@ fn a_failure_inside_an_argument_stops_the_enclosing_result_computation() {
 fn a_local_recursive_function_keeps_the_value_bound_before_it() {
     let source = r#"
         use /std/{Io, Nat, print};
-        let main() -> Io({}) =
+        let main() -> Io({}) =>
             let base = Io/pure(3)!;
-            let count(n: Nat) -> Nat =
+            let count(n: Nat) -> Nat =>
                 match n | 0 => base | k + 1 => count(k) + 1 end;
             let result = Nat/add(count(2), 4);
             print(Nat/to_str(result));
@@ -142,8 +142,8 @@ fn a_local_recursive_function_keeps_the_value_bound_before_it() {
 fn a_function_constructs_a_nested_description_before_its_scope_runs() {
     let source = r#"
         use /std/{Io, print};
-        let main() -> Io({}) =
-            let body() -> Io({}) =
+        let main() -> Io({}) =>
+            let body() -> Io({}) =>
                 let _ = print("body")!;
                 Io/pure(());
             let _ = print("acquire")!;

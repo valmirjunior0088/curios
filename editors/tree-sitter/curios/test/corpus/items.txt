@@ -3,7 +3,7 @@ Definitions with and without sugar
 ================================================================================
 
 pub let zero: Nat = 0;
-let map(@A: Type, @B: Type, m: Option(A), f: (A) -> B) -> Option(B) = m;
+let map(@A: Type, @B: Type, m: Option(A), f: (A) -> B) -> Option(B) => m;
 pub foreign log(Bytes) -> Nat;
 
 --------------------------------------------------------------------------------
@@ -65,8 +65,8 @@ pub foreign log(Bytes) -> Nat;
 A recursive group, each member with its own visibility
 ================================================================================
 
-pub let even(n: Nat) -> Bool = odd(n)
-and odd(n: Nat) -> Bool = even(n);
+pub let even(n: Nat) -> Bool => odd(n)
+and odd(n: Nat) -> Bool => even(n);
 
 --------------------------------------------------------------------------------
 
@@ -425,10 +425,10 @@ A witness group, each member resolving through the other
 ================================================================================
 
 satisfy Show(A) {
-    show(x) = Show/show(x),
+    show(x) => Show/show(x),
 }
-and (@B: Type) => Show(B) {
-    show(x) = Show/show(x),
+and (@B: Type) -> Show(B) {
+    show(x) => Show/show(x),
 }
 
 --------------------------------------------------------------------------------
@@ -484,8 +484,8 @@ and (@B: Type) => Show(B) {
 A field sugar's parameter is a pattern
 ================================================================================
 
-satisfy Program({Nat, Nat}) { execute((a, b)) = Io/pure(()) }
-satisfy Program({}) { execute(()) = Io/pure(()) }
+satisfy Program({Nat, Nat}) { execute((a, b)) => Io/pure(()) }
+satisfy Program({}) { execute(()) => Io/pure(()) }
 
 --------------------------------------------------------------------------------
 
@@ -544,11 +544,11 @@ Witnesses, bare and parameterized
 ================================================================================
 
 satisfy Show(Nat) {
-    show(n) = Nat/to_str(n),
+    show(n) => Nat/to_str(n),
 }
-satisfy (@A: Type, use Show(A)) => Show(List(A)) {
+satisfy (@A: Type, use Show(A)) -> Show(List(A)) {
     show = show_list,
-    Ok(b) = Nat/Lt(0, b),
+    Ok(b) => Nat/Lt(0, b),
 }
 
 --------------------------------------------------------------------------------
@@ -653,7 +653,7 @@ print(y)
 A test declaration
 ================================================================================
 
-test the_answer_holds =
+test the_answer_holds =>
     Test/assert(42 == 42);
 
 --------------------------------------------------------------------------------
@@ -702,11 +702,11 @@ A derived witness holds the dots alone, by itself and inside a mixed group
 satisfy Spell(Point) {
     ..
 }
-satisfy (@A: Type, use Spell(A)) => Spell(Tree(A)) {
+satisfy (@A: Type, use Spell(A)) -> Spell(Tree(A)) {
     ..
 }
 and Equal(Point) {
-    eql(a, b) = same(a, b),
+    eql(a, b) => same(a, b),
 }
 
 --------------------------------------------------------------------------------

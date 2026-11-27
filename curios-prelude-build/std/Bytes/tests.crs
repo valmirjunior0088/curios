@@ -4,7 +4,7 @@ use /std/ops/{Ord};
 use /std/Bool/{Holds};
 
 -- `..` splices one generator into a packed literal, between literal runs and adjacent to another atom. `i` and `bang` are bound rather than written, so the run is genuinely spliced rather than folded at parse time.
-test atom_splice_builds_the_written_sequence =
+test atom_splice_builds_the_written_sequence =>
     let i: Byte = 0x69;
     let bang: Byte = 0x21;
     Test/equal(0x[0x48, i, bang], Str/to_bytes("Hi!"));
@@ -13,34 +13,34 @@ test atom_splice_builds_the_written_sequence =
 let _bytes_cons_has_the_length_of_its_tail_plus_one(
     h: Byte,
     t: Bytes,
-) -> Eq()(Bytes/length(0x[h, ..t]), 1 + Bytes/length(t)) =
+) -> Eq()(Bytes/length(0x[h, ..t]), 1 + Bytes/length(t)) =>
     Eq/refl();
 
 let _bytes_cons_decodes_its_head_first(
     h: Byte,
     t: Bytes,
-) -> Eq()(Bytes/try_get(0x[h, ..t], 0), Option/some(h)) =
+) -> Eq()(Bytes/try_get(0x[h, ..t], 0), Option/some(h)) =>
     Eq/refl();
 
-test list_fold_sums_elements =
+test list_fold_sums_elements =>
     Test/equal(List/fold([10, 20, 30], 0, (e, acc) => acc + e), 60);
 
-test bytes_fold_sums_bytes =
+test bytes_fold_sums_bytes =>
     Test/equal(Bytes/fold(0x[0x0A, 0x14, 0x1E], 0, (byte, acc) => acc + Byte/to_nat(byte)), 60);
 
 -- Bytes show as two hexadecimal digits each, a leading zero kept, built from characters rather than decoded from bytes.
-test bytes_show_as_hexadecimal =
+test bytes_show_as_hexadecimal =>
     Test/equal(Show/show(0x[0x0F, 0xA0, 0x00]), "0fa000");
 
 -- The orders of `Bytes` and `Str` walk both runs' structure, so a type may name them: each is stated reflexive here, a statement an index walked upward under a guard is refused for.
-let bytes_order_is_reflexive(a: Bytes) -> Eq()(Bytes/ord(a, a), Ordering/eq()) =
+let bytes_order_is_reflexive(a: Bytes) -> Eq()(Bytes/ord(a, a), Ordering/eq()) =>
     Ord/refl(a);
 
-let _str_order_is_reflexive(a: Str) -> Eq()(Str/ord(a, a), Ordering/eq()) =
+let _str_order_is_reflexive(a: Str) -> Eq()(Str/ord(a, a), Ordering/eq()) =>
     bytes_order_is_reflexive(Str/to_bytes(a));
 
 -- A proper prefix first, then the first place the two differ.
-test packed_orders_compare_by_prefix_then_by_atom =
+test packed_orders_compare_by_prefix_then_by_atom =>
     Test/all([
         Test/equal(Bytes/ord(0x[], 0x[]), Ordering/eq()),
         Test/equal(Bytes/ord(0x[1], 0x[1, 0]), Ordering/lt()),
@@ -51,7 +51,7 @@ test packed_orders_compare_by_prefix_then_by_atom =
         Test/equal(Str/ord("b", "ab"), Ordering/gt())]);
 
 -- Two runs part at a byte where a byte decides their order, and not where one runs out or they are one run.
-test runs_part_at_a_byte_only_where_a_byte_decides =
+test runs_part_at_a_byte_only_where_a_byte_decides =>
     Test/all([
         Test/assert("`0x[1, 2]` is below `0x[1, 3]`", Bytes/ord/below(0x[1, 2], 0x[1, 3])),
         Test/assert("`0x[1, 2, 9]` is below `0x[2]`", Bytes/ord/below(0x[1, 2, 9], 0x[2])),
@@ -69,7 +69,7 @@ let _a_run_below_another_is_before_it_wherever_the_two_stand(
     s: Bytes,
     u: Bytes,
     parted: Holds(Bytes/ord/below(a, b)),
-) -> Eq()(Bytes/ord(0x[..p, ..a, ..s], 0x[..p, ..b, ..u]), Ordering/lt()) =
+) -> Eq()(Bytes/ord(0x[..p, ..a, ..s], 0x[..p, ..b, ..u]), Ordering/lt()) =>
     Bytes/ord/below/lt(
         0x[..p, ..a, ..s],
         0x[..p, ..b, ..u],
@@ -87,13 +87,13 @@ let _the_order_of_bytes_reads_past_a_shared_prefix(
     p: Bytes,
     a: Bytes,
     b: Bytes,
-) -> Eq()(Bytes/ord(0x[..p, ..a], 0x[..p, ..b]), Bytes/ord(a, b)) =
+) -> Eq()(Bytes/ord(0x[..p, ..a], 0x[..p, ..b]), Bytes/ord(a, b)) =>
     Bytes/ord/past(p, a, b);
 
 -- A run of bytes read as a number: bounded by its width, and injective at one width.
 let _a_run_denotes_a_number_below_its_width(
     b: Bytes,
-) -> Holds(Bytes/to_nat(b) < Nat/pow(256, Bytes/length(b))) =
+) -> Holds(Bytes/to_nat(b) < Nat/pow(256, Bytes/length(b))) =>
     Bytes/to_nat/below(b);
 
 let _two_runs_of_one_length_and_one_number_are_one(
@@ -101,5 +101,5 @@ let _two_runs_of_one_length_and_one_number_are_one(
     b: Bytes,
     same: Eq()(Bytes/length(a), Bytes/length(b)),
     e: Eq()(Bytes/to_nat(a), Bytes/to_nat(b)),
-) -> Eq()(a, b) =
+) -> Eq()(a, b) =>
     Bytes/to_nat_inj(a, b, same, e);

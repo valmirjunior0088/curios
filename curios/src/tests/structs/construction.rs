@@ -12,7 +12,7 @@ fn named_fields_run_end_to_end() {
         end
         let p : { n : Nat, v : Vec(Nat)(n) } =
             (n = 2, v = Vec/cons(30, Vec/cons(12, Vec/nil())));
-        let total(@k : Nat, v : Vec(Nat)(k), acc : Nat) -> Nat =
+        let total(@k : Nat, v : Vec(Nat)(k), acc : Nat) -> Nat =>
             match v
             | nil() => acc
             | cons(@m, x, xs) => total(xs, Nat/add(acc, x))
@@ -73,7 +73,7 @@ fn struct_dependent_fields_run_end_to_end() {
         end
         pub struct Sized : pub Type { n : Nat, v : Vec(Nat)(n) }
         let s : Sized = Sized { n = 2, v = Vec/cons(30, Vec/cons(12, Vec/nil())) };
-        let total(@k : Nat, v : Vec(Nat)(k), acc : Nat) -> Nat =
+        let total(@k : Nat, v : Vec(Nat)(k), acc : Nat) -> Nat =>
             match v
             | nil() => acc
             | cons(@m, x, xs) => total(xs, Nat/add(acc, x))
@@ -92,8 +92,8 @@ fn struct_abstract_smart_constructor_round_trips() {
         mod Celsius
             use /std/{Nat};
             pub struct Celsius : Type { Nat }
-            pub let of_nat(n : Nat) -> Celsius = Celsius { n };
-            pub let to_nat(c : Celsius) -> Nat = c.0;
+            pub let of_nat(n : Nat) -> Celsius => Celsius { n };
+            pub let to_nat(c : Celsius) -> Nat => c.0;
         end
         /std/print(Nat/to_str(Celsius/to_nat(Celsius/of_nat(42))))
         "#;
@@ -215,7 +215,7 @@ fn prop_struct_with_informative_field_rejected() {
         let b0 : Box = Box { 0 };
         let b1 : Box = Box { 1 };
         let irrelevant : Eq()(b0, b1) = Eq/refl();
-        let get(b : Box) -> Nat = b.val;
+        let get(b : Box) -> Nat => b.val;
         let zero_eq_one : Eq()(0, 1) = Eq/cong(get, irrelevant);
         /std/print("no")
         "#;
@@ -239,15 +239,15 @@ fn type_struct_distinct_values_not_convertible() {
     error(source);
 }
 
-// The function-field sugar, end to end: `label(params) -> T` in a struct declaration and a Σ-type, `label(params) = body` in a struct literal and a tuple literal. The parser keeps the sugar in the AST; `into_core` undoes it — this pins the lowering, not just the grammar.
+// The function-field sugar, end to end: `label(params) -> T` in a struct declaration and a Σ-type, `label(params) => body` in a struct literal and a tuple literal. The parser keeps the sugar in the AST; `into_core` undoes it — this pins the lowering, not just the grammar.
 #[test]
 fn function_field_sugar_runs_end_to_end() {
     let source = r#"
         use /std/{Nat};
         pub struct Api : pub Type { base : Nat, bump(x : Nat) -> Nat }
-        let api : Api = Api { base = 3, bump(x) = x + 1 };
+        let api : Api = Api { base = 3, bump(x) => x + 1 };
         let pair : { seed : Nat, twice(x : Nat) -> Nat } =
-            (seed = api.bump(api.base), twice(x) = x + x);
+            (seed = api.bump(api.base), twice(x) => x + x);
         /std/print(Nat/to_str(pair.twice(pair.seed)))
         "#;
 
@@ -260,9 +260,9 @@ fn function_field_sugar_takes_its_arguments_apart() {
     let source = r#"
         use /std/{Nat};
         pub struct Api : pub Type { sum(p : {Nat, Nat}) -> Nat }
-        let api : Api = Api { sum((a, b)) = a + b };
+        let api : Api = Api { sum((a, b)) => a + b };
         let pair : { swap(p : {Nat, Nat}) -> {Nat, Nat}, unit(u : {}) -> Nat } =
-            (swap((a, b)) = (b, a), unit(()) = 1);
+            (swap((a, b)) => (b, a), unit(()) => 1);
         /std/print(Nat/to_str(api.sum(pair.swap((3, 4))) * 10 + pair.unit(())))
         "#;
     assert_eq!(run(source), b"71");
@@ -270,7 +270,7 @@ fn function_field_sugar_takes_its_arguments_apart() {
     let witnessed = r#"
         use /std/{Nat};
         concept Sums(T: Type): Type { sum(T) -> Nat }
-        satisfy Sums({Nat, Nat}) { sum((a, b)) = a * 10 + b }
+        satisfy Sums({Nat, Nat}) { sum((a, b)) => a * 10 + b }
         /std/print(Nat/to_str(Sums/sum((3, 4))))
         "#;
     assert_eq!(run(witnessed), b"34");
@@ -322,7 +322,7 @@ fn a_concept_parameter_typed_by_a_universe_polymorphic_family_is_admitted() {
     let source = r#"
         use /std/{Nat, List};
         concept Sized(F : List(Type)) : pub Type { size(Nat) -> Nat, }
-        let s : Sized([Nat]) = Sized([Nat]) { size(n) = n };
+        let s : Sized([Nat]) = Sized([Nat]) { size(n) => n };
         /std/print(Nat/to_str(Sized/size(@_, use s, 4)))
         "#;
 

@@ -145,7 +145,7 @@ fn calling_double(root: &Path, name: &str, rows: &[(&str, &str)]) -> std::path::
         .expect("write the library");
     fs::write(
         package.join("exe.crs"),
-        fill!("let main() -> /std/Io({}) = let doubled = /${name}/double(3)!;\nlet _ = /std/Proc/exit(@{}, /std/Nat/to_byte(doubled % 256))!;\n/std/Io/pure(());\nmain()\n", name),
+        fill!("let main() -> /std/Io({}) => let doubled = /${name}/double(3)!;\nlet _ = /std/Proc/exit(@{}, /std/Nat/to_byte(doubled % 256))!;\n/std/Io/pure(());\nmain()\n", name),
     )
     .expect("write the temp source");
 
@@ -177,7 +177,7 @@ fn refused(directory: &Path, output: &Path, arguments: &[&str]) -> String {
 }
 
 /// A program that calls a `foreign` of its own, which no `[foreign]` row answers, and declares a test that calls it too.
-const UNANSWERED: &str = "foreign frobnicate(Nat) -> Nat;\nlet main() -> /std/Io({}) = let n = frobnicate(3)!;\n/std/print(/std/Nat/to_str(n));\ntest frobbed = let n = frobnicate(3)!;\n/std/Test/equal(n, 6);\nmain()\n";
+const UNANSWERED: &str = "foreign frobnicate(Nat) -> Nat;\nlet main() -> /std/Io({}) => let n = frobnicate(3)!;\n/std/print(/std/Nat/to_str(n));\ntest frobbed => let n = frobnicate(3)!;\n/std/Test/equal(n, 6);\nmain()\n";
 
 /// `compile` links what it bundles before it writes, as `run` links before it runs: a reached row nothing answers is refused by its name and by what would answer it, a `[foreign]` row, and no executable is written that its launcher would refuse at every start.
 #[test]
@@ -268,7 +268,7 @@ fn a_row_with_no_native_table_is_refused_natively_by_name() {
         .expect("write the library");
     fs::write(
         package.join("exe.crs"),
-        "let main() -> /std/Io({}) = let doubled = /clock/double(3)!;\n/std/print(/std/Nat/to_str(doubled));\nmain()\n",
+        "let main() -> /std/Io({}) => let doubled = /clock/double(3)!;\n/std/print(/std/Nat/to_str(doubled));\nmain()\n",
     )
     .expect("write the temp source");
 
@@ -453,7 +453,7 @@ fn printer(root: &Path) -> std::path::PathBuf {
     fs::write(
         package.join("exe.crs"),
         r#"use /std/{List, print, print_err};
-let entry() -> /std/Io({}) =
+let entry() -> /std/Io({}) =>
     let arguments = /std/Proc/args()!;
     match List/try_get(arguments, 1)
     | some(_) =>
@@ -551,7 +551,7 @@ fn a_branch_ticks_while_another_reads_standard_input() {
         package.join("exe.crs"),
         r#"use /std/{Io, Nat, Str, Bytes, Try, Proc};
 use /std/time/{Duration};
-let ticks(n: Nat) -> Io({}) =
+let ticks(n: Nat) -> Io({}) =>
     match n
     | 0 => Io/pure(())
     | m + 1 =>
@@ -559,7 +559,7 @@ let ticks(n: Nat) -> Io({}) =
         let _ = /std/print("tick\n")!;
         ticks(m)
     end;
-let reading() -> Io({}) =
+let reading() -> Io({}) =>
     let input = Io/Reader/new(Proc/stdin)!;
     let read = Try/run(Io/Reader/rest(input))!;
     match read

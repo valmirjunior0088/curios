@@ -82,13 +82,13 @@ use /std/ops/{Eql, Add, Sub, Mul, Div, Rem};
 use /std/Bool/{True, Holds};
 
 --- That `n` is not zero, decided — what `/` and `%` on `Nat` ask of a divisor. It is `Holds(0 < n)`: a natural is not zero exactly where zero is below it, which conversion decides.
-pub let NonZero(n: Nat) -> Prop =
+pub let NonZero(n: Nat) -> Prop =>
     Holds(n != 0);
 
 satisfy Eql(Nat) {
     eql = eql,
     eq = eq_of_eql,
-    refl(_) = True/qed(),
+    refl(_) => True/qed(),
 }
 
 satisfy Add(Nat) {
@@ -105,22 +105,22 @@ satisfy Mul(Nat) {
 
 --- The divisor must not be zero.
 satisfy Div(Nat) {
-    Ok(b) = NonZero(b),
+    Ok(b) => NonZero(b),
     div = div,
 }
 
 --- The divisor must not be zero.
 satisfy Rem(Nat) {
-    Ok(b) = NonZero(b),
+    Ok(b) => NonZero(b),
     rem = rem,
 }
 
 --- The decimal digit of `d` modulo ten.
-let single_digit(d: Nat) -> Str =
+let single_digit(d: Nat) -> Str =>
     Str/of_char(Char/hex_digit(d % 10));
 
 --- The decimal digits of `n`.
-pub let to_str(n: Nat) -> Str =
+pub let to_str(n: Nat) -> Str =>
     match n < 10
     | true => single_digit(n)
     | false =>
@@ -130,7 +130,7 @@ pub let to_str(n: Nat) -> Str =
     end;
 
 --- The number a nonempty run of decimal digits spells, or `none` for any other text.
-pub let of_str(s: Str) -> Option(Nat) =
+pub let of_str(s: Str) -> Option(Nat) =>
     match Str/is_empty(s)
     | true => Option/none()
     | false =>
@@ -146,22 +146,22 @@ pub let of_str(s: Str) -> Option(Nat) =
     end;
 
 --- `a - 1`, and `0` at zero.
-pub let pred(a: Nat) -> Nat =
+pub let pred(a: Nat) -> Nat =>
     a - 1;
 
 --- The greatest common divisor, with `gcd(a, 0)` as `a`, so `gcd(0, 0)` is `0`. It is [`Gcd/of`]'s value: a type may mention it, and its laws are `Gcd`'s.
-pub let gcd(a: Nat, b: Nat) -> Nat =
+pub let gcd(a: Nat, b: Nat) -> Nat =>
     Gcd/of(a, b).value;
 
 --- The least common multiple, with `lcm(0, 0)` as `0`.
-pub let lcm(a: Nat, b: Nat) -> Nat =
+pub let lcm(a: Nat, b: Nat) -> Nat =>
     match gcd(a, b) | 0 => 0 | g + 1 => a * b / (g + 1) end;
 
 --- The floor of the square root. General recursion, so a type may not mention it.
 ---
 --- Newton's iteration from a power of two above the root, so the cost grows with the root's bit width rather than the root: counting up would take `2⁶⁴` steps for a 128-bit `n`.
-pub let sqrt(n: Nat) -> Nat =
-    let go(x: Nat) -> Nat =
+pub let sqrt(n: Nat) -> Nat =>
+    let go(x: Nat) -> Nat =>
         match x
         | 0 => 0
         | xp + 1 =>
@@ -171,24 +171,24 @@ pub let sqrt(n: Nat) -> Nat =
     go(shl(1, log2(n) / 2 + 1));
 
 --- Whether `n` is even.
-pub let is_even(n: Nat) -> Bool =
+pub let is_even(n: Nat) -> Bool =>
     n % 2 == 0;
 
 --- How many factors of two a positive `n` holds: [`Scale/of`]'s count.
-pub let trailing_zeros(n: Nat, @ok: Holds(0 < n)) -> Nat =
+pub let trailing_zeros(n: Nat, @ok: Holds(0 < n)) -> Nat =>
     Scale/of(n).count;
 
 --- A positive `n` with its factors of two divided out, which is odd: `2 * half + 1` for [`Scale/of`]'s half.
-pub let odd_part(n: Nat, @ok: Holds(0 < n)) -> Nat =
+pub let odd_part(n: Nat, @ok: Holds(0 < n)) -> Nat =>
     2 * Scale/of(n).half + 1;
 
 --- Whether `lo <= c <= hi`.
-pub let in_range(c: Nat, lo: Nat, hi: Nat) -> Bool =
+pub let in_range(c: Nat, lo: Nat, hi: Nat) -> Bool =>
     match c >= lo | true => c <= hi | false => false end;
 
 -- Stated over `eql` by name, where `a == b` would read the witness that names this.
 --- `Eql`'s law at `Nat`: a decided equality is an equation, by recursion on both sides, since `a + 1 == b + 1` is `a == b` after cancellation.
-let eq_of_eql(a: Nat, b: Nat, h: Holds(eql(a, b))) -> Eq()(a, b) =
+let eq_of_eql(a: Nat, b: Nat, h: Holds(eql(a, b))) -> Eq()(a, b) =>
     match a
     | 0 =>
         match b

@@ -44,22 +44,22 @@ use /std/ops/{Eql};
 use /std/Bool/{True, Holds};
 
 --- The element at `i`, or `none` past the end.
-pub let try_get(@T: Type, a: List(T), i: Nat) -> Option(T) =
+pub let try_get(@T: Type, a: List(T), i: Nat) -> Option(T) =>
     match i < length(a)
     | true => Option/some(get(a, i))
     | false => Option/none()
     end;
 
 --- Everything from `k` on, under the evidence that `k` is within the length.
-pub let drop(@T: Type, a: List(T), k: Nat, @ok: Holds(k <= length(a))) -> List(T) =
+pub let drop(@T: Type, a: List(T), k: Nat, @ok: Holds(k <= length(a))) -> List(T) =>
     slice(@T, a, k, length(a) - k);
 
 --- The concatenation, in order.
-pub let flatten(@T: Type, parts: List(List(T))) -> List(T) =
+pub let flatten(@T: Type, parts: List(List(T))) -> List(T) =>
     fold(parts, [], (a, acc) => [..acc, ..a]);
 
 --- The first element `pred` accepts, or `none`.
-pub let find(@T: Type, l: List(T), pred: (T) -> Bool) -> Option(T) =
+pub let find(@T: Type, l: List(T), pred: (T) -> Bool) -> Option(T) =>
     match l
     | [] => Option/none()
     | [h, ..t] =>
@@ -67,8 +67,8 @@ pub let find(@T: Type, l: List(T), pred: (T) -> Bool) -> Option(T) =
     end;
 
 --- The index of the first element `pred` accepts, or `none`.
-pub let find_index(@T: Type, l: List(T), pred: (T) -> Bool) -> Option(Nat) =
-    let go(i: Nat, rest: List(T)) -> Option(Nat) =
+pub let find_index(@T: Type, l: List(T), pred: (T) -> Bool) -> Option(Nat) =>
+    let go(i: Nat, rest: List(T)) -> Option(Nat) =>
         match rest
         | [] => Option/none()
         | [h, ..t] =>
@@ -77,22 +77,22 @@ pub let find_index(@T: Type, l: List(T), pred: (T) -> Bool) -> Option(Nat) =
     go(0, l);
 
 --- Whether `pred` accepts some element.
-pub let any(@T: Type, l: List(T), pred: (T) -> Bool) -> Bool =
+pub let any(@T: Type, l: List(T), pred: (T) -> Bool) -> Bool =>
     match l
     | [] => false
     | [h, ..t] => match pred(h) | true => true | false => any(t, pred) end
     end;
 
 --- Whether `x` is an element.
-pub let contains(@T: Type, use Eql(T), l: List(T), x: T) -> Bool =
+pub let contains(@T: Type, use Eql(T), l: List(T), x: T) -> Bool =>
     any(l, (y) => y == x);
 
 --- The index of the first `x`, or `none`.
-pub let index_of(@T: Type, use Eql(T), l: List(T), x: T) -> Option(Nat) =
+pub let index_of(@T: Type, use Eql(T), l: List(T), x: T) -> Option(Nat) =>
     find_index(l, (y) => y == x);
 
 --- The last element, or `none` of an empty list.
-pub let last(@T: Type, l: List(T)) -> Option(T) =
+pub let last(@T: Type, l: List(T)) -> Option(T) =>
     match l
     | [] => Option/none()
     | [h] => Option/some(h)
@@ -100,49 +100,49 @@ pub let last(@T: Type, l: List(T)) -> Option(T) =
     end;
 
 --- The longest prefix `pred` accepts.
-pub let take_while(@T: Type, l: List(T), pred: (T) -> Bool) -> List(T) =
+pub let take_while(@T: Type, l: List(T), pred: (T) -> Bool) -> List(T) =>
     match l
     | [h, ..t], pred(h) => [h, ..take_while(t, pred)]
     | _ => []
     end;
 
 --- Everything after the longest prefix `pred` accepts.
-pub let drop_while(@T: Type, l: List(T), pred: (T) -> Bool) -> List(T) =
+pub let drop_while(@T: Type, l: List(T), pred: (T) -> Bool) -> List(T) =>
     match l
     | [h, ..t], pred(h) => drop_while(t, pred)
     | _ => l
     end;
 
 --- The first `n` elements, or all of them when there are fewer.
-pub let take(@T: Type, l: List(T), n: Nat) -> List(T) =
+pub let take(@T: Type, l: List(T), n: Nat) -> List(T) =>
     match n
     | 0 => []
     | k + 1 => match l | [] => [] | [h, ..t] => [h, ..take(t, k)] end
     end;
 
 --- Pairs, position by position, as long as the shorter list.
-pub let zip(@A: Type, @B: Type, a: List(A), b: List(B)) -> List({A, B}) =
+pub let zip(@A: Type, @B: Type, a: List(A), b: List(B)) -> List({A, B}) =>
     match (a, b)
     | ([x, ..xs], [y, ..ys]) => [(x, y), ..zip(xs, ys)]
     | _ => []
     end;
 
 --- The elements in reverse order.
-pub let reverse(@T: Type, l: List(T)) -> List(T) =
+pub let reverse(@T: Type, l: List(T)) -> List(T) =>
     fold(l, [], (x, acc) => [x, ..acc]);
 
 --- The elements `pred` accepts.
-pub let filter(@T: Type, l: List(T), pred: (T) -> Bool) -> List(T) =
+pub let filter(@T: Type, l: List(T), pred: (T) -> Bool) -> List(T) =>
     fold(l, [], (x, acc) =>
         match pred(x) | true => [..acc, x] | false => acc end);
 
 --- `f` on every element, keeping the values it answers.
-pub let filter_map(@T: Type, @B: Type, l: List(T), f: (T) -> Option(B)) -> List(B) =
+pub let filter_map(@T: Type, @B: Type, l: List(T), f: (T) -> Option(B)) -> List(B) =>
     fold(l, [], (x, acc) =>
         match f(x) | some(y) => [..acc, y] | none() => acc end);
 
 --- The elements `pred` accepts, and the rest.
-pub let partition(@T: Type, l: List(T), pred: (T) -> Bool) -> {List(T), List(T)} =
+pub let partition(@T: Type, l: List(T), pred: (T) -> Bool) -> {List(T), List(T)} =>
     let empty: {List(T), List(T)} = ([], []);
     fold(l, empty, (x, (yes, no)) =>
         match pred(x)
@@ -151,26 +151,26 @@ pub let partition(@T: Type, l: List(T), pred: (T) -> Bool) -> {List(T), List(T)}
         end);
 
 --- The firsts and the seconds.
-pub let unzip(@A: Type, @B: Type, l: List({A, B})) -> {List(A), List(B)} =
+pub let unzip(@A: Type, @B: Type, l: List({A, B})) -> {List(A), List(B)} =>
     let empty: {List(A), List(B)} = ([], []);
     fold(l, empty, ((x, y), (xs, ys)) => ([..xs, x], [..ys, y]));
 
 --- `lo` up to and excluding `hi`; empty when `hi` is not above `lo`.
-pub let range(lo: Nat, hi: Nat) -> List(Nat) =
-    let go(k: Nat, i: Nat) -> List(Nat) =
+pub let range(lo: Nat, hi: Nat) -> List(Nat) =>
+    let go(k: Nat, i: Nat) -> List(Nat) =>
         match k | 0 => [] | kp + 1 => [i, ..go(kp, i + 1)] end;
     go(hi - lo, lo);
 
 --- `n` copies of `x`.
-pub let replicate(@T: Type, n: Nat, x: T) -> List(T) =
+pub let replicate(@T: Type, n: Nat, x: T) -> List(T) =>
     match n | 0 => [] | k + 1 => [x, ..replicate(k, x)] end;
 
 --- `f` on every element, the results concatenated.
-pub let concat_map(@T: Type, @B: Type, l: List(T), f: (T) -> List(B)) -> List(B) =
+pub let concat_map(@T: Type, @B: Type, l: List(T), f: (T) -> List(B)) -> List(B) =>
     fold(l, [], (x, acc) => [..acc, ..f(x)]);
 
 --- `sep` between each pair of elements.
-pub let intersperse(@T: Type, l: List(T), sep: T) -> List(T) =
+pub let intersperse(@T: Type, l: List(T), sep: T) -> List(T) =>
     match l
     | [] => []
     | [h, ..t] => [h, ..fold(t, [], (x, acc) => [..acc, sep, x])]
@@ -184,7 +184,7 @@ pub let traverse(
     use Monad(M),
     l: List(T),
     f: (T) -> M(B),
-) -> M(List(B)) =
+) -> M(List(B)) =>
     match l
     | [] => Monad/pure([])
     | [h, ..t] =>
@@ -194,7 +194,7 @@ pub let traverse(
     end;
 
 --- `f` on every element in order under the monad, for its effect.
-pub let each(@M: (Type) -> Type, @T: Type, use Monad(M), l: List(T), f: (T) -> M({})) -> M({}) =
+pub let each(@M: (Type) -> Type, @T: Type, use Monad(M), l: List(T), f: (T) -> M({})) -> M({}) =>
     match l
     | [] => Monad/pure(())
     | [h, ..t] =>
@@ -210,8 +210,8 @@ pub let balanced(
     empty: A,
     single: (i: Nat, Holds(i < n)) -> A,
     combine: (A, A) -> A,
-) -> A =
-    let go(lo: Nat, count: Nat, @bounded: Holds(lo + count <= n)) -> A =
+) -> A =>
+    let go(lo: Nat, count: Nat, @bounded: Holds(lo + count <= n)) -> A =>
         match
         | 1 < count =>
             let half = count / 2;
@@ -226,7 +226,7 @@ pub let balanced(
     go(0, n);
 
 --- Whether the two hold equal elements in the same order.
-pub let eql(@A: Type, use Eql(A), a: List(A), b: List(A)) -> Bool =
+pub let eql(@A: Type, use Eql(A), a: List(A), b: List(A)) -> Bool =>
     match (a, b)
     | ([], []) => true
     | ([x, ..xs], [y, ..ys]) => x == y && eql(xs, ys)
@@ -234,7 +234,7 @@ pub let eql(@A: Type, use Eql(A), a: List(A), b: List(A)) -> Bool =
     end;
 
 -- By recursion on both lists: two conses `eql` holds equal have one head, by the elements' own law, and one tail.
-let eq_of_eql(@A: Type, use Eql(A), a: List(A), b: List(A), h: Holds(eql(a, b))) -> Eq()(a, b) =
+let eq_of_eql(@A: Type, use Eql(A), a: List(A), b: List(A), h: Holds(eql(a, b))) -> Eq()(a, b) =>
     match a
     | [] =>
         match b
@@ -252,39 +252,39 @@ let eq_of_eql(@A: Type, use Eql(A), a: List(A), b: List(A), h: Holds(eql(a, b)))
     end;
 
 -- By recursion: each element is equal to itself by its own law.
-let eql_refl(@A: Type, use Eql(A), a: List(A)) -> Holds(eql(a, a)) =
+let eql_refl(@A: Type, use Eql(A), a: List(A)) -> Holds(eql(a, a)) =>
     match a
     | [] => True/qed()
     | [x, ..xs] => Bool/and/both(x == x, eql(xs, xs), Eql/refl(x), eql_refl(xs))
     end;
 
-satisfy (@A: Type, use Eql(A)) => Eql(List(A)) {
+satisfy (@A: Type, use Eql(A)) -> Eql(List(A)) {
     eql = eql,
     eq = eq_of_eql,
     refl = eql_refl,
 }
 
-satisfy (@A: Type, use Show(A)) => Show(List(A)) {
-    show(l) = Fmt/render("[%]")(Str/join(", ", map(l, (x) => Show/show(x)))),
+satisfy (@A: Type, use Show(A)) -> Show(List(A)) {
+    show(l) => Fmt/render("[%]")(Str/join(", ", map(l, (x) => Show/show(x)))),
 }
 
-satisfy (@A: Type, use Spell(A)) => Spell(List(A)) {
-    spell(l) = Fmt/render("[%]")(Str/join(", ", map(l, (x) => Spell/spell(x)))),
+satisfy (@A: Type, use Spell(A)) -> Spell(List(A)) {
+    spell(l) => Fmt/render("[%]")(Str/join(", ", map(l, (x) => Spell/spell(x)))),
 }
 
 satisfy Monad(List) {
-    pure(x) = [x],
-    bind(m, f) = fold(m, [], (x, acc) => [..acc, ..f(x)]),
+    pure(x) => [x],
+    bind(m, f) => fold(m, [], (x, acc) => [..acc, ..f(x)]),
 }
 
 -- A recursion over the list, so a cons encodes as its head's run before its tail's encoding, which a key's law reads.
-let hash(@A: Type, use Hash(A), values: List(A)) -> Bytes =
+let hash(@A: Type, use Hash(A), values: List(A)) -> Bytes =>
     match values
     | [] => 0x[]
     | [x, ..xs] => 0x[..Hash/delimited(Hash/hash(x)), ..hash(xs)]
     end;
 
 --- Each element's encoding delimited, in order: in the order of the lists, a list that begins a longer one first.
-satisfy (@A: Type, use Hash(A)) => Hash(List(A)) {
+satisfy (@A: Type, use Hash(A)) -> Hash(List(A)) {
     hash = hash,
 }

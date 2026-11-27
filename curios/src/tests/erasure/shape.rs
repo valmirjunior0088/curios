@@ -9,7 +9,7 @@ use crate::test_support::*;
 fn a_function_written_at_a_universe_is_called_at_a_variable() {
     let source = r#"
         use /std/{Nat};
-        let apply(@A: Type, h: (A, Nat) -> Nat, a: A) -> Nat = h(a, 41);
+        let apply(@A: Type, h: (A, Nat) -> Nat, a: A) -> Nat => h(a, 41);
         /std/print(Nat/to_str(apply((t, n) => n + 1, Nat)))
         "#;
     assert_eq!(run(source), b"42");
@@ -21,7 +21,7 @@ fn a_function_written_at_a_proposition_is_called_at_a_variable() {
     let source = r#"
         use /std/{Nat};
         use /std/Bool/{True};
-        let apply(@A: Sort, h: (A, Nat) -> Nat, a: A) -> Nat = h(a, 41);
+        let apply(@A: Sort, h: (A, Nat) -> Nat, a: A) -> Nat => h(a, 41);
         /std/print(Nat/to_str(apply((p, n) => n + 1, True/qed())))
         "#;
     assert_eq!(run(source), b"42");
@@ -32,7 +32,7 @@ fn a_function_written_at_a_proposition_is_called_at_a_variable() {
 fn a_function_written_at_a_variable_is_called_at_a_universe() {
     let source = r#"
         use /std/{Nat};
-        let make(@A: Type, a: A) -> (A, Nat) -> Nat = (b, n) => n + 1;
+        let make(@A: Type, a: A) -> (A, Nat) -> Nat => (b, n) => n + 1;
         /std/print(Nat/to_str(make(Nat)(Nat, 41)))
         "#;
     assert_eq!(run(source), b"42");
@@ -43,9 +43,9 @@ fn a_function_written_at_a_variable_is_called_at_a_universe() {
 fn a_function_typed_by_a_computed_domain_is_called_at_its_stuck_form() {
     let source = r#"
         use /std/{Nat};
-        let Sel(n: Nat) -> Type =
+        let Sel(n: Nat) -> Type =>
             match n | 0 => Nat | k + 1 => Type end;
-        let f(x: Nat, keep: (b: Sel(x), n: Nat) -> Nat, a: Sel(x)) -> Nat = keep(a, 41);
+        let f(x: Nat, keep: (b: Sel(x), n: Nat) -> Nat, a: Sel(x)) -> Nat => keep(a, 41);
         /std/print(Nat/to_str(f(1, (b, n) => n + 1, Nat)))
         "#;
     assert_eq!(run(source), b"42");
@@ -56,11 +56,11 @@ fn a_function_typed_by_a_computed_domain_is_called_at_its_stuck_form() {
 fn a_function_written_outside_an_arm_is_called_under_its_refinement() {
     let source = r#"
         use /std/{Nat};
-        let Sel(n: Nat) -> Type =
+        let Sel(n: Nat) -> Type =>
             match n | 0 => Nat | k + 1 => Type end;
-        let f(x: Nat, keep: (b: Sel(x), n: Nat) -> Nat, a: Sel(x)) -> Nat =
+        let f(x: Nat, keep: (b: Sel(x), n: Nat) -> Nat, a: Sel(x)) -> Nat =>
             match x | 0 => 0 | xp + 1 => keep(a, 41) end;
-        let outer(x: Nat, a: Sel(x)) -> Nat = f(x, (b, n) => n + 1, a);
+        let outer(x: Nat, a: Sel(x)) -> Nat => f(x, (b, n) => n + 1, a);
         /std/print(Nat/to_str(outer(1, Nat)))
         "#;
     assert_eq!(run(source), b"42");
@@ -71,7 +71,7 @@ fn a_function_written_outside_an_arm_is_called_under_its_refinement() {
 fn a_tuple_built_at_a_universe_is_read_at_a_variable() {
     let source = r#"
         use /std/{Nat};
-        let second(@A: Type, p: {A, Nat}) -> Nat = p.1;
+        let second(@A: Type, p: {A, Nat}) -> Nat => p.1;
         /std/print(Nat/to_str(second((Nat, 41))))
         "#;
     assert_eq!(run(source), b"41");
@@ -83,7 +83,7 @@ fn a_tuple_built_at_a_proposition_is_read_at_a_variable() {
     let source = r#"
         use /std/{Nat};
         use /std/Bool/{True};
-        let second(@A: Sort, p: {A, Nat}) -> Nat = p.1;
+        let second(@A: Sort, p: {A, Nat}) -> Nat => p.1;
         /std/print(Nat/to_str(second((True/qed(), 41))))
         "#;
     assert_eq!(run(source), b"41");
@@ -95,7 +95,7 @@ fn a_function_held_in_a_structure_is_called_at_a_variable() {
     let source = r#"
         use /std/{Nat};
         struct Runner(A: Type): Type { run: (A, Nat) -> Nat }
-        let call(@A: Type, runner: Runner(A), a: A) -> Nat = runner.run(a, 41);
+        let call(@A: Type, runner: Runner(A), a: A) -> Nat => runner.run(a, 41);
         /std/print(Nat/to_str(call(Runner { run = (t, n) => n + 1 }, Nat)))
         "#;
     assert_eq!(run(source), b"42");
@@ -117,12 +117,12 @@ fn a_structure_is_its_declarations_row_where_a_reading_erases_a_field() {
         | a(s: S(P))
         | b()
         end
-        let pick(u: U) -> Nat =
+        let pick(u: U) -> Nat =>
             match u
             | a(s) => s.y
             | b() => 7
             end;
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let n = List/length(Proc/args()!);
             /std/print(Nat/to_str(pick(U/a(S(P) { x = P/p(), y = n + 40 }))));
         entry()
@@ -135,7 +135,7 @@ fn a_structure_is_its_declarations_row_where_a_reading_erases_a_field() {
 fn a_body_generic_in_a_sort_is_linked_at_the_sort_each_use_states() {
     let source = r#"
         use /std/{Nat, Bool, Option, print};
-        let count(@A: Sort, o: Option(A)) -> Nat = match o | some(_) => 1 | none() => 0 end;
+        let count(@A: Sort, o: Option(A)) -> Nat => match o | some(_) => 1 | none() => 0 end;
         print(Nat/to_str(count(Option/some(4)) + count(Bool/holds(true)) + count(Bool/holds(false))))
         "#;
     assert_eq!(run(source), b"2");

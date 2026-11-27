@@ -27,7 +27,7 @@ fn two_sorts_apart_in_a_level_are_not_set_apart_by_inversion() {
         use /std/{Eq};
         use /std/Bool/{False};
 
-        let apart(p: Eq()(Type, Type)) -> False = match p end;
+        let apart(p: Eq()(Type, Type)) -> False => match p end;
 
         /std/print("FORGED")
         "#;
@@ -45,7 +45,7 @@ fn two_sorts_apart_in_a_level_are_not_set_apart_by_inversion() {
 fn one_declaration_serves_two_universe_levels() {
     let source = r#"
         use /std/{Nat, Str};
-        let pick(@A : Type, x : A) -> A = x;
+        let pick(@A : Type, x : A) -> A => x;
         let small : Nat = pick(7);
         let large : Type = pick(Nat);
         /std/print("both")
@@ -56,9 +56,9 @@ fn one_declaration_serves_two_universe_levels() {
 
 /// A type that quantifies over a type and answers a double powerset of it — the carrier Hurkens' form of Girard's paradox is stated over — with `tau`, the half of the paradox that stratifies. `U` answers a type, so the levels its body holds are its callers': the one `X` ranges over and the one each of its four powersets answers at.
 const A_TYPE_QUANTIFYING_OVER_TYPES: &str = r#"
-    let Pow(A: Type) -> Type = (A) -> Type;
+    let Pow(A: Type) -> Type => (A) -> Type;
     let U: Type = (X: Type, f: (Pow(Pow(X))) -> X) -> Pow(Pow(X));
-    let tau(t: Pow(Pow(U))) -> U = (X, f) => (p) => t((x) => p(f(x(X, f))));
+    let tau(t: Pow(Pow(U))) -> U => (X, f) => (p) => t((x) => p(f(x(X, f))));
     "#;
 
 // `s(U, f)` instantiates the `X` an instance of `U` binds at an instance of `U` below it, and `sigma`, the self-application Girard's paradox needs, does the same with `tau`. Both are typed: the two instances are two types, one a level under the other, and nothing here asks them to be one. The count is what says `U`'s levels are its callers', without which the instance below would not exist.
@@ -66,8 +66,8 @@ const A_TYPE_QUANTIFYING_OVER_TYPES: &str = r#"
 fn a_type_quantifying_over_types_is_instantiated_at_an_instance_of_itself_below_it() {
     let source = format!(
         r#"{A_TYPE_QUANTIFYING_OVER_TYPES}
-        let at_itself(s: U, f: (Pow(Pow(U))) -> U) -> Pow(Pow(U)) = s(U, f);
-        let sigma(s: U) -> Pow(Pow(U)) = s(U, tau);
+        let at_itself(s: U, f: (Pow(Pow(U))) -> U) -> Pow(Pow(U)) => s(U, f);
+        let sigma(s: U) -> Pow(Pow(U)) => s(U, tau);
         /std/print("stratified")
         "#
     );
@@ -86,8 +86,8 @@ fn a_type_quantifying_over_types_is_instantiated_at_an_instance_of_itself_below_
 fn the_self_application_girards_paradox_needs_is_refused_at_one_instance() {
     let source = format!(
         r#"{A_TYPE_QUANTIFYING_OVER_TYPES}
-        let sigma(s: U) -> Pow(Pow(U)) = s(U, tau);
-        let omega(x: U, p: Pow(U)) -> Type = (h: sigma(x)(p)) -> p(x);
+        let sigma(s: U) -> Pow(Pow(U)) => s(U, tau);
+        let omega(x: U, p: Pow(U)) -> Type => (h: sigma(x)(p)) -> p(x);
         /std/print("no")
         "#
     );
@@ -102,7 +102,7 @@ fn the_self_application_girards_paradox_needs_is_refused_at_one_instance() {
 fn the_same_quantifier_instantiates_at_a_type_below_it() {
     let source = format!(
         r#"{A_TYPE_QUANTIFYING_OVER_TYPES}
-        let sigma_at(s: U, A: Type, f: (Pow(Pow(A))) -> A) -> Pow(Pow(A)) = s(A, f);
+        let sigma_at(s: U, A: Type, f: (Pow(Pow(A))) -> A) -> Pow(Pow(A)) => s(A, f);
         /std/print("stratified")
         "#
     );
@@ -122,7 +122,7 @@ fn the_set_of_the_sets_that_are_not_members_of_themselves_is_refused() {
         | set(A: Type, f: (A) -> V)
         end
 
-        let Member(x: V, y: V) -> Type = match y | set(A, f) => {a: A, p: Eq()(f(a), x)} end;
+        let Member(x: V, y: V) -> Type => match y | set(A, f) => {a: A, p: Eq()(f(a), x)} end;
 
         let Regular: Type = {x: V, h: (Member(x, x)) -> False};
 
@@ -204,7 +204,7 @@ fn a_local_polymorphic_definition_applied_to_itself_is_refused_with_its_remedy()
         use /std/{Nat};
 
         let self_applied: (@A: Type, x: A) -> A =
-            let id(@A: Type, x: A) -> A = x;
+            let id(@A: Type, x: A) -> A => x;
             id(id);
 
         /std/print(Nat/to_str(self_applied(1)))
@@ -236,7 +236,7 @@ fn the_same_definition_at_the_top_level_is_admitted() {
     let source = r#"
         use /std/{Nat};
 
-        let id(@A: Type, x: A) -> A = x;
+        let id(@A: Type, x: A) -> A => x;
         let self_applied: (@A: Type, x: A) -> A = id(id);
 
         /std/print(Nat/to_str(self_applied(1)))
@@ -251,7 +251,7 @@ fn a_recursive_call_a_level_above_its_group_is_refused_with_its_remedy() {
     let source = r#"
         use /std/{Nat};
 
-        let depth(@A: Type, n: Nat, x: A) -> Nat =
+        let depth(@A: Type, n: Nat, x: A) -> Nat =>
             match n | 0 => 0 | k + 1 => depth(@Type, k, A) + 1 end;
 
         /std/print(Nat/to_str(depth(0, 1)))
@@ -282,9 +282,9 @@ fn a_group_member_used_a_level_above_its_own_certifies() {
     let source = r#"
         use /std/{Nat};
 
-        let pick(@A: Type, n: Nat, x: A) -> Nat =
+        let pick(@A: Type, n: Nat, x: A) -> Nat =>
             match n | 0 => 1 | k + 1 => other(k) end
-        and other(n: Nat) -> Nat =
+        and other(n: Nat) -> Nat =>
             match n | 0 => 1 | k + 1 => pick(k, Nat) end;
 
         /std/print(Nat/to_str(other(1)))
@@ -298,7 +298,7 @@ fn a_self_recursive_call_a_level_above_its_own_certifies() {
     let source = r#"
         use /std/{Nat};
 
-        let depth(@A: Type, n: Nat, x: A) -> Nat =
+        let depth(@A: Type, n: Nat, x: A) -> Nat =>
             match n | 0 => 0 | k + 1 => depth(@Type, k, Nat) end;
 
         /std/print(Nat/to_str(depth(0, 1)))
@@ -321,11 +321,11 @@ fn caret_under(line: &str, written: &str, from: usize) -> String {
 // **A conflict a scheme's bound closes names the declaration instantiated, at a use of it.** `lt` holds the level of its first argument's type under its second's domain, a bound its scheme states and no term of `bad` writes. Restated at a use with no place and no name, it left the report wherever else on the cycle carried a position, saying nothing of `lt`.
 #[test]
 fn a_conflict_a_schemes_bound_closes_names_the_declaration_instantiated() {
-    const BAD: &str = "        let bad(H: (Type) -> Type) -> Type = lt(H, H);";
+    const BAD: &str = "        let bad(H: (Type) -> Type) -> Type => lt(H, H);";
     let source = format!(
         r#"
-        let tie(@T: Type, _: T) -> Type = T;
-        let lt(F: (Type) -> Type, G: (Type) -> Type) -> Type = G(tie(F));
+        let tie(@T: Type, _: T) -> Type => T;
+        let lt(F: (Type) -> Type, G: (Type) -> Type) -> Type => G(tie(F));
 {BAD}
         /std/print("no")
         "#
@@ -352,10 +352,10 @@ fn a_conflict_two_uses_close_alone_stands_at_one_and_notes_the_other() {
     const BAD: &str = "        let bad: Type = let p = P; let q = Q; {lt(p, q), lt(q, p)};";
     let source = format!(
         r#"
-        let tie(@T: Type, _: T) -> Type = T;
-        let lt(F: (Type) -> Type, G: (Type) -> Type) -> Type = G(tie(F));
-        let P(A: Type) -> Type = A;
-        let Q(A: Type) -> Type = A;
+        let tie(@T: Type, _: T) -> Type => T;
+        let lt(F: (Type) -> Type, G: (Type) -> Type) -> Type => G(tie(F));
+        let P(A: Type) -> Type => A;
+        let Q(A: Type) -> Type => A;
 {BAD}
         /std/print("no")
         "#
@@ -384,14 +384,14 @@ fn a_conflict_two_uses_close_alone_stands_at_one_and_notes_the_other() {
 
 /// The declarations the conflicts below are closed over: `coerce` holds its first argument's level to its second's domain's, and `tie` holds its argument's type at the level it answers.
 const TIED: &str = r#"
-        let coerce(A: Type, F: (Type) -> Type) -> Type = F(A);
-        let tie(@T: Type, x: T) -> Type = T;
+        let coerce(A: Type, F: (Type) -> Type) -> Type => F(A);
+        let tie(@T: Type, x: T) -> Type => T;
 "#;
 
 // **A conflict an argument closes names the parameter the argument was checked as.** `coerce` states no bound in its scheme, the level `A` and `F`'s domain share being one by assignment, so what is on the cycle is `tie(G)` held under `A`'s sort: the report stands there and says whose parameter that is. No local definition's level and no call of a group's own member is on the cycle, so neither remedy is stated.
 #[test]
 fn a_conflict_an_argument_closes_names_the_parameter_it_was_checked_as() {
-    const BAD: &str = "        let bad(G: (Type) -> Type) -> Type = coerce(tie(G), G);";
+    const BAD: &str = "        let bad(G: (Type) -> Type) -> Type => coerce(tie(G), G);";
     let message = error(&format!("{TIED}{BAD}\n        /std/print(\"no\")\n"));
 
     assert!(
@@ -413,7 +413,7 @@ fn a_conflict_an_argument_closes_names_the_parameter_it_was_checked_as() {
 #[test]
 fn a_conflict_closed_in_an_arm_of_an_argument_names_the_parameter() {
     let message = error(&format!(
-        "{TIED}        let bad(b: /std/Bool, G: (Type) -> Type) -> Type = coerce(match b | true => tie(G) | false => /std/Nat end, G);\n        /std/print(\"no\")\n"
+        "{TIED}        let bad(b: /std/Bool, G: (Type) -> Type) -> Type => coerce(match b | true => tie(G) | false => /std/Nat end, G);\n        /std/print(\"no\")\n"
     ));
     assert!(
         message.contains("checked as `A`, the 1st argument of `coerce`"),
@@ -425,7 +425,7 @@ fn a_conflict_closed_in_an_arm_of_an_argument_names_the_parameter() {
 #[test]
 fn a_conflict_through_a_call_inside_an_argument_names_each_parameter() {
     let message = error(&format!(
-        "{TIED}        let id(@X: Type, x: X) -> X = x;\n        let bad(G: (Type) -> Type) -> Type = coerce(id(tie(G)), G);\n        /std/print(\"no\")\n"
+        "{TIED}        let id(@X: Type, x: X) -> X => x;\n        let bad(G: (Type) -> Type) -> Type => coerce(id(tie(G)), G);\n        /std/print(\"no\")\n"
     ));
 
     assert!(
@@ -440,10 +440,10 @@ fn a_conflict_through_a_call_inside_an_argument_names_each_parameter() {
 fn a_conflict_an_argument_closes_after_it_waited_names_the_parameter() {
     let message = error(
         r#"
-        let pick(@F: (Type) -> Type, a: F(/std/Nat), k: (X: Type) -> F(X)) -> F(/std/Nat) = a;
-        let tie(@T: Type, x: T) -> Type = T;
-        let take(A: Type, F: (Type) -> Type) -> Type = F(A);
-        let bad(G: (Type) -> Type) -> Type = take(pick(tie(G), (X) => X), G);
+        let pick(@F: (Type) -> Type, a: F(/std/Nat), k: (X: Type) -> F(X)) -> F(/std/Nat) => a;
+        let tie(@T: Type, x: T) -> Type => T;
+        let take(A: Type, F: (Type) -> Type) -> Type => F(A);
+        let bad(G: (Type) -> Type) -> Type => take(pick(tie(G), (X) => X), G);
         /std/print("no")
         "#,
     );
@@ -465,11 +465,11 @@ fn a_type_read_off_a_list_or_a_fold_is_classified_at_its_sort() {
             value: List/get(ts, 0, @h),
         }
 
-        pub let value(ts: List(Type), h: Holds(0 < List/length(ts)), head: Head(ts, h)) -> List/get(ts, 0, @h) =
+        pub let value(ts: List(Type), h: Holds(0 < List/length(ts)), head: Head(ts, h)) -> List/get(ts, 0, @h) =>
             head.value;
 
-        pub let Folded(xs: List(Nat)) -> Type = List/fold(xs, Nat, (_, acc: Type) => acc);
-        pub let keep(xs: List(Nat), x: Folded(xs)) -> Folded(xs) = x;
+        pub let Folded(xs: List(Nat)) -> Type => List/fold(xs, Nat, (_, acc: Type) => acc);
+        pub let keep(xs: List(Nat), x: Folded(xs)) -> Folded(xs) => x;
 
         /std/print("classified")
         "#;
@@ -485,9 +485,9 @@ fn an_arms_solution_has_its_variables_own_type() {
         | big(): (Type)
         end
 
-        let id(@A: Type, a: A) -> A = a;
-        pub let f(X: Type, c: Code(X), x: X) -> X = match c | big() => id(@X, x) end;
-        pub let f2(X: Type, c: Code(X), x: X) -> Type = match c | big() => {x} end;
+        let id(@A: Type, a: A) -> A => a;
+        pub let f(X: Type, c: Code(X), x: X) -> X => match c | big() => id(@X, x) end;
+        pub let f2(X: Type, c: Code(X), x: X) -> Type => match c | big() => {x} end;
 
         /std/print("solved")
         "#;

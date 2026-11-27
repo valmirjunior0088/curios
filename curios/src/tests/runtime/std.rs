@@ -10,7 +10,7 @@ fn flt_of_str_returns_option() {
     assert_eq!(
         run(r#"
         use /std/{Nat, Flt, Str, Option, Io};
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let whole = Flt/to_nat(Option/unwrap_or(Flt/of_str("12.0"), +0.0));
             let half = Flt/to_nat(Flt/mul(Option/unwrap_or(Flt/of_str(".5"), +0.0), +2.0));
             let exp = Flt/to_nat(Option/unwrap_or(Flt/of_str("1e3"), +0.0));
@@ -29,7 +29,7 @@ fn clock_diff_of_two_distinct_now_readings() {
     let (system, io) = MockHost::builder().mono([(100, 500), (130, 900)]).build();
     run_text(
         r#"
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let a = /std/time/Instant/now()!;
             let b = /std/time/Instant/now()!;
             let d = /std/time/Instant/diff(b, a);
@@ -54,7 +54,7 @@ fn a_timestamp_reads_the_wall_clock_into_one_count_and_shows_in_utc() {
         r#"
         use /std/{Str, Int, Bool, Show};
         use /std/time/{Timestamp, Duration};
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let a = Timestamp/now()!;
             let b = Timestamp/now()!;
             /std/print(Str/join(" ", [
@@ -82,7 +82,7 @@ fn clock_mono_reads_scripted_elapsed() {
     let (system, io) = MockHost::builder().mono([(2, 7), (5, 9)]).build();
     run_text(
         r#"
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let earlier = /std/time/Instant/now()!;
             let later = /std/time/Instant/now()!;
             let e = /std/time/Instant/diff(later, earlier);
@@ -119,7 +119,7 @@ fn a_handle_wrapper_is_built_only_beneath_its_module() {
     for (imports, wrapper, literal, published) in wrappers {
         let forged = |built: &str| {
             error(&format!(
-                "{imports}\nforeign token() -> Handle;\nlet forged() -> /std/Io({wrapper}) = /std/Io/bind(token(), (h) => /std/Io/pure({built}));\n/std/print(\"unreachable\")\n"
+                "{imports}\nforeign token() -> Handle;\nlet forged() -> /std/Io({wrapper}) => /std/Io/bind(token(), (h) => /std/Io/pure({built}));\n/std/print(\"unreachable\")\n"
             ))
         };
 

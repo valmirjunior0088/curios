@@ -223,7 +223,7 @@ fn implicit_marks_on_binders_and_arguments() {
 
 #[test]
 fn implicit_marks_on_let_shorthand_and_inductive_params() {
-    let m = "let foo(@T : Type, x : T) -> T = x;"
+    let m = "let foo(@T : Type, x : T) -> T => x;"
         .parse::<Module>()
         .unwrap();
     match &m.items[0] {
@@ -272,7 +272,7 @@ fn at_on_a_binder_type_is_a_parse_error() {
     }
 
     assert!(
-        "let foo(n : @Nat) -> Nat = n;".parse::<Module>().is_err(),
+        "let foo(n : @Nat) -> Nat => n;".parse::<Module>().is_err(),
         "@ on a def-form parameter type should not parse",
     );
 
@@ -340,7 +340,7 @@ fn a_term_spans_its_own_text_without_the_whitespace_after_it() {
 /// A binder is spanned over its word at every binder position: a lambda parameter, a `let` pattern leaf and a function-sugar parameter.
 #[test]
 fn a_binder_spans_its_word_alone() {
-    let term = "let ( a , b ) = p; let f( n : Nat) -> Nat = n; ( x ) => x"
+    let term = "let ( a , b ) = p; let f( n : Nat) -> Nat => n; ( x ) => x"
         .parse::<Term>()
         .unwrap();
     let Subterm::Let(outer) = &*term else {

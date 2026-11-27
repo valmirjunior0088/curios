@@ -15,12 +15,12 @@ fn superclass_projection_resolves() {
             cmp(A, A) -> Ordering
         }
         satisfy Equal(Nat) {
-            eql(a, b) = a == b
+            eql(a, b) => a == b
         }
         satisfy Ordered(Nat) {
-            cmp(a, b) = Ordering/lt()
+            cmp(a, b) => Ordering/lt()
         }
-        pub let same(@A : Type, use Ordered(A), x : A, y : A) -> Bool = Equal/eql(x, y);
+        pub let same(@A : Type, use Ordered(A), x : A, y : A) -> Bool => Equal/eql(x, y);
         let n : Nat = 3;
         /std/print(Bool/to_str(same(n, n)))
         "#;
@@ -34,7 +34,7 @@ fn prelude_ord_superclass_projects() {
     let source = r#"
         use /std/{Nat, Bool};
         use /std/ops/{Eql, Ord};
-        pub let equal(@A : Type, use Ord(A), x : A, y : A) -> Bool = Eql/eql(x, y);
+        pub let equal(@A : Type, use Ord(A), x : A, y : A) -> Bool => Eql/eql(x, y);
         let n : Nat = 4;
         /std/print(Bool/to_str(equal(n, n)))
         "#;
@@ -52,9 +52,9 @@ fn higher_kinded_superclass_projects() {
             empty(@A : Type) -> M(A)
         }
         satisfy MonadPlus(Option) {
-            empty(@A) = Option/none()
+            empty(@A) => Option/none()
         }
-        pub let wrap(@M : (Type) -> Type, use MonadPlus(M), m : M(Nat)) -> M(Nat) =
+        pub let wrap(@M : (Type) -> Type, use MonadPlus(M), m : M(Nat)) -> M(Nat) =>
             Monad/bind(m, (x) => Monad/pure(x));
         let o : Option(Nat) = wrap(Option/some(11));
         /std/print(Nat/to_str(Option/unwrap_or(o, 0)))
@@ -79,7 +79,7 @@ fn a_superclass_edge_is_in_scope_for_a_later_field_type() {
             encode = Str/to_bytes
         }
         satisfy Keyed(Str) {
-            injective(a, b, same) = Str/eq_of_bytes(a, b, same)
+            injective(a, b, same) => Str/eq_of_bytes(a, b, same)
         }
         /std/print("resolved")
         "#;
@@ -93,7 +93,7 @@ fn a_superclass_edge_is_reached_by_no_label() {
     let projected = r#"
         use /std/{Nat, Bool, Str, print};
         use /std/ops/{Eql, Ord};
-        let peek(@A: Type, o: Ord(A)) -> Eql(A) = o._super0;
+        let peek(@A: Type, o: Ord(A)) -> Eql(A) => o._super0;
         print("no")
         "#;
 
@@ -116,7 +116,7 @@ fn a_superclass_edge_is_reached_by_no_label() {
         satisfy Over(Nat) {
             _super0 = 2
         }
-        let own(@A: Type, o: Over(A)) -> Nat = o._super0;
+        let own(@A: Type, o: Over(A)) -> Nat => o._super0;
         print(Nat/to_str(Over/_super0(@Nat)))
         "#;
 
@@ -128,7 +128,7 @@ fn a_superclass_edge_is_reached_by_no_label() {
 fn a_literals_law_is_stated_over_the_superclass_it_writes() {
     let source = r#"
         use /std/{Nat, Bytes, Hash};
-        let flat: Hash(Nat) = Hash { hash(n) = 0x[] };
+        let flat: Hash(Nat) = Hash { hash(n) => 0x[] };
         let _forged: Hash/Key(Nat) = Hash/Key { use flat, use _, mono = Nat/hash/mono };
         /std/print("")
         "#;
@@ -149,7 +149,7 @@ fn an_ambiguous_superclass_names_the_premises_it_is_reached_from() {
         use /std/{Str, Show};
         concept Pretty(T: Type): Type { use Show(T), }
         concept Loud(T: Type): Type { use Show(T), }
-        pub let say(@T: Type, use Pretty(T), use Loud(T), x: T) -> Str = Show/show(x);
+        pub let say(@T: Type, use Pretty(T), use Loud(T), x: T) -> Str => Show/show(x);
         /std/print("")
         "#;
 

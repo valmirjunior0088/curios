@@ -6,7 +6,7 @@ pub const LISTING_PROGRAM: &str = r#"
     let app: Tui(Listing(Str), Nat) =
         Tui {
             init = (Listing/new(["one", "two", "three"]), Directive/none()),
-            update(model, event) =
+            update(model, event) =>
                 match event
                 | input(key(k)) =>
                     match k.code
@@ -15,9 +15,9 @@ pub const LISTING_PROGRAM: &str = r#"
                     end
                 | _ => (model, Directive/none())
                 end,
-            view(model) = Pane/border(Style/plain, "pick", Listing/view(model, (s: Str) => s, Style/plain, Style { ..Style/plain, reverse = true })),
+            view(model) => Pane/border(Style/plain, "pick", Listing/view(model, (s: Str) => s, Style/plain, Style { ..Style/plain, reverse = true })),
         };
-    let program() -> Io({}) =
+    let program() -> Io({}) =>
         let outcome = Try/run(Tui/main(app))!;
         match outcome
         | success(model) => /std/print(Option/unwrap_or(Listing/selected(model), "none"))

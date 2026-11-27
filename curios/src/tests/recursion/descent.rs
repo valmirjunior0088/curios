@@ -8,12 +8,12 @@ fn a_descent_through_a_local_definition_is_graded_wherever_the_call_stands() {
     let source = r#"
         use /std/{Nat, Bool};
         use /std/Bool/{True, Holds};
-        let halved(n: Nat) -> Holds(0 <= n) =
+        let halved(n: Nat) -> Holds(0 <= n) =>
             match n < 2
             | true => True/qed()
             | false => let half = n / 2; let _inner = halved(half); True/qed()
             end;
-        let depth(n: Nat) -> Nat =
+        let depth(n: Nat) -> Nat =>
             match n < 2
             | true => 0
             | false => let half = n / 2; let below = depth(half); below + 1
@@ -31,7 +31,7 @@ fn a_call_through_a_local_definition_that_does_not_descend_is_refused() {
     let source = r#"
         use /std/{Nat, Bool};
         use /std/Bool/{True, Holds};
-        let grown(n: Nat) -> Holds(0 <= n) =
+        let grown(n: Nat) -> Holds(0 <= n) =>
             match n < 2
             | true => True/qed()
             | false => let more = n + 1; let _inner = grown(more); True/qed()
@@ -49,9 +49,9 @@ fn a_proof_reaching_two_partial_definitions_names_the_first_written() {
         error(&fill!(
             r#"
             use /std/{Nat, Io};
-            pub let zeta(n: Nat) -> Nat = zeta(n);
-            pub let alpha(n: Nat) -> Nat = alpha(n);
-            pub let keep(_a: Nat, _b: Nat) -> /std/Bool/True = /std/Bool/True/qed();
+            pub let zeta(n: Nat) -> Nat => zeta(n);
+            pub let alpha(n: Nat) -> Nat => alpha(n);
+            pub let keep(_a: Nat, _b: Nat) -> /std/Bool/True => /std/Bool/True/qed();
             pub let x: /std/Bool/True = keep(${arguments});
             Io/pure(())
             "#,
@@ -69,9 +69,9 @@ fn a_proof_splitting_an_applied_lambdas_binder_descends_on_what_it_stands_for() 
     let source = r#"
         use /std/{Nat};
         use /std/Bool/{True};
-        pub let below(n: Nat) -> True =
+        pub let below(n: Nat) -> True =>
             ((x: Nat) => match x | 0 => True/qed() | k + 1 => below(k) end)(n);
-        pub let twice(n: Nat) -> True =
+        pub let twice(n: Nat) -> True =>
             match n
             | 0 => True/qed()
             | k + 1 => ((x: Nat) => match x | 0 => True/qed() | j + 1 => twice(j) end)(k)

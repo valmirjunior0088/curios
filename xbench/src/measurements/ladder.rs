@@ -249,7 +249,7 @@ use /std/{Str, Nat, Byte, Bytes, Parse, Result, List, Option, Json, Html};
 let token_walk: Parse(Bytes, List(Bytes)) =
     Parse/sep_by0(Parse/bytes/take_while((b) => Byte/to_nat(b) != ','), Parse/bytes/expect(','));
 
-let work(mode: Str, n: Nat) -> Nat =
+let work(mode: Str, n: Nat) -> Nat =>
     match
     | Str/eql(mode, "json") =>
         match Json/decode(Str/flatten(["[", Str/repeat("1, ", n), "1]"]))
@@ -266,7 +266,7 @@ let work(mode: Str, n: Nat) -> Nat =
     | _ => 0
     end;
 
-let entry() -> /std/Io({}) =
+let entry() -> /std/Io({}) =>
     let arguments = /std/Proc/args()!;
     let mode = /std/List/try_get(arguments, 1);
     let size = /std/List/try_get(arguments, 2);

@@ -16,7 +16,7 @@ const ROUNDED: &str = r#"
     use /std/{Flt, Eq};
     use /std/Flt/{Rounding};
 
-    pub let f(a: Flt, b: Flt) -> Eq()(Flt/rounded/add(Rounding/toward_zero(), a, b), a) =
+    pub let f(a: Flt, b: Flt) -> Eq()(Flt/rounded/add(Rounding/toward_zero(), a, b), a) =>
         Eq/refl();
 "#;
 
@@ -26,7 +26,7 @@ fn an_abstract_witness_folds_back_to_its_operator() {
     let source = r#"
         use /std/ops/{Add};
         use /std/{Nat, Eq};
-        let bad(@A : Type, use Add(A), a : A) -> Eq()(a + a, a + a) = ?;
+        let bad(@A : Type, use Add(A), a : A) -> Eq()(a + a, a + a) => ?;
         /std/Io/pure(())
     "#;
 
@@ -46,7 +46,7 @@ fn an_abstract_witness_folds_back_in_a_mismatch_too() {
     let source = r#"
         use /std/ops/{Add};
         use /std/{Nat, Eq};
-        let bad(@A : Type, use Add(A), a : A) -> Eq()(a + a, a) = Eq/refl();
+        let bad(@A : Type, use Add(A), a : A) -> Eq()(a + a, a) => Eq/refl();
         /std/Io/pure(())
     "#;
 
@@ -67,10 +67,10 @@ fn an_intrinsic_keeps_the_proof_its_reader_cannot_prove_again() {
         r#"
         use /std/{Nat, Eq, Io};
 
-        pub let quot(n: Nat, d: Nat, @ok: Nat/NonZero(d)) -> Nat =
+        pub let quot(n: Nat, d: Nat, @ok: Nat/NonZero(d)) -> Nat =>
             n / d;
 
-        pub let claim(g: (Nat) -> Nat, h: (m: Nat) -> Nat/NonZero(g(m)), n: Nat, m: Nat) -> Eq()(quot(n, g(m), @h(m)), 7) =
+        pub let claim(g: (Nat) -> Nat, h: (m: Nat) -> Nat/NonZero(g(m)), n: Nat, m: Nat) -> Eq()(quot(n, g(m), @h(m)), 7) =>
             Eq/refl();
 
         Io/pure(())
@@ -85,10 +85,10 @@ fn an_intrinsic_keeps_the_proof_its_reader_cannot_prove_again() {
         r#"
         use /std/{Nat, Byte, Bool, Eq, Io};
 
-        pub let narrow(n: Nat, @ok: Bool/Holds(n < 256)) -> Byte =
+        pub let narrow(n: Nat, @ok: Bool/Holds(n < 256)) -> Byte =>
             Nat/to_byte(n);
 
-        pub let claim(g: (Nat) -> Nat, h: (m: Nat) -> Bool/Holds(g(m) < 256), m: Nat) -> Eq()(narrow(g(m), @h(m)), Nat/to_byte(7)) =
+        pub let claim(g: (Nat) -> Nat, h: (m: Nat) -> Bool/Holds(g(m) < 256), m: Nat) -> Eq()(narrow(g(m), @h(m)), Nat/to_byte(7)) =>
             Eq/refl();
 
         Io/pure(())
@@ -107,7 +107,7 @@ fn an_intrinsic_leaves_out_the_proof_its_reader_proves_again() {
         r#"
         use /std/{Nat, Bool, Eq, Io};
 
-        pub let claim(n: Nat, d: Nat, @positive: Bool/Holds(0 < d)) -> Eq()(n / d, 7) =
+        pub let claim(n: Nat, d: Nat, @positive: Bool/Holds(0 < d)) -> Eq()(n / d, 7) =>
             Eq/refl();
 
         Io/pure(())
@@ -122,7 +122,7 @@ fn an_intrinsic_leaves_out_the_proof_its_reader_proves_again() {
         r#"
         use /std/{Nat, Byte, Bool, Eq, Io};
 
-        pub let claim(n: Nat, @small: Bool/Holds(n < 256)) -> Eq()(Nat/to_byte(n), Nat/to_byte(7)) =
+        pub let claim(n: Nat, @small: Bool/Holds(n < 256)) -> Eq()(Nat/to_byte(n), Nat/to_byte(7)) =>
             Eq/refl();
 
         Io/pure(())
@@ -141,7 +141,7 @@ fn an_intrinsic_whose_proof_was_never_found_is_written_as_its_operator() {
         r#"
         use /std/{Nat, Eq, Io};
 
-        pub let claim(a: Nat, b: Nat) -> Eq()(a / b, 7) =
+        pub let claim(a: Nat, b: Nat) -> Eq()(a / b, 7) =>
             Eq/refl();
 
         Io/pure(())
@@ -227,7 +227,7 @@ fn every_intrinsic_holding_a_proof_reads_back_with_it() {
         .iter()
         .enumerate()
         .map(|(index, (parameters, call))| {
-            format!("pub let claim{index}({parameters}) -> Eq()({call}, z) =\n    Eq/refl();\n")
+            format!("pub let claim{index}({parameters}) -> Eq()({call}, z) =>\n    Eq/refl();\n")
         })
         .collect::<String>();
     let report = refused(&format!("{IMPORTS}\n{claims}\nIo/pure(())\n"));
@@ -252,7 +252,7 @@ fn every_intrinsic_holding_a_proof_reads_back_with_it() {
         .zip(&printed)
         .enumerate()
         .map(|(index, ((parameters, _), printed))| {
-            format!("pub let pasted{index}({parameters}) -> Prop =\n    {printed};\n")
+            format!("pub let pasted{index}({parameters}) -> Prop =>\n    {printed};\n")
         })
         .collect::<String>();
     if let Err(error) = compile(&format!("{IMPORTS}\n{pasted}\nIo/pure(())\n")) {
@@ -260,7 +260,7 @@ fn every_intrinsic_holding_a_proof_reads_back_with_it() {
     }
 
     let bare = refused(&format!(
-        "use /std/{{Nat, Bool, Eq, Io}};\npub let bare({DIVISOR}) -> Prop =\n    Eq(@Nat)(n / g(m), z);\n\nIo/pure(())\n"
+        "use /std/{{Nat, Bool, Eq, Io}};\npub let bare({DIVISOR}) -> Prop =>\n    Eq(@Nat)(n / g(m), z);\n\nIo/pure(())\n"
     ));
     assert!(
         bare.contains("the bound of the `/` operator was not discharged"),
@@ -292,7 +292,7 @@ fn a_call_that_unfolds_to_an_operation_no_reader_writes_keeps_its_name() {
     );
     let baseline = compile_modules(&mounted(
         "lib",
-        "use /std/{Flt};\n\npub let g(a: Flt) -> Flt = a;\n",
+        "use /std/{Flt};\n\npub let g(a: Flt) -> Flt => a;\n",
     ))
     .expect("the baseline compiles");
     kept(

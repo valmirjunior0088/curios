@@ -35,7 +35,7 @@ fn a_closed_length_past_what_a_fold_builds_is_left_to_the_runtime() {
         fill!(
             r#"
             use /std/{Nat, Bytes, print};
-            let d(b: Bytes) -> Bytes = 0x[..b, ..b];
+            let d(b: Bytes) -> Bytes => 0x[..b, ..b];
             print(Nat/to_str(Bytes/length(${doubled})))
             "#,
             doubled = doubled("0x[00, 01, 02, 03]")
@@ -43,7 +43,7 @@ fn a_closed_length_past_what_a_fold_builds_is_left_to_the_runtime() {
         fill!(
             r#"
             use /std/{Nat, List, print};
-            let d(l: List(Nat)) -> List(Nat) = [..l, ..l];
+            let d(l: List(Nat)) -> List(Nat) => [..l, ..l];
             print(Nat/to_str(List/length(${doubled})))
             "#,
             doubled = doubled("[1, 2, 3, 4]")

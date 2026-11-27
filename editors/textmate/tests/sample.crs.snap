@@ -53,7 +53,7 @@
 #                    ^ source.curios constant.numeric.decimal.curios
 #                     ^ source.curios punctuation.separator.curios
 >
->pub let map(@A: Type, @B: Type, m: Option(A), f: (A) -> B) -> Option(B) =
+>pub let map(@A: Type, @B: Type, m: Option(A), f: (A) -> B) -> Option(B) =>
 #^^^ source.curios keyword.other.curios
 #   ^ source.curios
 #    ^^^ source.curios keyword.control.curios
@@ -102,7 +102,7 @@
 #                                                                     ^ source.curios entity.name.type.curios
 #                                                                      ^ source.curios punctuation.bracket.curios
 #                                                                       ^ source.curios
-#                                                                        ^ source.curios keyword.operator.assignment.curios
+#                                                                        ^^ source.curios keyword.operator.arrow.curios
 >    match m | some(a) => Option/some(f(a)) | none() => Option/none() end;
 #^^^^ source.curios
 #    ^^^^^ source.curios keyword.control.curios
@@ -145,7 +145,7 @@
 #                                                                     ^^^ source.curios keyword.control.curios
 #                                                                        ^ source.curios punctuation.separator.curios
 >
->pub let even(n: Nat) -> Bool = match n | 0 => true | p + 1 => odd(p) end
+>pub let even(n: Nat) -> Bool => match n | 0 => true | p + 1 => odd(p) end
 #^^^ source.curios keyword.other.curios
 #   ^ source.curios
 #    ^^^ source.curios keyword.control.curios
@@ -162,37 +162,37 @@
 #                       ^ source.curios
 #                        ^^^^ source.curios entity.name.type.curios
 #                            ^ source.curios
-#                             ^ source.curios keyword.operator.assignment.curios
-#                              ^ source.curios
-#                               ^^^^^ source.curios keyword.control.curios
-#                                    ^ source.curios
-#                                     ^ source.curios variable.other.curios
-#                                      ^ source.curios
-#                                       ^ source.curios punctuation.separator.curios
-#                                        ^ source.curios
-#                                         ^ source.curios constant.numeric.decimal.curios
-#                                          ^ source.curios
-#                                           ^^ source.curios keyword.operator.arrow.curios
-#                                             ^ source.curios
-#                                              ^^^^ source.curios constant.language.boolean.curios
-#                                                  ^ source.curios
-#                                                   ^ source.curios punctuation.separator.curios
-#                                                    ^ source.curios
-#                                                     ^ source.curios variable.other.curios
-#                                                      ^ source.curios
-#                                                       ^ source.curios keyword.operator.arithmetic.curios
-#                                                        ^ source.curios
-#                                                         ^ source.curios constant.numeric.decimal.curios
-#                                                          ^ source.curios
-#                                                           ^^ source.curios keyword.operator.arrow.curios
-#                                                             ^ source.curios
-#                                                              ^^^ source.curios entity.name.function.curios
-#                                                                 ^ source.curios punctuation.bracket.curios
-#                                                                  ^ source.curios variable.other.curios
-#                                                                   ^ source.curios punctuation.bracket.curios
-#                                                                    ^ source.curios
-#                                                                     ^^^ source.curios keyword.control.curios
->and odd(n: Nat) -> Bool = even(n);
+#                             ^^ source.curios keyword.operator.arrow.curios
+#                               ^ source.curios
+#                                ^^^^^ source.curios keyword.control.curios
+#                                     ^ source.curios
+#                                      ^ source.curios variable.other.curios
+#                                       ^ source.curios
+#                                        ^ source.curios punctuation.separator.curios
+#                                         ^ source.curios
+#                                          ^ source.curios constant.numeric.decimal.curios
+#                                           ^ source.curios
+#                                            ^^ source.curios keyword.operator.arrow.curios
+#                                              ^ source.curios
+#                                               ^^^^ source.curios constant.language.boolean.curios
+#                                                   ^ source.curios
+#                                                    ^ source.curios punctuation.separator.curios
+#                                                     ^ source.curios
+#                                                      ^ source.curios variable.other.curios
+#                                                       ^ source.curios
+#                                                        ^ source.curios keyword.operator.arithmetic.curios
+#                                                         ^ source.curios
+#                                                          ^ source.curios constant.numeric.decimal.curios
+#                                                           ^ source.curios
+#                                                            ^^ source.curios keyword.operator.arrow.curios
+#                                                              ^ source.curios
+#                                                               ^^^ source.curios entity.name.function.curios
+#                                                                  ^ source.curios punctuation.bracket.curios
+#                                                                   ^ source.curios variable.other.curios
+#                                                                    ^ source.curios punctuation.bracket.curios
+#                                                                     ^ source.curios
+#                                                                      ^^^ source.curios keyword.control.curios
+>and odd(n: Nat) -> Bool => even(n);
 #^^^ source.curios keyword.control.curios
 #   ^ source.curios
 #    ^^^ source.curios entity.name.function.curios
@@ -207,15 +207,15 @@
 #                  ^ source.curios
 #                   ^^^^ source.curios entity.name.type.curios
 #                       ^ source.curios
-#                        ^ source.curios keyword.operator.assignment.curios
-#                         ^ source.curios
-#                          ^^^^ source.curios entity.name.function.curios
-#                              ^ source.curios punctuation.bracket.curios
-#                               ^ source.curios variable.other.curios
-#                                ^ source.curios punctuation.bracket.curios
-#                                 ^ source.curios punctuation.separator.curios
+#                        ^^ source.curios keyword.operator.arrow.curios
+#                          ^ source.curios
+#                           ^^^^ source.curios entity.name.function.curios
+#                               ^ source.curios punctuation.bracket.curios
+#                                ^ source.curios variable.other.curios
+#                                 ^ source.curios punctuation.bracket.curios
+#                                  ^ source.curios punctuation.separator.curios
 >
->pub let and(p: Parse(A), q: Parse(B)) -> Parse({A, B}) = Parse/and(p, q);
+>pub let and(p: Parse(A), q: Parse(B)) -> Parse({A, B}) => Parse/and(p, q);
 #^^^ source.curios keyword.other.curios
 #   ^ source.curios
 #    ^^^ source.curios keyword.control.curios
@@ -252,18 +252,18 @@
 #                                                    ^ source.curios punctuation.bracket.curios
 #                                                     ^ source.curios punctuation.bracket.curios
 #                                                      ^ source.curios
-#                                                       ^ source.curios keyword.operator.assignment.curios
-#                                                        ^ source.curios
-#                                                         ^^^^^ source.curios entity.name.namespace.curios
-#                                                              ^ source.curios punctuation.separator.path.curios
-#                                                               ^^^ source.curios entity.name.function.curios
-#                                                                  ^ source.curios punctuation.bracket.curios
-#                                                                   ^ source.curios variable.other.curios
-#                                                                    ^ source.curios punctuation.separator.curios
-#                                                                     ^ source.curios
-#                                                                      ^ source.curios variable.other.curios
-#                                                                       ^ source.curios punctuation.bracket.curios
-#                                                                        ^ source.curios punctuation.separator.curios
+#                                                       ^^ source.curios keyword.operator.arrow.curios
+#                                                         ^ source.curios
+#                                                          ^^^^^ source.curios entity.name.namespace.curios
+#                                                               ^ source.curios punctuation.separator.path.curios
+#                                                                ^^^ source.curios entity.name.function.curios
+#                                                                   ^ source.curios punctuation.bracket.curios
+#                                                                    ^ source.curios variable.other.curios
+#                                                                     ^ source.curios punctuation.separator.curios
+#                                                                      ^ source.curios
+#                                                                       ^ source.curios variable.other.curios
+#                                                                        ^ source.curios punctuation.bracket.curios
+#                                                                         ^ source.curios punctuation.separator.curios
 >
 >satisfy Show(Nat) {
 #^^^^^^^ source.curios keyword.other.curios
@@ -274,26 +274,26 @@
 #                ^ source.curios punctuation.bracket.curios
 #                 ^ source.curios
 #                  ^ source.curios punctuation.bracket.curios
->    show(n) = Nat/to_str(n),
+>    show(n) => Nat/to_str(n),
 #^^^^ source.curios
 #    ^^^^ source.curios entity.name.function.curios
 #        ^ source.curios punctuation.bracket.curios
 #         ^ source.curios variable.other.curios
 #          ^ source.curios punctuation.bracket.curios
 #           ^ source.curios
-#            ^ source.curios keyword.operator.assignment.curios
-#             ^ source.curios
-#              ^^^ source.curios entity.name.namespace.curios
-#                 ^ source.curios punctuation.separator.path.curios
-#                  ^^^^^^ source.curios entity.name.function.curios
-#                        ^ source.curios punctuation.bracket.curios
-#                         ^ source.curios variable.other.curios
-#                          ^ source.curios punctuation.bracket.curios
-#                           ^ source.curios punctuation.separator.curios
+#            ^^ source.curios keyword.operator.arrow.curios
+#              ^ source.curios
+#               ^^^ source.curios entity.name.namespace.curios
+#                  ^ source.curios punctuation.separator.path.curios
+#                   ^^^^^^ source.curios entity.name.function.curios
+#                         ^ source.curios punctuation.bracket.curios
+#                          ^ source.curios variable.other.curios
+#                           ^ source.curios punctuation.bracket.curios
+#                            ^ source.curios punctuation.separator.curios
 >}
 #^ source.curios punctuation.bracket.curios
 >
->satisfy (@A: Type, use Show(A)) => Show(List(A)) {
+>satisfy (@A: Type, use Show(A)) -> Show(List(A)) {
 #^^^^^^^ source.curios keyword.other.curios
 #       ^ source.curios
 #        ^ source.curios punctuation.bracket.curios
@@ -349,12 +349,12 @@
 >}
 #^ source.curios punctuation.bracket.curios
 >
->test sample_map_holds =
+>test sample_map_holds =>
 #^^^^ source.curios keyword.other.curios
 #    ^ source.curios
 #     ^^^^^^^^^^^^^^^^ source.curios entity.name.function.curios
 #                     ^ source.curios
-#                      ^ source.curios keyword.operator.assignment.curios
+#                      ^^ source.curios keyword.operator.arrow.curios
 >    Test/assert(even(zero));
 #^^^^ source.curios
 #    ^^^^ source.curios entity.name.namespace.curios
@@ -368,12 +368,12 @@
 #                          ^ source.curios punctuation.bracket.curios
 #                           ^ source.curios punctuation.separator.curios
 >
->test sample_equality_holds =
+>test sample_equality_holds =>
 #^^^^ source.curios keyword.other.curios
 #    ^ source.curios
 #     ^^^^^^^^^^^^^^^^^^^^^ source.curios entity.name.function.curios
 #                          ^ source.curios
-#                           ^ source.curios keyword.operator.assignment.curios
+#                           ^^ source.curios keyword.operator.arrow.curios
 >    Test/equal(map(Option/some(zero), (n: Nat) => n + 1), Option/some(1));
 #^^^^ source.curios
 #    ^^^^ source.curios entity.name.namespace.curios

@@ -11,7 +11,7 @@ use {
     std::{cell::RefCell, collections::BTreeSet},
 };
 
-const PROGRAM: &str = "use /std/{Nat};\nlet seven: Nat = 7;\nlet eight: Nat = 8;\nlet double(n: Nat) -> Nat = n + n;\nlet quad(n: Nat) -> Nat = double(double(n));\n/std/print(\"\")\n";
+const PROGRAM: &str = "use /std/{Nat};\nlet seven: Nat = 7;\nlet eight: Nat = 8;\nlet double(n: Nat) -> Nat => n + n;\nlet quad(n: Nat) -> Nat => double(double(n));\n/std/print(\"\")\n";
 
 /// What compiling `source` through `cache` tells of its declarations as elaboration established them: the path of each name they declare, and whether the certifier's record came with them. None where it told nothing.
 fn told(source: &str, cache: Option<&dyn Cache>) -> Option<(BTreeSet<String>, bool)> {

@@ -23,7 +23,7 @@ fn said(head: &str, prose: &[&str]) -> Option<(String, Vec<String>)> {
 #[test]
 fn a_private_definition_is_stated_by_its_head_and_the_prose_above_it() {
     const DOUBLE: &str =
-        "--- Twice `n`.\n---\n--- Never less than it.\nlet double(n: Nat) -> Nat =\n    n + n;";
+        "--- Twice `n`.\n---\n--- Never less than it.\nlet double(n: Nat) -> Nat =>\n    n + n;";
 
     assert_eq!(
         stated(DOUBLE, "double", 0),
@@ -116,7 +116,7 @@ fn a_member_is_stated_within_its_owner() {
 #[test]
 fn a_witness_a_test_and_a_group_member_are_each_stated() {
     const WITNESS: &str =
-        "--- A number's digits.\nsatisfy Show(Nat) {\n    show(n) = to_str(n),\n}";
+        "--- A number's digits.\nsatisfy Show(Nat) {\n    show(n) => to_str(n),\n}";
     assert_eq!(
         stated(WITNESS, "Show(Nat)", 0),
         said("satisfy Show(Nat)", &["A number's digits."])
@@ -131,12 +131,12 @@ fn a_witness_a_test_and_a_group_member_are_each_stated() {
     assert!(!derived(WITNESS, "Show(Nat)"));
 
     assert_eq!(
-        stated("test holds =\n    assert(true);", "holds", 0),
+        stated("test holds =>\n    assert(true);", "holds", 0),
         said("test holds", &[])
     );
 
     const GROUP: &str =
-        "let even(n: Nat) -> Bool =\n    odd(n)\nand odd(n: Nat) -> Bool =\n    even(n);";
+        "let even(n: Nat) -> Bool =>\n    odd(n)\nand odd(n: Nat) -> Bool =>\n    even(n);";
     assert_eq!(
         stated(GROUP, "odd", 1),
         said("let odd(n: Nat) -> Bool", &[])
@@ -166,7 +166,7 @@ fn a_declaration_is_written_whole_where_its_representation_shows() {
     assert_eq!(written(PAIR, "Pair").as_deref(), Some(PAIR));
     assert_eq!(written(SIZED, "Sized").as_deref(), Some(SIZED));
     assert_eq!(
-        written("pub let double(n: Nat) -> Nat =\n    n + n;", "double").as_deref(),
+        written("pub let double(n: Nat) -> Nat =>\n    n + n;", "double").as_deref(),
         Some("pub let double(n: Nat) -> Nat")
     );
 }
@@ -174,7 +174,7 @@ fn a_declaration_is_written_whole_where_its_representation_shows() {
 /// A place that is no definition's name states nothing, and neither does a text that is no item.
 #[test]
 fn a_place_no_definition_is_named_at_states_nothing() {
-    const DOUBLE: &str = "let double(n: Nat) -> Nat =\n    n + n;";
+    const DOUBLE: &str = "let double(n: Nat) -> Nat =>\n    n + n;";
 
     assert_eq!(stated(DOUBLE, "Nat", 0), None);
     assert_eq!(heading("double(n: Nat) -> Nat", 0), None);

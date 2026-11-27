@@ -23,7 +23,7 @@ satisfy (
     use Eql(St),
     use Eql(R),
     use Eql(A),
-) => Eql(Step(St, R, A)) {
+) -> Eql(Step(St, R, A)) {
     ..
 }
 
@@ -34,7 +34,7 @@ satisfy (
     use Spell(St),
     use Spell(R),
     use Spell(A),
-) => Spell(Step(St, R, A)) {
+) -> Spell(Step(St, R, A)) {
     ..
 }
 
@@ -62,24 +62,24 @@ pub struct Reader(S: Type): Type {
 }
 
 --- A reader over `stream` whose named reads refuse a piece past `limit` bytes.
-pub let within(@S: Type, stream: S, limit: Nat) -> Io(Reader(S)) =
+pub let within(@S: Type, stream: S, limit: Nat) -> Io(Reader(S)) =>
     let ahead = Box/new(Held { cuts = 0, bytes = 0x[] })!;
     Io/pure(Reader { stream = stream, limit = limit, ahead = ahead });
 
 --- A reader over `stream` whose named reads refuse a piece past 1 MiB.
-pub let new(@S: Type, stream: S) -> Io(Reader(S)) =
+pub let new(@S: Type, stream: S) -> Io(Reader(S)) =>
     within(stream, 1048576);
 
 --- The bytes `r` holds, left where they are.
-pub let held(@S: Type, r: Reader(S)) -> Io(Bytes) =
+pub let held(@S: Type, r: Reader(S)) -> Io(Bytes) =>
     Box/change(r.ahead, (now: Held) => (now, now.bytes));
 
 -- Everything `r` holds, taken as one piece.
-let drained(@S: Type, r: Reader(S)) -> Io(Bytes) =
+let drained(@S: Type, r: Reader(S)) -> Io(Bytes) =>
     Box/change(r.ahead, (now: Held) => (Held { cuts = now.cuts + 1, bytes = 0x[] }, now.bytes));
 
 -- Whether `r` holds other than the `bytes` a piece left at `cuts`: what another reader cut or took in meanwhile, which the piece has not been asked of.
-let touched(@S: Type, r: Reader(S), cuts: Nat, bytes: Bytes) -> Io(Bool) =
+let touched(@S: Type, r: Reader(S), cuts: Nat, bytes: Bytes) -> Io(Bool) =>
     Box/change(r.ahead, (now: Held) =>
         (now, Bool/not(now.cuts == cuts && Bytes/length(now.bytes) == Bytes/length(bytes))));
 
@@ -93,7 +93,7 @@ let looked(
     from: St,
     seen: Nat,
     now: Held,
-) -> {Held, {Step(St, R, A), Nat}} =
+) -> {Held, {Step(St, R, A), Nat}} =>
     let at = match seen == now.cuts | true => from | false => state end;
     let step = piece(at, now.bytes);
     match step
@@ -120,8 +120,8 @@ pub let take(
     r: Reader(S),
     piece: (St, Bytes) -> Step(St, R, A),
     state: St,
-) -> Io(Result(Stop(St, R), A)) =
-    let go(from: St, seen: Nat) -> Io(Result(Stop(St, R), A)) =
+) -> Io(Result(Stop(St, R), A)) =>
+    let go(from: St, seen: Nat) -> Io(Result(Stop(St, R), A)) =>
         let (step, cuts) =
             Box/change(r.ahead, (now: Held) => looked(piece, state, from, seen, now))!;
         match step
@@ -161,7 +161,7 @@ let settled(
     got: Result(Stop(St, Error), A),
     whole: (A) -> B,
     at_end: (Bytes) -> B,
-) -> Io(Result(Error, B)) =
+) -> Io(Result(Error, B)) =>
     match got
     | success(a) => Io/pure(Result/success(whole(a)))
     | failure(stop) =>
@@ -175,8 +175,8 @@ let settled(
     end;
 
 --- One line without its line ending — a newline, or a carriage return and a newline. Where the stream ends, what is held is the last line, and `none` where nothing is. A line past `r`'s bound is `too_long`, and its bytes stay held.
-pub let line(@S: Type, use Io/Read(S), r: Reader(S)) -> Try(Io, Error, Option(Bytes)) =
-    let read() -> Io(Result(Error, Option(Bytes))) =
+pub let line(@S: Type, use Io/Read(S), r: Reader(S)) -> Try(Io, Error, Option(Bytes)) =>
+    let read() -> Io(Result(Error, Option(Bytes))) =>
         let got =
             take(r, (searched: Nat, bytes: Bytes) => piece/line(r.limit, searched, bytes), 0)!;
         settled(
@@ -191,7 +191,7 @@ pub let line(@S: Type, use Io/Read(S), r: Reader(S)) -> Try(Io, Error, Option(By
     Try/attempt(read());
 
 --- One line as text: `line`, its bytes read as UTF-8. A line that is not text is `not_text` with the length of its longest prefix that is, and is taken as the bytes it was.
-pub let line_text(@S: Type, use Io/Read(S), r: Reader(S)) -> Try(Io, Error, Option(Str)) =
+pub let line_text(@S: Type, use Io/Read(S), r: Reader(S)) -> Try(Io, Error, Option(Str)) =>
     let found = line(r)!;
     match found
     | none() => Try/pure(Option/none())
@@ -208,8 +208,8 @@ pub let until(
     use Io/Read(S),
     r: Reader(S),
     delimiter: Byte,
-) -> Try(Io, Error, {bytes: Bytes, met: Bool}) =
-    let read() -> Io(Result(Error, {bytes: Bytes, met: Bool})) =
+) -> Try(Io, Error, {bytes: Bytes, met: Bool}) =>
+    let read() -> Io(Result(Error, {bytes: Bytes, met: Bool})) =>
         let got =
             take(
                 r,
@@ -228,8 +228,8 @@ pub let exactly(
     use Io/Read(S),
     r: Reader(S),
     n: Nat,
-) -> Try(Io, Error, {bytes: Bytes, whole: Bool}) =
-    let read() -> Io(Result(Error, {bytes: Bytes, whole: Bool})) =
+) -> Try(Io, Error, {bytes: Bytes, whole: Bool}) =>
+    let read() -> Io(Result(Error, {bytes: Bytes, whole: Bool})) =>
         let got = take(r, ((): {}, bytes: Bytes) => piece/exactly(r.limit, n, bytes), ())!;
         settled(
             r,
@@ -239,8 +239,8 @@ pub let exactly(
     Try/attempt(read());
 
 --- Everything up to the end of the stream, the bytes held first. More than `r`'s bound is `too_long`, and stays held.
-pub let rest(@S: Type, use Io/Read(S), r: Reader(S)) -> Try(Io, Error, Bytes) =
-    let read() -> Io(Result(Error, Bytes)) =
+pub let rest(@S: Type, use Io/Read(S), r: Reader(S)) -> Try(Io, Error, Bytes) =>
+    let read() -> Io(Result(Error, Bytes)) =>
         let got = take(r, ((): {}, bytes: Bytes) => piece/rest(r.limit, bytes), ())!;
         settled(r, got, (found: Bytes) => found, (last: Bytes) => last);
     Try/attempt(read());

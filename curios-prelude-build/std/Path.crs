@@ -9,35 +9,35 @@ pub struct Path: Type {
 }
 
 --- The path these bytes name.
-pub let of_bytes(b: Bytes) -> Path =
+pub let of_bytes(b: Bytes) -> Path =>
     Path { b };
 
 --- The path this text names.
-pub let of_str(s: Str) -> Path =
+pub let of_str(s: Str) -> Path =>
     Path { Str/to_bytes(s) };
 
-pub let to_bytes(p: Path) -> Bytes =
+pub let to_bytes(p: Path) -> Bytes =>
     p.0;
 
 --- The path as text, or where it stops being UTF-8, as `Str/of_bytes` answers.
-pub let to_str(p: Path) -> Result(Nat, Str) =
+pub let to_str(p: Path) -> Result(Nat, Str) =>
     Str/of_bytes(p.0);
 
 --- Whether the path has no bytes.
-pub let is_empty(p: Path) -> Bool =
+pub let is_empty(p: Path) -> Bool =>
     Bytes/length(p.0) == 0;
 
 let separator: Byte =
     '/';
 
-let ends_with_separator(b: Bytes) -> Bool =
+let ends_with_separator(b: Bytes) -> Bool =>
     match Bytes/try_get(b, Bytes/length(b) - 1)
     | some(last) => last == separator
     | none() => false
     end;
 
 --- The components before the last separator, and the one after it, which every path has: empty after a trailing separator, and the whole path when there is none.
-let components(b: Bytes) -> {before: List(Bytes), last: Bytes} =
+let components(b: Bytes) -> {before: List(Bytes), last: Bytes} =>
     let (done, current): {List(Bytes), Bytes} =
         Bytes/fold(
             b,
@@ -50,7 +50,7 @@ let components(b: Bytes) -> {before: List(Bytes), last: Bytes} =
     (before = done, last = current);
 
 --- `a/b`, with one separator between them whatever `a` ends in; an empty side is the other side.
-pub let join(a: Path, b: Path) -> Path =
+pub let join(a: Path, b: Path) -> Path =>
     match
     | is_empty(a) => b
     | is_empty(b) => a
@@ -59,11 +59,11 @@ pub let join(a: Path, b: Path) -> Path =
     end;
 
 --- The last component; empty after a trailing separator.
-pub let name(p: Path) -> Path =
+pub let name(p: Path) -> Path =>
     Path { components(p.0).last };
 
 --- Everything before the last separator: `none` for a bare name, and `/` for a child of the root.
-pub let parent(p: Path) -> Option(Path) =
+pub let parent(p: Path) -> Option(Path) =>
     let before = components(p.0).before;
     match before
     | [] => Option/none()
@@ -78,7 +78,7 @@ pub let parent(p: Path) -> Option(Path) =
     end;
 
 --- What follows the last `.` of the name, unless that `.` is its first byte: `.bashrc` has none and `archive.tar.gz` has `gz`.
-pub let extension(p: Path) -> Option(Path) =
+pub let extension(p: Path) -> Option(Path) =>
     let dot: Byte = '.';
     let (_, seen, current): {Nat, Bool, Bytes} =
         Bytes/fold(
@@ -95,19 +95,19 @@ pub let extension(p: Path) -> Option(Path) =
     end;
 
 satisfy Eql(Path) {
-    eql(a, b) = a.0 == b.0,
+    eql(a, b) => a.0 == b.0,
     -- A congruence written over the fields and applied at the projections, where an equation between two projections solves nothing. The law is applied outside it, at the projections: a field is below its record, so a family nested through this one descends through the law as it does through `eql`.
-    eq(a, b, h) =
-        let fields(x: Bytes, y: Bytes, bytes: Eq()(x, y)) -> Eq()(Path { x }, Path { y }) =
+    eq(a, b, h) =>
+        let fields(x: Bytes, y: Bytes, bytes: Eq()(x, y)) -> Eq()(Path { x }, Path { y }) =>
             let refl() = bytes;
             Eq/refl();
         fields(a.0, b.0, proved()),
-    refl(a) = Eql/refl(a.0),
+    refl(a) => Eql/refl(a.0),
 }
 
 --- The text when the bytes are UTF-8, the bytes otherwise.
 satisfy Show(Path) {
-    show(p) =
+    show(p) =>
         match Str/of_bytes(p.0)
         | success(s) => s
         | failure(_) => Show/show(p.0)
@@ -115,7 +115,7 @@ satisfy Show(Path) {
 }
 
 satisfy Spell(Path) {
-    spell(p) =
+    spell(p) =>
         match Str/of_bytes(p.0)
         | success(s) => Fmt/render("Path/of_str(#)")(s)
         | failure(_) => Fmt/render("Path/of_bytes(#)")(p.0)

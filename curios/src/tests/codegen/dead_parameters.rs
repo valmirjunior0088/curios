@@ -14,12 +14,12 @@ use {
 fn a_parameter_read_only_to_build_its_own_next_value_is_dead() {
     let source = r#"
         use /std/{Nat, Bytes, List, Option, Proc};
-        let count(b: Bytes, k: Nat, @seen: Bytes) -> Nat =
+        let count(b: Bytes, k: Nat, @seen: Bytes) -> Nat =>
             match b
             | 0x[] => k
             | 0x[h, ..t] => count(t, k + 1, @0x[..seen, h])
             end;
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let arguments = Proc/args()!;
             let bytes = Option/unwrap_or(List/try_get(arguments, 0), 0x[]);
             /std/print(Nat/to_str(count(bytes, 0, @0x[])));
@@ -72,13 +72,13 @@ fn recursive_arguments_keep_their_positions_and_effects() {
     answers(
         r#"
         use /std/{Nat, List, Proc, Io};
-        let walk(n: Nat, a: Nat, unused: Nat, b: Nat) -> Nat =
+        let walk(n: Nat, a: Nat, unused: Nat, b: Nat) -> Nat =>
             match n
             | 0 => a * 1000 + b
             | k + 1 => walk(k, b + 2, unused, a + 1)
             end;
-        let after(_: {}, x: Nat) -> Nat = x;
-        let entry() -> Io({}) =
+        let after(_: {}, x: Nat) -> Nat => x;
+        let entry() -> Io({}) =>
             let n = List/length(Proc/args()!);
             let _ = /std/print("before:")!;
             let first = walk(n, n + 3, after(/std/print("argument:")!, n + 100), n + 5);
@@ -101,12 +101,12 @@ fn a_nested_capture_survives_cleanup_and_suspension() {
     answers(
         r#"
         use /std/{Nat, List, Proc, Io};
-        let capture(n: Nat, unused: Nat, a: Nat, b: Nat) -> (Nat) -> Nat =
+        let capture(n: Nat, unused: Nat, a: Nat, b: Nat) -> (Nat) -> Nat =>
             match n
             | 0 => (x) => a * 10 + b + x
             | k + 1 => (x) => capture(k, unused, b + 2, a + 1)(x) + 1
             end;
-        let entry() -> Io({}) =
+        let entry() -> Io({}) =>
             let n = List/length(Proc/args()!);
             let f = capture(n, n + 100, n + 3, n + 5);
             let _ = /std/print("before:")!;

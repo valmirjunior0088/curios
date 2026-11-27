@@ -59,18 +59,18 @@ fn inductive_match_multi_binder() {
 fn pattern_binders_round_trip() {
     // Tuple/struct destructuring patterns at `let`, lambda-parameter, and function-definition-sugar-parameter position: plain names still round-trip unchanged, and compound patterns (nested, field-punned, or mixed with plain-name parameters) survive print → re-parse.
     for source in [
-        "let x = pair; x",                        // plain name, unchanged
-        "let (x, y) = pair; x",                   // tuple pattern
-        "let Point { x, y } = p; x",              // struct pattern, field-punned
-        "let Point { x, w = ww } = p; x",         // punned + explicit label mixed
-        "let Point { loc = (x, y) } = p; x",      // tuple nested in struct
-        "let (Point { x, y }, z) = pair; x",      // struct nested in tuple
-        "((x, y) : Point) => x",                  // tuple-pattern lambda param
-        "(Point { x, y } : Point) => x",          // struct-pattern lambda param
-        "((x, y) : Point, z : Nat) => x",         // mixed pattern/plain-name params
-        "let f((x, y) : Point) -> Nat = x; f(p)", // tuple-pattern func-sugar param
+        "let x = pair; x",                         // plain name, unchanged
+        "let (x, y) = pair; x",                    // tuple pattern
+        "let Point { x, y } = p; x",               // struct pattern, field-punned
+        "let Point { x, w = ww } = p; x",          // punned + explicit label mixed
+        "let Point { loc = (x, y) } = p; x",       // tuple nested in struct
+        "let (Point { x, y }, z) = pair; x",       // struct nested in tuple
+        "((x, y) : Point) => x",                   // tuple-pattern lambda param
+        "(Point { x, y } : Point) => x",           // struct-pattern lambda param
+        "((x, y) : Point, z : Nat) => x",          // mixed pattern/plain-name params
+        "let f((x, y) : Point) -> Nat => x; f(p)", // tuple-pattern func-sugar param
         // Function-definition-sugar parameters always require an explicit `: T` annotation (unlike lambda parameters); a struct pattern's head name is descriptive only, never load-bearing as a type.
-        "let f((x, y) : Point, Point { z, w = ww } : Point) -> Nat = x + y + z + ww; f(p, q)",
+        "let f((x, y) : Point, Point { z, w = ww } : Point) -> Nat => x + y + z + ww; f(p, q)",
     ] {
         let term = source.parse::<Term>().unwrap();
         assert_eq!(
@@ -93,7 +93,7 @@ fn an_unclosed_struct_pattern_after_let_is_reported_as_one() {
     for source in [
         "(Pt { x = 1, y = 2 })",
         "f(Pt { x = 1, y = 2 })",
-        "(base = 3, bump(x) = Pt { x = x, y = 2 })",
+        "(base = 3, bump(x) => Pt { x = x, y = 2 })",
     ] {
         assert!(source.parse::<Term>().is_ok(), "{source}");
     }

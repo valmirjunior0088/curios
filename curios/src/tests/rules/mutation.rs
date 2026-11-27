@@ -24,7 +24,7 @@ const SUBJECTS: &[(&str, &str)] = &[
         let count : Nat = 3;
         let flag : Bool = true;
         let same : Eq()(1, 1) = Eq/refl();
-        let twice(n : Nat) -> Nat = n + n;
+        let twice(n : Nat) -> Nat => n + n;
         /std/print(Nat/to_str(twice(count)))
         "#,
     ),

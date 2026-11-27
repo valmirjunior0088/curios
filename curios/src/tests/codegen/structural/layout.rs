@@ -186,7 +186,7 @@ fn packed_unary_payload_declines_the_immediate_encoding() {
         | pair(Nat, Nat)
         end
 
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let taint = List/length(Proc/args()!);
             let g = match taint | 0 => Gauge/tiny(7) | _ => Gauge/pair(taint, taint) end;
             match g
@@ -203,7 +203,7 @@ fn packed_unary_payload_declines_the_immediate_encoding() {
         | pair(Nat, Nat)
         end
 
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let taint = List/length(Proc/args()!);
             let g = match taint | 0 => Gauge/tiny(0x[7]) | _ => Gauge/pair(taint, taint) end;
             match g
@@ -243,10 +243,10 @@ fn a_two_way_dispatch_is_a_branch_not_a_table() {
         | right(Nat)
         end
 
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let taint = List/length(Proc/args()!);
             let flag : Bool = taint == 0;
-            let decide(n : Nat, acc : Nat) -> Nat =
+            let decide(n : Nat, acc : Nat) -> Nat =>
                 match n
                 | 0 => acc
                 | m + 1 =>
@@ -284,14 +284,14 @@ fn a_tuple_is_read_at_its_own_final_type() {
         | link(Nat, Chain)
         end
 
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let taint = List/length(Proc/args()!);
-            let build(n : Nat, acc : Chain) -> Chain =
+            let build(n : Nat, acc : Chain) -> Chain =>
                 match n
                 | 0 => acc
                 | m + 1 => build(m, Chain/link(m, acc))
                 end;
-            let total(c : Chain, acc : Nat) -> Nat =
+            let total(c : Chain, acc : Nat) -> Nat =>
                 match c
                 | stop() => acc
                 | link(v, rest) => total(rest, (acc + v) % 999983)
@@ -342,7 +342,7 @@ fn a_rope_is_entered_through_its_final_shapes() {
     let source = r#"
         use /std/{Str, Char, Nat, List, Bytes, Proc};
 
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let n = List/length(Proc/args()!);
             let text = Str/concat(Nat/to_str(n + 7), Str/repeat("é→𝄞", 4));
             let walked = Str/fold(text, 0, (c, a) => (a * 31 + Char/to_nat(c)) % 1000003);
@@ -381,7 +381,7 @@ fn a_read_in_a_loop_keeps_the_run_it_last_resolved() {
     let wat = wat(r#"
         use /std/{Str, Char, Nat, List, Proc};
 
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let n = List/length(Proc/args()!);
             let text = Str/concat(Nat/to_str(n + 7), Str/repeat("é→𝄞", 4));
             /std/print(Nat/to_str(Str/fold(text, 0, (c, a) => (a * 31 + Char/to_nat(c)) % 1000003)));
@@ -434,7 +434,7 @@ fn a_list_fold_walks_its_list_through_a_window() {
     let source = r#"
         use /std/{Nat, List, Proc};
 
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let n = List/length(Proc/args()!);
             let xs = List/map(List/range(0, 64), (i) => i * 7 + n);
             /std/print(Nat/to_str(List/fold(xs, 7, (x, acc) => (acc * 31 + x) % 65521)));
@@ -479,7 +479,7 @@ fn a_window_walk_holds_its_end_and_length_in_words_read_unsigned() {
     let source = r#"
         use /std/{Str, Bytes, Byte, Nat, List, Proc};
 
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let n = List/length(Proc/args()!);
             let text = Str/to_bytes(Str/concat(Nat/to_str(n), "abcdefgh"));
             /std/print(Nat/to_str(Bytes/fold(text, 7, (b, acc) => (acc * 31 + Byte/to_nat(b)) % 65521)));
@@ -527,14 +527,14 @@ fn a_monomorphic_slot_carries_its_own_type() {
         | link(Nat, Chain)
         end
 
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let taint = List/length(Proc/args()!);
-            let build(n : Nat, acc : Chain) -> Chain =
+            let build(n : Nat, acc : Chain) -> Chain =>
                 match n
                 | 0 => acc
                 | m + 1 => build(m, Chain/link(m, acc))
                 end;
-            let total(c : Chain, acc : Nat) -> Nat =
+            let total(c : Chain, acc : Nat) -> Nat =>
                 match c
                 | stop() => acc
                 | link(v, rest) => total(rest, (acc + v) % 999983)

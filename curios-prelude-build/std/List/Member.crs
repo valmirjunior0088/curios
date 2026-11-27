@@ -14,7 +14,7 @@ end
 pub use Member/*;
 
 --- An empty list has no member.
-pub let absent(@T: Type, @x: T, i: Member()(x, [])) -> False =
+pub let absent(@T: Type, @x: T, i: Member()(x, [])) -> False =>
     match i end;
 
 --- A member of a cons is its head or a member of its tail, and `P` follows from whichever it is.
@@ -29,7 +29,7 @@ pub let uncons(
     i: Member()(x, [h, ..l]),
     head: (Eq()(x, h)) -> P,
     tail: (Member()(x, l)) -> P,
-) -> P =
+) -> P =>
     match i | here() => head(Eq/refl()) | there(rest) => tail(rest) end;
 
 --- A member of `a` is a member of `a` followed by `b`.
@@ -39,7 +39,7 @@ pub let left(
     @a: List(T),
     b: List(T),
     i: Member()(x, a),
-) -> Member()(x, [..a, ..b]) =
+) -> Member()(x, [..a, ..b]) =>
     match i
     | here() => Member/here()
     | there(rest) => Member/there(left(b, rest))
@@ -52,7 +52,7 @@ pub let right(
     a: List(T),
     @b: List(T),
     i: Member()(x, b),
-) -> Member()(x, [..a, ..b]) =
+) -> Member()(x, [..a, ..b]) =>
     match a | [] => i | [_, ..t] => Member/there(right(t, i)) end;
 
 --- A member of `a` followed by `b` is a member of one of the two, and `P` follows from whichever it is.
@@ -65,7 +65,7 @@ pub let split(
     i: Member()(x, [..a, ..b]),
     first: (Member()(x, a)) -> P,
     second: (Member()(x, b)) -> P,
-) -> P =
+) -> P =>
     match a
     | [] => second(i)
     | [_, ..t] =>

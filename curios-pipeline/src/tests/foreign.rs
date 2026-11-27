@@ -8,7 +8,7 @@ fn declaration_produces_a_wasm_import() {
     let module = compile(
         r#"
             foreign frobnicate(Nat, Bytes) -> Nat;
-            let entry() -> /std/Io({}) =
+            let entry() -> /std/Io({}) =>
                 let n = frobnicate(5, 0x[0x00, 0x01])!;
                 /std/print(/std/Nat/to_str(n));
             entry()
@@ -55,7 +55,7 @@ fn a_program_is_handed_the_rows_it_reaches() {
         r#"
             foreign reached(Nat) -> Nat;
             foreign unreached(Nat) -> Nat;
-            let entry() -> /std/Io({}) =
+            let entry() -> /std/Io({}) =>
                 let n = reached(5)!;
                 /std/print(/std/Nat/to_str(n));
             entry()
@@ -79,7 +79,7 @@ fn a_library_row_and_a_program_row_import_by_the_names_they_are_declared_under()
     let module = compile(
         r#"
             foreign frobnicate(Nat) -> Nat;
-            let entry() -> /std/Io({}) =
+            let entry() -> /std/Io({}) =>
                 let _ = /std/Try/run(/std/Io/write(/std/Proc/stdout, 0x[0x00]))!;
                 let n = frobnicate(5)!;
                 /std/print(/std/Nat/to_str(n));
@@ -137,7 +137,7 @@ fn a_report_spells_a_row_as_its_declaration_is_reached() {
         &[
             (
                 "lib.crs",
-                "mod inner;\n\nuse /std/{Eq, Io, Nat};\n\nlet deep(n: Nat) -> Io(Nat) = Io/pure(n);\n\nlet p: Eq()(inner/deep(1), deep(1)) = Eq/refl();\n",
+                "mod inner;\n\nuse /std/{Eq, Io, Nat};\n\nlet deep(n: Nat) -> Io(Nat) => Io/pure(n);\n\nlet p: Eq()(inner/deep(1), deep(1)) = Eq/refl();\n",
             ),
             ("inner.crs", "pub foreign deep(Nat) -> Nat;\n"),
         ],

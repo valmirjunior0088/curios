@@ -15,7 +15,7 @@ let serve: Cli =
             Cli/positionals([Cli/positional("root", Cli/str, "Directory to serve")])),
         Option/some("1.0.0"));
 
-let why(f: Cli/Failure) -> Str =
+let why(f: Cli/Failure) -> Str =>
     match f
     | unknown_option(t, near) =>
         Str/flatten([
@@ -28,7 +28,7 @@ let why(f: Cli/Failure) -> Str =
     | _ => "not this command's"
     end;
 
-let read(argv: List(Str)) -> Str =
+let read(argv: List(Str)) -> Str =>
     match Cli/parse(serve, List/map(argv, Str/to_bytes), Map/empty())
     | parsed(p) =>
         Str/join(" ", [
@@ -41,7 +41,7 @@ let read(argv: List(Str)) -> Str =
     | refused(_, f) => why(f)
     end;
 
-test an_option_takes_the_next_token_or_the_one_glued_to_it =
+test an_option_takes_the_next_token_or_the_one_glued_to_it =>
     Test/all([
         Test/equal(read(["--port", "9090", "/srv"]), "false 9090  /srv"),
         Test/equal(read(["--port=9090", "/srv"]), "false 9090  /srv"),
@@ -49,23 +49,23 @@ test an_option_takes_the_next_token_or_the_one_glued_to_it =
         Test/equal(read(["-vp", "9090", "/srv"]), "true 9090  /srv")]);
 
 -- A value-taking option owns its next token, whatever it looks like.
-test an_option_owns_its_next_token_whatever_it_looks_like =
+test an_option_owns_its_next_token_whatever_it_looks_like =>
     Test/equal(read(["--header", "--port", "/srv"]), "false 8080 --port /srv");
 
 -- `--` ends the options, so a token that looks like one fills the positional instead; a dash and a digit is a value, as a negative number is, since no short name is a digit.
-test a_double_dash_and_a_negative_number_are_positionals =
+test a_double_dash_and_a_negative_number_are_positionals =>
     Test/all([
         Test/equal(read(["--", "-weird"]), "false 8080  -weird"),
         Test/equal(read(["-5"]), "false 8080  -5")]);
 
 -- Help is decided before the line is understood, so it answers over a line that would otherwise parse and over one that would otherwise fail; the version comes next.
-test help_and_the_version_answer_before_any_other_reading =
+test help_and_the_version_answer_before_any_other_reading =>
     Test/all([
         Test/equal(read(["--port", "1", "--help"]), "help"),
         Test/equal(read(["--prot", "-h"]), "help"),
         Test/equal(read(["--version", "--prot"]), "version 1.0.0")]);
 
-test each_refusal_names_what_the_line_got_wrong =
+test each_refusal_names_what_the_line_got_wrong =>
     Test/all([
         Test/equal(read(["--prot", "/srv"]), "unknown --prot near --port"),
         Test/equal(read(["--zzzzz", "/srv"]), "unknown --zzzzz"),
@@ -76,7 +76,7 @@ test each_refusal_names_what_the_line_got_wrong =
         Test/equal(read(["a", "b"]), "unexpected b")]);
 
 -- A missing positional is named as help shouts it, in any script: `année` as `ANNÉE`.
-test a_missing_positional_is_named_as_help_shouts_it =
+test a_missing_positional_is_named_as_help_shouts_it =>
     let cal: Cli =
         Cli/declare(
             Cli/leaf(
@@ -93,7 +93,7 @@ test a_missing_positional_is_named_as_help_shouts_it =
     Test/equal(refused, "missing ANNÉE");
 
 -- A reader refusing a value reports its own reason, named against the option that asked for it.
-test a_reader_that_refuses_a_value_reports_its_own_reason =
+test a_reader_that_refuses_a_value_reports_its_own_reason =>
     Test/equal(
         read(["--port", "http", "/srv"]),
         "bad --port: expected a natural number, found 'http'");

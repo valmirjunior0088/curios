@@ -1051,7 +1051,7 @@ impl Witnessed {
         self.written.as_ref().and_then(Declaration::place)
     }
 
-    /// Its head as its author wrote it, `satisfy (@A: Type, use Show(A)) => Show(List(A))`, read off its own text ([`Declaration::heading`]) where it is asked for; and where its unit holds no text of it, what it says of the declaration ([`Witnessed::keyed`]).
+    /// Its head as its author wrote it, `satisfy (@A: Type, use Show(A)) -> Show(List(A))`, read off its own text ([`Declaration::heading`]) where it is asked for; and where its unit holds no text of it, what it says of the declaration ([`Witnessed::keyed`]).
     pub fn head(&self) -> String {
         self.written
             .as_ref()

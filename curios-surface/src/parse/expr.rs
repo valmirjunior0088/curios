@@ -2,11 +2,11 @@ use {
     super::{
         DEFINITION_NAMES_ITS_MEMBERS, Grammar, MEMO_ATOMIC_TERM, MEMO_TERM, Read,
         comment_ending_at, members, parse_caller_sort, parse_decorated_binder, parse_func,
-        parse_func_type, parse_intrinsic, parse_keyword, parse_keyword_at, parse_let_binder,
-        parse_literal, parse_mark, parse_match, parse_name, parse_numbered_binder, parse_parens,
-        parse_pattern, parse_premise, parse_prop, parse_qualified_name, parse_struct_lit,
-        parse_terminator, parse_tuple, parse_tuple_type, parse_type, parse_unreadable_binder,
-        parse_usize_raw, parse_written_word_raw, refused,
+        parse_func_pattern_param, parse_func_type, parse_intrinsic, parse_keyword,
+        parse_keyword_at, parse_let_binder, parse_literal, parse_mark, parse_match, parse_name,
+        parse_numbered_binder, parse_parens, parse_pattern, parse_premise, parse_prop,
+        parse_qualified_name, parse_struct_lit, parse_terminator, parse_tuple, parse_tuple_type,
+        parse_type, parse_unreadable_binder, parse_usize_raw, parse_written_word_raw, refused,
     },
     crate::{
         Apply, Argument, Binder, Dialect, Field, FuncSugarParam, Infix, Label, Let, LetBinding,
@@ -25,7 +25,13 @@ use {
 /// What refuses a definition with parameters and no result.
 const DEFINITION_STATES_ITS_RESULT: &[&str] = &[
     "a definition with parameters states its result before its body",
-    "write `let double(n: Nat) -> Nat = …`",
+    "write `let double(n: Nat) -> Nat => …`",
+];
+
+/// What refuses `:=` where a function's `=>` belongs.
+const FUNCTION_TAKES_ARROW: &[&str] = &[
+    "`:=` is no token of Curios",
+    "a function's body follows `=>`, as in `let double(n: Nat) -> Nat => n * 2;`",
 ];
 
 /// What refuses `:=` where a definition's `=` belongs.
@@ -126,7 +132,7 @@ pub fn parse_func_sugar_param<'a, D: Grammar>(
         .parse(state)
 }
 
-// The function-definition sugar `(p : T, ...) -> R = body`. Shared by both the type-required and the local (type-optional) signature parsers.
+// The function-definition sugar `(p : T, ...) -> R => body`. Shared by both the type-required and the local (type-optional) signature parsers.
 pub fn parse_func_let_signature<'a, D: Grammar>(
     owns_body: bool,
 ) -> impl Parser<'a, LetSignature<D>> {
@@ -139,9 +145,9 @@ pub fn parse_func_let_signature<'a, D: Grammar>(
             .and_drop(parse_literal("->").map_err(DEFINITION_STATES_ITS_RESULT))
             // Past the arrow this is the definition sugar, so a member it refuses is its own to report.
             .flat_map(members)
-            .and(parse_term::<D>)
-            .and_drop(refusing(":=", DEFINITION_TAKES_EQUALS))
-            .and_drop(parse_literal("="))
+            .and(parse_result_type::<D>)
+            .and_drop(refusing(":=", FUNCTION_TAKES_ARROW))
+            .and_drop(parse_literal("=>"))
             .and(body(owns_body))
             .map(|((params, output), body)| LetSignature::Func {
                 params,
@@ -150,6 +156,33 @@ pub fn parse_func_let_signature<'a, D: Grammar>(
             })
             .parse(state)
     }
+}
+
+// A local function read as a lambda reads, `(n) => body` or `(n: T) -> R => body`: a parameter's type and the result each optional. One stating every type has already been read as the definition sugar, so this one leaves some type to its body or its uses, as a lambda does.
+fn parse_local_lambda_signature<'a, D: Grammar>(
+    state: ParserState<'a>,
+) -> Parsed<'a, LetSignature<D>> {
+    parse_literal("(")
+        .and_keep(sep_by0_trailing(parse_func_pattern_param, || {
+            parse_literal(",")
+        }))
+        .and_drop(parse_literal(")"))
+        .flat_map(members)
+        .and(
+            parse_literal("->")
+                .and_keep(parse_result_type::<D>)
+                .map(Some)
+                .or(pure(None)),
+        )
+        .and_drop(refusing(":=", FUNCTION_TAKES_ARROW))
+        .and_drop(parse_literal("=>"))
+        .and(parse_body::<D>)
+        .map(|((params, output), body)| LetSignature::Lambda {
+            params,
+            output,
+            body,
+        })
+        .parse(state)
 }
 
 /// Where a `let` that states its type stands, which decides what its value is read as: at the top level, a body, and after `and` in a local group, a term, as every local value is.
@@ -181,7 +214,7 @@ fn parse_required_name_signature<'a, D: Grammar>(
     }
 }
 
-/// A definition's body, committed when the signature before it could have been nothing but a declaration's: past `let name : T =` or `let name(params) -> T =` the local reading is the same text failing the same way, so a mistake in the body is the item's own diagnosis rather than a reason to try the tail — which is what lets the item loop recover past it. A local `let` keeps its body recoverable, since the term grammar around it decides its diagnoses.
+/// A definition's body, committed when the signature before it could have been nothing but a declaration's: past `let name : T =` or `let name(params) -> T =>` the local reading is the same text failing the same way, so a mistake in the body is the item's own diagnosis rather than a reason to try the tail — which is what lets the item loop recover past it. A local `let` keeps its body recoverable, since the term grammar around it decides its diagnoses.
 fn body<'a, D: Grammar>(owned: bool) -> impl Parser<'a, Term<D>> {
     move |state: ParserState<'a>| {
         (match owned {
@@ -230,24 +263,24 @@ fn stated<'a, D: Grammar>(placed: Placed) -> impl Parser<'a, LetSignature<D>> {
             .or(mark().and_drop(take_exact("=")).flat_map(|start| {
                 fail_from(
                     &start,
-                    &["this definition states no type", "a top-level `let` and every member after `and` state theirs, `: T = …` or `(params) -> T = …`", "only a local `let` may leave its type out"],
+                    &["this definition states no type", "a top-level `let` and every member after `and` state theirs, `: T = …` or `(params) -> T => …`", "only a local `let` may leave its type out"],
                 )
             })).parse(state)
     }
 }
 
-// A local `let`'s first member: a name and the definition sugar, or a pattern and the plain form, whose type may be omitted. The two share the prefix `name(…)`, a function's parameters or a constructor's payloads, and are told apart at the `->` the sugar states its result with, which never follows a pattern: `let f() -> Nat = …` defines `f`, and `let refl() = p;` holds `p` to the case `refl`.
+// A local `let`'s first member: a name and a function, or a pattern and the plain form, whose type may be omitted. The two share the prefix `name(…)`, a function's parameters or a constructor's payloads, and are told apart at the `=>` a function's body follows, which never follows a pattern: `let f() -> Nat => …` and `let f(n) => …` define `f`, and `let refl() = p;` holds `p` to the case `refl`.
 fn parse_let_member<'a, D: Grammar>(
     state: ParserState<'a>,
 ) -> Parsed<'a, (Pattern<D>, LetSignature<D>)> {
     parse_decorated_binder::<D>
         .map(Pattern::Binder)
-        .and(parse_func_let_signature(false))
+        .and(parse_func_let_signature(false).or(parse_local_lambda_signature))
         .or(parse_let_binder::<D>.and(parse_optional_name_signature))
         .parse(state)
 }
 
-// `let x = e; tail` / `let x : T = e; tail` / `let (x, y) = e; tail` / `let f(p : T, …) -> R = …; tail` / `let f … and g …; tail`. The binder accepts a tuple/struct pattern (see `Pattern`), desugaring at lowering into a fresh binder plus a projection-`let` chain.
+// `let x = e; tail` / `let x : T = e; tail` / `let (x, y) = e; tail` / `let f(p : T, …) -> R => …; tail` / `let f … and g …; tail`. The binder accepts a tuple/struct pattern (see `Pattern`), desugaring at lowering into a fresh binder plus a projection-`let` chain.
 //
 // `many1` parses the whole run of `let` statements in a loop, then the tail once, and they become a single flat `Let` block — one node for the whole run, not a right-nested chain — so nothing downstream (clone, lowering) recurses once per binding. The leading `mark` on the first statement and the trailing `mark` after the tail span the block.
 pub fn parse_let<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, Term<D>> {
@@ -677,7 +710,7 @@ fn written_instead_of(word: &str) -> Option<&'static str> {
         }
         "return" => "a function's body is its result, and nothing returns it",
         "fn" | "def" | "fun" | "function" => {
-            "a function is declared with `let`, as in `let double(n: Nat) -> Nat = n + n;`"
+            "a function is declared with `let`, as in `let double(n: Nat) -> Nat => n + n;`"
         }
         "var" | "const" => {
             "a name is bound once, with `let name = value;`, and is never assigned again"
@@ -713,7 +746,7 @@ pub fn parse_body<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, Term<D>>
 /// What refuses a `let` chain where a program reads a term.
 const CHAIN_IS_A_BODY: &[&str] = &[
     "a `let` chain stands only as a body: a function's, a lambda's, a `match` arm's, a test's or a top-level value's, a program's final term, or the tail of another chain",
-    "a value that sequences is a function, `let name() -> T = …;`, called where its value is needed",
+    "a value that sequences is a function, `let name() -> T => …;`, called where its value is needed",
 ];
 
 // A `let` where a program reads a term, refused by name at the word, and committed: left to the other alternatives, a tuple would read the word as a field's label and report the token after it.
@@ -745,6 +778,16 @@ fn term<'a, D: Grammar>() -> impl Parser<'a, Term<D>> {
         )
         .parse(state)
     }
+}
+
+/// A function's stated result, or a function type's: a term short of a lambda, since the `=>` past a result begins the function's body, so `-> (T) => …` reads its result as the type `(T)` and not as a lambda over `T`.
+pub fn parse_result_type<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, Term<D>> {
+    with_span(
+        parse_func_type
+            .or(parse_infix_expr(0).and_drop(refuse_juxtaposed_term))
+            .or(refuse_non_term),
+    )
+    .parse(state)
 }
 
 // The last resort, for a position that begins no term at all. Every alternative above declines at the choice point, and [`Parser::or`]'s tie-break then reports the first of them — `Expected keyword 'let'`, which names the chain's order rather than the reader's mistake. Consuming the offending character puts this failure one past that point, where it outranks them. It stays uncommitted, so a speculative caller still backtracks past it: the trailing comma of `(a, b,)`, whose `parse_term` at the `)` must fail recoverably for the separator to be read as trailing, above all. A word needs none of this — `parse_keyword` consumes the identifier run before refusing it, so a word already fails past the choice point, and the only words that begin no term are the six [`refuse_declaration_head`] names.

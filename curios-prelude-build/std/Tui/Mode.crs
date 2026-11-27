@@ -28,7 +28,7 @@ satisfy Spell(Mode) {
 }
 
 --- The DEC private mode number of `m`.
-pub let number(m: Mode) -> Nat =
+pub let number(m: Mode) -> Nat =>
     match m
     | alternate_screen() => 1049
     | bracketed_paste() => 2004
@@ -39,7 +39,7 @@ pub let number(m: Mode) -> Nat =
     end;
 
 --- The mode numbered `n`, or `none` for a number that names none of them.
-pub let of_number(n: Nat) -> Option(Mode) =
+pub let of_number(n: Nat) -> Option(Mode) =>
     match n
     | 1049 => Option/some(Mode/alternate_screen())
     | 2004 => Option/some(Mode/bracketed_paste())

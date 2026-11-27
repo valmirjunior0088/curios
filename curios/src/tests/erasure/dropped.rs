@@ -13,7 +13,7 @@ fn let_bound_unit_effect_survives_erasure() {
     // `{}` is unit, not a prop, so it is kept — a unit-typed effect must run after erasure. `/std/print` returns `{}`; binding its first call to an unused `let` must not drop the "a" write. Guards that the empty tuple stays runtime content (the `Sort::of` empty-tuple-is-`Type` rule).
     let source = r#"
         use /std/{Io};
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let first = /std/print("a")!;
             /std/print("b");
         entry()
@@ -28,7 +28,7 @@ fn erased_param_unused_is_accepted() {
         use /std/{Str, Nat, Io};
         let f : (T : Type, m : Nat) -> Nat = (T, m) => m;
         let r : Nat = f(Nat, 3);
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let _ = /std/print(Nat/to_str(r))!;
             /std/Io/pure(());
         entry()
@@ -44,7 +44,7 @@ fn erased_param_is_dropped_at_runtime() {
         let h : (m : Type) -> Nat = (m) => 0;
         let g : (n : Type) -> Nat = (n) => h(n);
         let r : Nat = g(Nat);
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let _ = /std/print(Nat/to_str(r))!;
             /std/Io/pure(());
         entry()
@@ -60,7 +60,7 @@ fn erased_struct_field_collapses_to_bare_value() {
         struct Wrap : pub Type { val : Nat, ghost : Type }
         let make : (n : Type) -> Wrap = (n) => Wrap { val = 5, ghost = n };
         let r : Nat = make(Nat).val;
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let _ = /std/print(Nat/to_str(r))!;
             /std/Io/pure(());
         entry()
@@ -103,7 +103,7 @@ fn erased_tuple_field_is_a_subset_type() {
         use /std/{Str, Nat, Io};
         let make : (n : Type) -> { val : Nat, Type } = (n) => (5, n);
         let r : Nat = make(Nat).0;
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let _ = /std/print(Nat/to_str(r))!;
             /std/Io/pure(());
         entry()
@@ -113,13 +113,13 @@ fn erased_tuple_field_is_a_subset_type() {
 
 #[test]
 fn erased_definition_param_is_dropped_at_runtime() {
-    // The def-form sugar `let f(n : Type) -> R = body`: `g`'s type-valued `n` is dropped and passed to `h`'s type-valued `m` (runs only if both are dropped).
+    // The def-form sugar `let f(n : Type) -> R => body`: `g`'s type-valued `n` is dropped and passed to `h`'s type-valued `m` (runs only if both are dropped).
     let source = r#"
         use /std/{Str, Nat, Io};
-        let h(m : Type) -> Nat = 0;
-        let g(n : Type) -> Nat = h(n);
+        let h(m : Type) -> Nat => 0;
+        let g(n : Type) -> Nat => h(n);
         let r : Nat = g(Nat);
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let _ = /std/print(Nat/to_str(r))!;
             /std/Io/pure(());
         entry()
@@ -141,7 +141,7 @@ fn erased_inductive_payload_is_dropped_at_runtime() {
             | box(ghost, val) => val
             end;
         let r : Nat = get(make(Nat));
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let _ = /std/print(Nat/to_str(r))!;
             /std/Io/pure(());
         entry()
@@ -154,9 +154,9 @@ fn erased_void_discharges_to_relevant_result() {
     let source = r#"
         use /std/{Io};
         use /std/Bool/{False};
-        let absurd(@A : Type, c : False) -> A = match c end;
-        let direct(@A : Type, c : False) -> A = match c end;
-        let via_absurd(@A : Type, c : False) -> A = absurd(c);
+        let absurd(@A : Type, c : False) -> A => match c end;
+        let direct(@A : Type, c : False) -> A => match c end;
+        let via_absurd(@A : Type, c : False) -> A => absurd(c);
         let proofs = (direct, via_absurd);
         /std/print("ok")
         "#;
@@ -171,7 +171,7 @@ fn erased_indexed_relevant_repro() {
         induct Box : (n : Type) -> Type
         | mk(x : Type) : (x)
         end
-        let f(m : Type, k : Nat) -> Box(m) =
+        let f(m : Type, k : Nat) -> Box(m) =>
             let go =
                 match k
                 | 0 => (d) => Box/mk(m)
@@ -193,9 +193,9 @@ fn erased_index_in_type_valued_arg() {
         induct Box : (n : Type) -> Type
         | mk(x : Type) : (x)
         end
-        let absurd(@A : Type, c : False) -> A = match c end;
-        let id_void(w : False) -> False = w;
-        let f(m : Type) -> (False) -> Box(m) = (v) => absurd(@Box(m), id_void(v));
+        let absurd(@A : Type, c : False) -> A => match c end;
+        let id_void(w : False) -> False => w;
+        let f(m : Type) -> (False) -> Box(m) => (v) => absurd(@Box(m), id_void(v));
         let g = f;
         /std/print("ok")
         "#;
@@ -248,7 +248,7 @@ fn a_function_of_only_proofs_is_called_with_nothing() {
         pub induct Box: pub Type
         | tag()
         end
-        let prove(P: Prop, proof: P) -> Box = Box/tag();
+        let prove(P: Prop, proof: P) -> Box => Box/tag();
         let b: Box = prove(Eq()(2 * 21, 42), Eq/refl());
         match b | tag() => /std/print("called\n") end
         "#),
@@ -263,8 +263,8 @@ fn a_proof_valued_function_in_a_kept_slot_erases_and_runs() {
         run(r#"
         use /std/{Nat, Str};
         use /std/Bool/{True, Holds};
-        let app(P: (Nat) -> Prop, f: (k: Nat) -> P(k), n: Nat) -> P(n) = f(n);
-        let pf(n: Nat) -> Holds(n <= n) = app((k) => Holds(k <= k), (k) => True/qed(), n);
+        let app(P: (Nat) -> Prop, f: (k: Nat) -> P(k), n: Nat) -> P(n) => f(n);
+        let pf(n: Nat) -> Holds(n <= n) => app((k) => Holds(k <= k), (k) => True/qed(), n);
         let _: Holds(3 <= 3) = pf(3);
         /std/print("ok")
         "#),

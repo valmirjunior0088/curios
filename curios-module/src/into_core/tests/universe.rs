@@ -13,7 +13,7 @@ fn no_items_simple_tail() {
 #[test]
 fn written_types_get_distinct_levels_and_lexical_roles() {
     let (_, minted, _, _) = into_core(
-        &"let id(@A : Type, x : A) -> A = x; Type"
+        &"let id(@A : Type, x : A) -> A => x; Type"
             .parse::<Entrypoint>()
             .unwrap(),
         &RootSource::none(),
@@ -43,7 +43,7 @@ fn written_types_get_distinct_levels_and_lexical_roles() {
 #[test]
 fn each_written_sort_is_one_quality_of_its_declaration() {
     let (_, minted, _, _) = into_core(
-        &"let first(@A : Sort, x : A) -> A = x; let both(@A : Sort, @B : Sort, x : A, y : B) -> A = x; Type"
+        &"let first(@A : Sort, x : A) -> A => x; let both(@A : Sort, @B : Sort, x : A, y : B) -> A => x; Type"
             .parse::<Entrypoint>()
             .unwrap(),
         &RootSource::none(),
@@ -76,7 +76,7 @@ fn a_sort_outside_a_signature_is_refused_with_where_it_stands() {
         ("a body", "Sort"),
         (
             "a local definition",
-            "let outer(n : Type) -> Type = let inner(@A : Sort, a : A) -> A = a; n; Type",
+            "let outer(n : Type) -> Type => let inner(@A : Sort, a : A) -> A => a; n; Type",
         ),
     ] {
         let refusal = into_core(
@@ -123,11 +123,11 @@ fn a_declaration_lowers_the_same_whatever_is_written_before_it() {
 
         (item, mints.binders, mints.metavariables, roles)
     };
-    let id = "let id(@A : Type, x : A) -> A = x;";
+    let id = "let id(@A : Type, x : A) -> A => x;";
 
     let alone = lowered(&format!("{id} Type"));
     let after = lowered(&format!(
-        "let first(@A : Type, @B : Type, x : A, y : B) -> A = x; {id} Type"
+        "let first(@A : Type, @B : Type, x : A, y : B) -> A => x; {id} Type"
     ));
 
     assert_eq!(alone, after);
@@ -136,8 +136,8 @@ fn a_declaration_lowers_the_same_whatever_is_written_before_it() {
 #[test]
 fn cached_and_full_elaboration_have_identical_universe_transactions() {
     let (full, cached) = elaboration_paths(
-        "let pre(@A : Type, x : A) -> A = x;\
-         let user(@B : Type, x : B) -> B = pre(x);\
+        "let pre(@A : Type, x : A) -> A => x;\
+         let user(@B : Type, x : B) -> B => pre(x);\
          user(Type)",
     );
 
@@ -147,7 +147,7 @@ fn cached_and_full_elaboration_have_identical_universe_transactions() {
 #[test]
 fn a_polymorphic_definition_instantiates_at_prop_and_type() {
     let program =
-        elaborate_source_program("let id(@A : Type, x : A) -> A = x; (id(Prop), id(Type))");
+        elaborate_source_program("let id(@A : Type, x : A) -> A => x; (id(Prop), id(Type))");
     let definitions = &program.definitions;
     let definition = definitions
         .items
@@ -298,7 +298,7 @@ fn cumulativity_admits_two_uses_of_an_inferred_local_alias() {
 /// A level a caller supplies stays a parameter: `@A : Type` puts the level in an argument position, so each occurrence chooses it.
 #[test]
 fn a_level_in_argument_position_stays_a_parameter() {
-    let definitions = elaborate_source("pub let pick(@A : Type, x : A) -> A = x; pick");
+    let definitions = elaborate_source("pub let pick(@A : Type, x : A) -> A => x; pick");
     assert_eq!(universe_parameters(&definitions, "/pick"), 1);
 }
 
@@ -307,7 +307,7 @@ fn a_level_in_argument_position_stays_a_parameter() {
 fn a_level_only_in_the_result_is_minimized_away() {
     let definitions = elaborate_source(
         "pub induct Unit : pub Type | only() end
-         pub let Holds(x : Unit) -> Type = Unit;
+         pub let Holds(x : Unit) -> Type => Unit;
          Holds",
     );
     assert_eq!(universe_parameters(&definitions, "/Unit"), 0);
@@ -343,11 +343,11 @@ fn an_operator_in_a_dependent_type_elaborates_after_its_witness_row() {
          pub induct Box : pub Type
          | box()
          end
-         pub let join(a : Box, b : Box) -> Box =
+         pub let join(a : Box, b : Box) -> Box =>
              Box/box();
-         pub let Probe(b : Box) -> Type =
+         pub let Probe(b : Box) -> Type =>
              match b | box() => One end;
-         pub let probe(a : Box, b : Box) -> Probe(a + b) =
+         pub let probe(a : Box, b : Box) -> Probe(a + b) =>
              One/point();
          satisfy Add(Box) {
              add = join,
@@ -364,9 +364,9 @@ fn a_method_is_called_at_an_instance_of_every_level_of_its_concept() {
              left(@A : Type, value : A) -> F(A),
              right(@B : Type, value : B) -> G(B),
          }
-         pub let lefted(@F : (Type) -> Type, @G : (Type) -> Type, use M(F, G), @A : Type, value : A) -> F(A) =
+         pub let lefted(@F : (Type) -> Type, @G : (Type) -> Type, use M(F, G), @A : Type, value : A) -> F(A) =>
              M/left(@F, @G, value);
-         pub let righted(@F : (Type) -> Type, @G : (Type) -> Type, use M(F, G), @B : Type, value : B) -> G(B) =
+         pub let righted(@F : (Type) -> Type, @G : (Type) -> Type, use M(F, G), @B : Type, value : B) -> G(B) =>
              M/right(@F, @G, value);
          M",
     );
@@ -385,7 +385,7 @@ fn a_concept_field_may_reference_a_preceding_field() {
              op(A) -> A,
              law(x : A) -> Eq()(op(op(x)), op(x)),
          }
-         pub let lawful(@A : Type, use Idem(A), x : A) -> Eq()(Idem/op(Idem/op(x)), Idem/op(x)) =
+         pub let lawful(@A : Type, use Idem(A), x : A) -> Eq()(Idem/op(Idem/op(x)), Idem/op(x)) =>
              Idem/law(x);
          Idem",
     );
@@ -404,7 +404,7 @@ fn a_superclass_does_not_shift_a_dependent_field_reference() {
              op(A) -> A,
              law(x : A) -> Eq()(op(op(x)), op(x)),
          }
-         pub let lawful(@A : Type, use Idem(A), x : A) -> Eq()(Idem/op(Idem/op(x)), Idem/op(x)) =
+         pub let lawful(@A : Type, use Idem(A), x : A) -> Eq()(Idem/op(Idem/op(x)), Idem/op(x)) =>
              Idem/law(x);
          Idem",
     );

@@ -24,16 +24,16 @@ satisfy Hash/Key(Duration) {
 }
 
 satisfy Add(Duration) {
-    add(a, b) = Duration { nanos = a.nanos + b.nanos },
+    add(a, b) => Duration { nanos = a.nanos + b.nanos },
 }
 
 satisfy Sub(Duration) {
-    sub(a, b) = Duration { nanos = a.nanos - b.nanos },
+    sub(a, b) => Duration { nanos = a.nanos - b.nanos },
 }
 
 --- As its constructor's call: `Duration/of_nanos(+1500000000)`.
 satisfy Spell(Duration) {
-    spell(d) = Fmt/render("Duration/of_nanos(#)")(d.nanos),
+    spell(d) => Fmt/render("Duration/of_nanos(#)")(d.nanos),
 }
 
 --- No time.
@@ -41,39 +41,39 @@ pub let zero: Duration =
     Duration { nanos = +0 };
 
 --- `n` seconds.
-pub let of_secs(n: Int) -> Duration =
+pub let of_secs(n: Int) -> Duration =>
     Duration { nanos = n * 1000000000 };
 
 --- `n` milliseconds.
-pub let of_millis(n: Int) -> Duration =
+pub let of_millis(n: Int) -> Duration =>
     Duration { nanos = n * 1000000 };
 
 --- `n` microseconds.
-pub let of_micros(n: Int) -> Duration =
+pub let of_micros(n: Int) -> Duration =>
     Duration { nanos = n * 1000 };
 
 --- `n` nanoseconds.
-pub let of_nanos(n: Int) -> Duration =
+pub let of_nanos(n: Int) -> Duration =>
     Duration { nanos = n };
 
 --- The whole seconds, rounded toward zero: the magnitude's whole seconds under the length's sign.
-pub let to_secs(d: Duration) -> Int =
+pub let to_secs(d: Duration) -> Int =>
     Int/sign(d.nanos) * Nat/to_int(Int/abs(d.nanos) / 1000000000);
 
 --- The whole milliseconds, rounded toward zero.
-pub let to_millis(d: Duration) -> Int =
+pub let to_millis(d: Duration) -> Int =>
     Int/sign(d.nanos) * Nat/to_int(Int/abs(d.nanos) / 1000000);
 
 --- The nanoseconds, exactly.
-pub let to_nanos(d: Duration) -> Int =
+pub let to_nanos(d: Duration) -> Int =>
     d.nanos;
 
 --- The length as ISO 8601 writes a duration: `PT1H30M`, `PT1.5S`, `-PT1.5S`, and `PT0S` for none.
-pub let to_str(d: Duration) -> Str =
+pub let to_str(d: Duration) -> Str =>
     iso8601/write_duration(d);
 
 --- The length ISO 8601's extended format writes as `s`, or `none` for text that writes none.
-pub let of_str(s: Str) -> Option(Duration) =
+pub let of_str(s: Str) -> Option(Duration) =>
     iso8601/whole(iso8601/duration(), s);
 
 satisfy Show(Duration) {

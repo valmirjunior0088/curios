@@ -2,7 +2,7 @@
 use /std/{Str, List, Option, Result, Try, Io, Proc, Fmt, Json, Path, File, fs, Bool, Bytes, Monad};
 
 --- Whether `bytes` read as one JSON document: bytes that are no UTF-8 are no text, and refused where they would become text.
-let reads(bytes: Bytes) -> Bool =
+let reads(bytes: Bytes) -> Bool =>
     match Str/of_bytes(bytes)
     | failure(_) => false
     | success(text) =>
@@ -10,14 +10,14 @@ let reads(bytes: Bytes) -> Bool =
     end;
 
 --- What is wrong with the case `name`, which the decoder answered `read`: nothing where its prefix leaves the answer free or the answer is the one the prefix asks for.
-let judged(name: Str, read: Bool) -> Option(Str) =
+let judged(name: Str, read: Bool) -> Option(Str) =>
     match (Str/starts_with(name, "y_"), Str/starts_with(name, "n_"), read)
     | (true, _, false) => Option/some(Str/concat(name, " is refused, which a parser must read"))
     | (_, true, true) => Option/some(Str/concat(name, " is read, which a parser must refuse"))
     | _ => Option/none()
     end;
 
-let execute() -> Try(Io, Str, {}) =
+let execute() -> Try(Io, Str, {}) =>
     let arguments = Proc/args()!;
     let given =
         Option/to_result(List/try_get(arguments, 1), "the corpus's directory is the one argument")!;

@@ -270,12 +270,12 @@ fn an_anchor_is_a_name_no_other_thing_of_the_page_takes() {
             &Qualifier::from(["m", "pairs"]),
             &Declaration {
                 signature: Signature {
-                    text: "satisfy (@A: Type, use Show(A)) =>\n    Show({A, A})".to_string(),
+                    text: "satisfy (@A: Type, use Show(A)) ->\n    Show({A, A})".to_string(),
                     marks: Vec::new(),
                 },
                 ..declaration(&home, "", Kind::Witness)
             }
         ),
-        "satisfy(@A:Type,useShow(A))=>Show({A,A})@/m/pairs"
+        "satisfy(@A:Type,useShow(A))->Show({A,A})@/m/pairs"
     );
 }

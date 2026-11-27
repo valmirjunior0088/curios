@@ -14,13 +14,13 @@ fn program(body: &str) -> String {
     fill!(
         r#"
         use /std/{Str, Bytes, Nat, Bool, List, Option, Result, Show, Try, Io, Path, File, fs, Proc};
-        let show_unit(r: Result(Io/Error, {})) -> Str =
+        let show_unit(r: Result(Io/Error, {})) -> Str =>
             match r | success(_) => "ok" | failure(e) => Show/show(e) end;
-        let text(b: Bytes) -> Str =
+        let text(b: Bytes) -> Str =>
             Result/unwrap_or(Str/of_bytes(b), "?");
-        let program() -> Try(Io, Io/Error, Str) =
+        let program() -> Try(Io, Io/Error, Str) =>
             ${body};
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             match Try/run(program())!
             | failure(e) => /std/print(Show/show(e))
             | success(s) => /std/print(s)

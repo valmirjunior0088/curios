@@ -8,7 +8,7 @@ pub let body(
     limits: Limits,
     r: Reader(Socket),
     framing: Framing,
-) -> Io(Result(Reader/Stop(Bytes, Refusal), Bytes)) =
+) -> Io(Result(Reader/Stop(Bytes, Refusal), Bytes)) =>
     let read =
         Reader/take(
             r,

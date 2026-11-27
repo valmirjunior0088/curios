@@ -9,13 +9,13 @@ fn a_function_returning_test_sequences_assertions_and_io() {
         run_tests_program(
             r#"
         use /std/{Io, Test, print};
-        let check() -> Test({}) =
+        let check() -> Test({}) =>
             let _ = Test/assert("the first check holds", true)!;
             let _ = print("before|")!;
             let _ = Io/yield()!;
             let _ = Test/assert("the check after the yield holds", true)!;
             Test/assert("the last check holds", true);
-        test checked = check();
+        test checked => check();
         ()
     "#
         ),
@@ -29,12 +29,12 @@ fn a_failed_assertion_skips_the_remaining_test_continuations() {
         run_tests_program(
             r#"
         use /std/{Test, print};
-        test sequence =
+        test sequence =>
             let _ = Test/assert("the first step holds", true)!;
             let _ = Test/assert("the second step fails", false)!;
             let _ = print("unreached")!;
             Test/assert("the step past the failure holds", true);
-        test afterward = Test/assert("it holds", true);
+        test afterward => Test/assert("it holds", true);
         ()
     "#
         ),
@@ -48,12 +48,12 @@ fn one_try_embedding_serves_io_and_test_bases() {
         run_tests_program(
             r#"
         use /std/{Nat, Str, Io, Try, Test, print};
-        let io_error() -> Try(Io, Str, Nat) = Try/raise("io error");
-        let test_error() -> Try(Test, Str, Nat) = Try/raise("test error");
-        test first =
+        let io_error() -> Try(Io, Str, Nat) => Try/raise("io error");
+        let test_error() -> Try(Test, Str, Nat) => Try/raise("test error");
+        test first =>
             let _ = io_error()!;
             print("unreached");
-        test second =
+        test second =>
             let _ = test_error()!;
             print("unreached");
         ()
@@ -68,7 +68,7 @@ fn a_test_declaration_requires_a_terminal_unit_payload() {
     let refusal = tests_error(
         r#"
         use /std/{Nat, Test};
-        test not_terminal = Test/pure(42);
+        test not_terminal => Test/pure(42);
         ()
     "#,
     );
@@ -81,14 +81,14 @@ fn successful_payloads_flow_through_binding_and_identity_lifting() {
         run_tests_program(
             r#"
         use /std/{Nat, Test};
-        let answer() -> Test(Nat) =
+        let answer() -> Test(Nat) =>
             let first = Test/pure(20)!;
             Test/pure(first + 1);
-        let check() -> Test({}) =
+        let check() -> Test({}) =>
             let value = answer()!;
             let _ = Test/equal(value, 21)!;
             Test/assert("the value doubles to forty-two", value * 2 == 42);
-        test checked = check();
+        test checked => check();
         ()
         "#
         ),
@@ -102,14 +102,14 @@ fn a_test_can_inspect_expected_errors_as_data() {
         run_tests_program(
             r#"
         use /std/{Nat, Str, Io, Try, Test};
-        let refused() -> Try(Io, Str, Nat) = Try/raise("expected refusal");
-        let check() -> Test({}) =
+        let refused() -> Try(Io, Str, Nat) => Try/raise("expected refusal");
+        let check() -> Test({}) =>
             let outcome = Try/run(refused())!;
             match outcome
             | success(_) => Test/fail("unexpected success")
             | failure(why) => Test/equal(why, "expected refusal")
             end;
-        test checked = check();
+        test checked => check();
         ()
         "#
         ),
@@ -122,8 +122,8 @@ fn a_try_embedding_requires_its_bases_declared_embedding() {
     let refusal = error(
         r#"
         use /std/{Nat, Str, Option, Try, Test};
-        let action() -> Try(Option, Str, Nat) = Try/pure(1);
-        let check() -> Test({}) =
+        let action() -> Try(Option, Str, Nat) => Try/pure(1);
+        let check() -> Test({}) =>
             let value = action()!;
             Test/equal(value, 1);
         ()

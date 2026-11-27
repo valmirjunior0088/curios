@@ -20,10 +20,10 @@ fn a_flattening_writes_every_element_where_it_stands() {
         r#"
         use /std/{Str, Nat, List, Io};
 
-        let leaning(k: Nat, acc: List(Nat)) -> List(Nat) =
+        let leaning(k: Nat, acc: List(Nat)) -> List(Nat) =>
             match k | 0 => acc | m + 1 => leaning(m, [..acc, m]) end;
 
-        let halves(lo: Nat, k: Nat) -> List(Nat) =
+        let halves(lo: Nat, k: Nat) -> List(Nat) =>
             match k
             | 0 => []
             | 1 => [lo]
@@ -32,13 +32,13 @@ fn a_flattening_writes_every_element_where_it_stands() {
                 [..halves(lo, half), ..halves(lo + half, k - half)]
             end;
 
-        let weighed(xs: List(Nat)) -> Nat =
+        let weighed(xs: List(Nat)) -> Nat =>
             List/fold(xs, (0, 0), (x, acc) => ((acc.0 + (acc.1 + 1) * x) % 1000003, acc.1 + 1)).0;
 
-        let read(xs: List(Nat), at: Nat) -> Nat =
+        let read(xs: List(Nat), at: Nat) -> Nat =>
             match List/try_get(xs, at) | some(x) => x | none() => 0 end;
 
-        let shapes(n: Nat) -> List(Nat) =
+        let shapes(n: Nat) -> List(Nat) =>
             let lean = leaning(n, []);
             let first = read(lean, n / 2);
             let halved = halves(0, n);
@@ -64,7 +64,7 @@ fn a_flattening_writes_every_element_where_it_stands() {
                 weighed(regrown) + fifth + sixth + seventh,
             ];
 
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let arguments = /std/Proc/args()!;
             let n =
                 match List/try_get(arguments, 1)
@@ -115,22 +115,22 @@ fn a_read_in_a_loop_answers_whatever_shape_each_turn_hands_it() {
         r#"
         use /std/{Str, Nat, List, Bytes, Byte, Io, Proc, Option};
 
-        let weigh(b: Bytes, acc: Nat) -> Nat =
+        let weigh(b: Bytes, acc: Nat) -> Nat =>
             match b | 0x[] => acc | 0x[h, ..t] => weigh(t, (acc * 31 + Byte/to_nat(h)) % 1000003) end;
 
-        let head(b: Bytes) -> Nat =
+        let head(b: Bytes) -> Nat =>
             match b | 0x[] => 0 | 0x[h, .._] => Byte/to_nat(h) end;
 
-        let heads(ps: List(Bytes), acc: Nat) -> Nat =
+        let heads(ps: List(Bytes), acc: Nat) -> Nat =>
             match ps | [] => acc | [p, ..rest] => heads(rest, (acc * 31 + head(p)) % 1000003) end;
 
-        let weigh_all(ps: List(Bytes), acc: Nat) -> Nat =
+        let weigh_all(ps: List(Bytes), acc: Nat) -> Nat =>
             match ps | [] => acc | [p, ..rest] => weigh_all(rest, weigh(p, acc)) end;
 
-        let sum(xs: List(Nat), acc: Nat) -> Nat =
+        let sum(xs: List(Nat), acc: Nat) -> Nat =>
             match xs | [] => acc | [x, ..rest] => sum(rest, (acc * 31 + x) % 1000003) end;
 
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let arguments = Proc/args()!;
             let leaf = match List/try_get(arguments, 1) | some(b) => b | none() => 0x[] end;
             let joined = 0x[..leaf, ..Str/to_bytes("-mid-"), ..leaf];
@@ -181,7 +181,7 @@ fn a_run_built_from_a_window_and_read_once_holds_no_room() {
     let compiled = compile(
         r#"
         use /std/{Str, Nat, Bytes, List, Io};
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let arguments = /std/Proc/args()!;
             let mib =
                 match List/try_get(arguments, 1)

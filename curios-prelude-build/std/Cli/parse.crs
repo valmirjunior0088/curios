@@ -4,7 +4,7 @@ use /std/Cli/{Value, Field, Presence, Positional, Positionals, Command, Failure,
 use /std/Cli/Parsed/{Presented};
 use /std/Cli/scan/{Seen, Raw};
 
-let lifted(@A: Type, @B: Type, r: Reading(A), f: (A) -> B) -> Reading(B) =
+let lifted(@A: Type, @B: Type, r: Reading(A), f: (A) -> B) -> Reading(B) =>
     match r
     | parsed(a) => Reading/parsed(f(a))
     | help(path) => Reading/help(path)
@@ -12,13 +12,13 @@ let lifted(@A: Type, @B: Type, r: Reading(A), f: (A) -> B) -> Reading(B) =
     | refused(path, failure) => Reading/refused(path, failure)
     end;
 
-let reading(v: Value, name: Str, value: Bytes) -> Result(Failure, v.A) =
+let reading(v: Value, name: Str, value: Bytes) -> Result(Failure, v.A) =>
     match v.read(value)
     | success(a) => Result/success(a)
     | failure(reason) => Result/failure(Failure/bad_value(name, reason))
     end;
 
-let readings(v: Value, name: Str, values: List(Bytes)) -> Result(Failure, List(v.A)) =
+let readings(v: Value, name: Str, values: List(Bytes)) -> Result(Failure, List(v.A)) =>
     match values
     | [] => Result/success([])
     | [t, ..more] =>
@@ -28,7 +28,7 @@ let readings(v: Value, name: Str, values: List(Bytes)) -> Result(Failure, List(v
     end;
 
 -- The variable `f` declares, as a refusal names it, and its value, where the environment sets it: an empty variable is unset, as a shell reads one.
-let variable(f: Field, env: Map(Str, Bytes)) -> Option({Str, Bytes}) =
+let variable(f: Field, env: Map(Str, Bytes)) -> Option({Str, Bytes}) =>
     match f.env
     | some(name) =>
         match Map/try_get(env, name)
@@ -39,14 +39,14 @@ let variable(f: Field, env: Map(Str, Bytes)) -> Option({Str, Bytes}) =
     end;
 
 -- A flag's or a toggle's variable, read as clap reads one: these twelve words in any case, and anything else refused.
-let switch(name: Str, value: Bytes) -> Result(Failure, Bool) =
+let switch(name: Str, value: Bytes) -> Result(Failure, Bool) =>
     match Str/of_bytes(value)
     | failure(_) => Result/failure(Failure/bad_value(name, "not valid UTF-8"))
     | success(text) => switch_word(name, text)
     end;
 
 -- The twelve words a switch reads, in any case, and anything else refused.
-let switch_word(name: Str, text: Str) -> Result(Failure, Bool) =
+let switch_word(name: Str, text: Str) -> Result(Failure, Bool) =>
     match Str/to_lower(text)
     | "y" | "yes" | "t" | "true" | "on" | "1" => Result/success(true)
     | "n" | "no" | "f" | "false" | "off" | "0" => Result/success(false)
@@ -58,14 +58,14 @@ let switch_word(name: Str, text: Str) -> Result(Failure, Bool) =
                     text)))
     end;
 
-let given(seen: List(Seen)) -> Nat =
+let given(seen: List(Seen)) -> Nat =>
     List/length(List/filter(seen, (s) =>
         match s | given() => true | _ => false end));
 
-let given_values(seen: List(Seen)) -> List(Bytes) =
+let given_values(seen: List(Seen)) -> List(Bytes) =>
     List/concat_map(seen, (s) => match s | value(b) => [b] | _ => [] end);
 
-let switched(seen: List(Seen)) -> Option(Bool) =
+let switched(seen: List(Seen)) -> Option(Bool) =>
     List/fold(
         seen,
         Option/none(),
@@ -76,7 +76,7 @@ let switched(seen: List(Seen)) -> Option(Bool) =
             | _ => held
             end);
 
-let picks(seen: List(Seen)) -> List(Nat) =
+let picks(seen: List(Seen)) -> List(Nat) =>
     List/fold(
         List/reverse(seen),
         [],
@@ -86,14 +86,14 @@ let picks(seen: List(Seen)) -> List(Nat) =
             | _ => held
             end);
 
-let present(@A: Type, presence: Presence(A), a: A) -> Presented(A, presence) =
+let present(@A: Type, presence: Presence(A), a: A) -> Presented(A, presence) =>
     match presence
     | required() => a
     | optional() => Option/some(a)
     | default(_) => a
     end;
 
-let absent(@A: Type, presence: Presence(A), name: Str) -> Result(Failure, Presented(A, presence)) =
+let absent(@A: Type, presence: Presence(A), name: Str) -> Result(Failure, Presented(A, presence)) =>
     match presence
     | required() => Result/failure(Failure/missing_required(name))
     | optional() => Result/success(Option/none())
@@ -105,7 +105,7 @@ let read_field(
     f: Field,
     seen: List(Seen),
     env: Map(Str, Bytes),
-) -> Result(Failure, Carrier(f.kind)) =
+) -> Result(Failure, Carrier(f.kind)) =>
     let name = Str/concat("--", f.long);
     let set = variable(f, env);
     match f.kind
@@ -188,7 +188,7 @@ let read_field(
     end;
 
 -- The texts the line gave `f`, or the variable it is read from where the line gave none, which a read as the program runs reads again: an option's last value, a `many`'s every value, a choice's chosen name; a flag, a count and a toggle are read as what they are, and give none.
-let given_texts(f: Field, seen: List(Seen), env: Map(Str, Bytes)) -> List(Bytes) =
+let given_texts(f: Field, seen: List(Seen), env: Map(Str, Bytes)) -> List(Bytes) =>
     let line =
         match f.kind
         | option(_, _) =>
@@ -222,7 +222,7 @@ let read_options(
     at: Nat,
     seen: Map(Nat, List(Seen)),
     env: Map(Str, Bytes),
-) -> Result(Failure, Values(Parsed/option_slots(fields))) =
+) -> Result(Failure, Values(Parsed/option_slots(fields))) =>
     match fields
     | [] => Result/success(Values/nil())
     | [f, ..more] =>
@@ -235,7 +235,7 @@ let read_options(
 let read_required(
     ps: List(Positional),
     tokens: List(Bytes),
-) -> Result(Failure, {Values(Parsed/required_slots(ps)), List(Bytes)}) =
+) -> Result(Failure, {Values(Parsed/required_slots(ps)), List(Bytes)}) =>
     match ps
     | [] => Result/success((Values/nil(), tokens))
     | [p, ..more] =>
@@ -251,7 +251,7 @@ let read_required(
 let read_optional(
     ps: List(Positional),
     tokens: List(Bytes),
-) -> Result(Failure, {Values(Parsed/optional_slots(ps)), List(Bytes)}) =
+) -> Result(Failure, {Values(Parsed/optional_slots(ps)), List(Bytes)}) =>
     match ps
     | [] => Result/success((Values/nil(), tokens))
     | [p, ..more] =>
@@ -269,7 +269,7 @@ let read_optional(
 let read_rest(
     p: Option(Positional),
     tokens: List(Bytes),
-) -> Result(Failure, Values(Parsed/rest_slots(p))) =
+) -> Result(Failure, Values(Parsed/rest_slots(p))) =>
     match p
     | none() =>
         match tokens
@@ -286,7 +286,7 @@ let leaf_values(
     ps: Positionals,
     raw: Raw,
     env: Map(Str, Bytes),
-) -> Result(Failure, Values(Parsed/slots(options, ps))) =
+) -> Result(Failure, Values(Parsed/slots(options, ps))) =>
     let o = read_options(options, 0, raw.seen, env)!;
     let (r, after_required) = read_required(ps.required, raw.positionals)!;
     let (q, after_optional) = read_optional(ps.optional, after_required)!;
@@ -294,7 +294,7 @@ let leaf_values(
     Result/success(Parsed/appended(o, Parsed/appended(r, Parsed/appended(q, t))));
 
 -- What `raw` asks before the line is read further: help, then the version, then the first refusal.
-let asked(@A: Type, raw: Raw, path: List(Str), version: Option(Str)) -> Option(Reading(A)) =
+let asked(@A: Type, raw: Raw, path: List(Str), version: Option(Str)) -> Option(Reading(A)) =>
     match
     | raw.help => Option/some(Reading/help(path))
     | raw.version, some(text) = version => Option/some(Reading/version(text))
@@ -308,7 +308,7 @@ pub let command(
     path: List(Str),
     version: Option(Str),
     env: Map(Str, Bytes),
-) -> Reading(Parsed(c)) =
+) -> Reading(Parsed(c)) =>
     match c
     | leaf(name, _, options, ps) =>
         let here = [..path, name];
@@ -353,7 +353,7 @@ and chosen(
     path: List(Str),
     version: Option(Str),
     env: Map(Str, Bytes),
-) -> Option(Reading(Chosen(commands))) =
+) -> Option(Reading(Chosen(commands))) =>
     match commands
     | [] => Option/none()
     | [c, ..rest] =>

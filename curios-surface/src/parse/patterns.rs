@@ -4,8 +4,8 @@ use {
         PATTERN_TAKES_NO_USE, Read, begins_a_name, digit_led, member_ends, members,
         parse_binder_label, parse_block_str, parse_keyword, parse_label, parse_line_str,
         parse_literal, parse_mark, parse_name, parse_named_premise, parse_nat_digits, parse_number,
-        parse_place, parse_qualified_name, parse_quoted_char, parse_word_raw, parse_written_word,
-        refused, require_space, trimmed, unbindable,
+        parse_place, parse_qualified_name, parse_quoted_char, parse_result_type, parse_word_raw,
+        parse_written_word, refused, require_space, trimmed, unbindable,
     },
     crate::{
         Binder, Elements, FuncParam, FuncType, FuncTypeParam, Label, MatchPattern,
@@ -74,9 +74,9 @@ pub fn parse_func_type<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, Ter
             .and_drop(parse_literal(")"))
             .and_drop(parse_literal("->")),
     )
-    // Past the arrow this is a function type, so a member it refuses is its own to report.
+    // Past the arrow this is a function type, so a member it refuses is its own to report, and its result a type, never a lambda, so a `=>` past it ends the type.
     .flat_map(members)
-    .and(parse_term::<D>)
+    .and(parse_result_type::<D>)
     .map(|(params, output): (Vec<FuncTypeParam<D>>, Term<D>)| {
         Subterm::FuncType(FuncType {
             params: params.into_iter().collect(),
@@ -238,7 +238,7 @@ fn parse_pattern_inner<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, Pat
         .parse(state)
 }
 
-// A constructor binder pattern `tag(p, …)`, [`parse_ctor_match_pattern`]'s shape over binder patterns, each payload under its mark. Tried before the bare name its tag would otherwise be read as, and never committed: a definition sugar's head, `f(x: T)`, shares the prefix, and a `let` tells the two apart only at the `->` the sugar writes ([`super::expr`]'s `parse_let_group`). A payload under `use` is no pattern, and fails here for the forms sharing the prefix to report.
+// A constructor binder pattern `tag(p, …)`, [`parse_ctor_match_pattern`]'s shape over binder patterns, each payload under its mark. Tried before the bare name its tag would otherwise be read as, and never committed: a definition sugar's head, `f(x: T)`, shares the prefix, and a `let` tells the two apart only at the `=>` a function's body follows ([`super::expr`]'s `parse_let_group`). A payload under `use` is no pattern, and fails here for the forms sharing the prefix to report.
 fn parse_ctor_pattern<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, Pattern<D>> {
     let argument = |state: ParserState<'a>| {
         parse_mark
@@ -720,7 +720,7 @@ pub fn parse_unreadable_binder<'a, T: 'a, D: Grammar>(
         .parse(state)
 }
 
-// A lambda parameter with an optional domain annotation and a binder pattern, which the definition sugar `label(params) = value` of a tuple, a structure and a witness reads too (`parse_tuple_field_prefix`), since the sugar lowers to a lambda. It retains its mark — `@name`, or `use _` — so a hidden-binder field type (`pure : (@A, x) -> M(A)`) can be implemented as `pure(@A, x) = …` rather than losing the mark. `(x)` is sugar for `(x : _)`; the annotation, when present, parses as an arbitrary term and stops at the closing `)` (mirrors `parse_func_type_param`).
+// A lambda parameter with an optional domain annotation and a binder pattern, which the definition sugar `label(params) => value` of a tuple, a structure and a witness reads too (`parse_tuple_field_prefix`), since the sugar lowers to a lambda. It retains its mark — `@name`, or `use _` — so a hidden-binder field type (`pure : (@A, x) -> M(A)`) can be implemented as `pure(@A, x) => …` rather than losing the mark. `(x)` is sugar for `(x : _)`; the annotation, when present, parses as an arbitrary term and stops at the closing `)` (mirrors `parse_func_type_param`).
 pub fn parse_func_pattern_param<'a, D: Grammar>(
     state: ParserState<'a>,
 ) -> Parsed<'a, Read<FuncParam<D>>> {

@@ -7,19 +7,19 @@ pub use Option/*;
 --- The additive identity.
 pub let zero: Nat = 0;
 
-pub let map(@A: Type, @B: Type, m: Option(A), f: (A) -> B) -> Option(B) =
+pub let map(@A: Type, @B: Type, m: Option(A), f: (A) -> B) -> Option(B) =>
     match m | some(a) => Option/some(f(a)) | none() => Option/none() end;
 
-pub let even(n: Nat) -> Bool = match n | 0 => true | p + 1 => odd(p) end
-and odd(n: Nat) -> Bool = even(n);
+pub let even(n: Nat) -> Bool => match n | 0 => true | p + 1 => odd(p) end
+and odd(n: Nat) -> Bool => even(n);
 
-pub let and(p: Parse(A), q: Parse(B)) -> Parse({A, B}) = Parse/and(p, q);
+pub let and(p: Parse(A), q: Parse(B)) -> Parse({A, B}) => Parse/and(p, q);
 
 satisfy Show(Nat) {
-    show(n) = Nat/to_str(n),
+    show(n) => Nat/to_str(n),
 }
 
-satisfy (@A: Type, use Show(A)) => Show(List(A)) {
+satisfy (@A: Type, use Show(A)) -> Show(List(A)) {
     show = show_list,
 }
 
@@ -27,8 +27,8 @@ satisfy Spell(Nat) {
     ..
 }
 
-test sample_map_holds =
+test sample_map_holds =>
     Test/assert(even(zero));
 
-test sample_equality_holds =
+test sample_equality_holds =>
     Test/equal(map(Option/some(zero), (n: Nat) => n + 1), Option/some(1));

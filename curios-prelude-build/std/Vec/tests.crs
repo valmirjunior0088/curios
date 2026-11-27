@@ -2,23 +2,23 @@
 use /std/{Vec, List, Nat, Str, Bool, Test};
 
 -- The bound is decided, so a literal index inside the length discharges by reduction, and the vector's own count is what carries that bound onto the list underneath.
-test a_literal_index_inside_the_length_reads_the_list_under_the_vectors_count =
+test a_literal_index_inside_the_length_reads_the_list_under_the_vectors_count =>
     let v: Vec(Nat, 3) = Vec/cons(10, Vec/cons(20, Vec/cons(30, Vec/nil())));
     Test/equal([List/get(v.list, 0), List/get(v.list, 1), List/get(v.list, 2)], [10, 20, 30]);
 
 -- An update keeps the count, so it answers a vector of the same length, and the one written reads back.
-test set_writes_an_element_at_the_same_length =
+test set_writes_an_element_at_the_same_length =>
     let v: Vec(Nat, 3) = Vec/cons(10, Vec/cons(20, Vec/cons(30, Vec/nil())));
     let w: Vec(Nat, 3) = Vec/set(v, 1, 25);
     Test/all([Test/equal(w.list, [10, 25, 30]), Test/equal(List/get(w.list, 1), 25)]);
 
 -- A list is already counted by `List/length`, so `of_list` keeps the list it was given and takes that length as the index.
-test of_list_keeps_its_list_at_the_lists_own_length =
+test of_list_keeps_its_list_at_the_lists_own_length =>
     let v = Vec/of_list([1, 2, 3]);
     Test/all([Test/equal(Vec/length(v), 3), Test/equal(v.list, [1, 2, 3])]);
 
 -- Equal lengths are in the types, so `zip` demands no proof and `replicate` builds the second operand at exactly the first's length.
-test zip_pairs_two_vectors_of_one_length_position_by_position =
+test zip_pairs_two_vectors_of_one_length_position_by_position =>
     let v: Vec(Nat, 3) = Vec/cons(1, Vec/cons(2, Vec/cons(3, Vec/nil())));
     let z = Vec/zip(v, Vec/replicate(3, "x"));
     Test/equal(
@@ -26,7 +26,7 @@ test zip_pairs_two_vectors_of_one_length_position_by_position =
         "1x2x3x");
 
 -- A vector compares as its list, and a nonempty index makes its first element and `rest` total.
-test a_vector_compares_as_its_list_and_a_nonempty_index_is_total =
+test a_vector_compares_as_its_list_and_a_nonempty_index_is_total =>
     let v: Vec(Nat, 2) = Vec/cons(1, Vec/cons(2, Vec/nil()));
     let w: Vec(Nat, 2) = Vec/cons(1, Vec/cons(3, Vec/nil()));
     Test/all([
@@ -38,6 +38,6 @@ test a_vector_compares_as_its_list_and_a_nonempty_index_is_total =
         Test/assert("vectors apart are unequal", v != w)]);
 
 -- The count is a bound, so a literal at the length its type states needs no proof of it.
-test a_literal_at_a_stated_length_needs_no_proof_of_its_count =
+test a_literal_at_a_stated_length_needs_no_proof_of_its_count =>
     let v: Vec(Nat, 3) = Vec { [1, 2, 3] };
     Test/all([Test/equal(Vec/length(v), 3), Test/equal(v.list, [1, 2, 3])]);

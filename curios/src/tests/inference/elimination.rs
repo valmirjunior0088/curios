@@ -8,13 +8,13 @@ use crate::test_support::*;
 fn a_recursion_matches_at_its_declared_result() {
     // The same recursion as `triangular_sum`: the match is checked at the declared result, `std/Nat`, and each arm at it.
     let source = r#"
-        let triangle(n : std/Nat) -> std/Nat =
+        let triangle(n : std/Nat) -> std/Nat =>
             match n
             | 0 => 0
             | pred + 1 => std/Nat/add(triangle(pred), pred)
             end;
         let result : std/Nat = triangle(5);
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let _ = /std/print(std/Nat/to_str(result))!;
             /std/Io/pure(());
         entry()
@@ -28,12 +28,12 @@ fn a_goal_over_a_compound_scrutinee_is_read_at_each_case() {
     // The goal `Vec(Nat, Nat/add(k, k))` writes the compound scrutinee, so each arm reads it with its case in the scrutinee's place: `Vec(Nat, 0)`, and `Vec(Nat, pred + 1)`.
     let source = r#"
         use /std/{Nat, Vec, Io};
-        let build(n : Nat) -> Vec(Nat, n) =
+        let build(n : Nat) -> Vec(Nat, n) =>
             match n
             | 0 => Vec/nil()
             | pred + 1 => Vec/cons(0, build(pred))
             end;
-        let d(k : Nat) -> Vec(Nat, Nat/add(k, k)) =
+        let d(k : Nat) -> Vec(Nat, Nat/add(k, k)) =>
             match Nat/add(k, k)
             | 0 => Vec/nil()
             | pred + 1 => build(Nat/succ(pred))
@@ -50,12 +50,12 @@ fn operator_scrutinee_refines_a_proof_carrying_arm() {
     let source = r#"
         use /std/{Nat, Option};
         use /std/Bool/{True, False};
-        let AtMost(a : Nat, hi : Nat) -> Prop =
+        let AtMost(a : Nat, hi : Nat) -> Prop =>
             match a <= hi
             | false => False
             | true => True
             end;
-        let certify(a : Nat, hi : Nat) -> Option(AtMost(a, hi)) =
+        let certify(a : Nat, hi : Nat) -> Option(AtMost(a, hi)) =>
             match a <= hi
             | false => Option/none()
             | true => Option/some(True/qed())
@@ -74,7 +74,7 @@ fn operator_scrutinee_refines_a_proof_carrying_arm() {
 fn a_guard_discharges_a_bound_spelled_one_reduction_away() {
     let source = r#"
         use /std/{Nat, List, Str, Io};
-        let take(l: List(Nat), n: Nat) -> List(Nat) =
+        let take(l: List(Nat), n: Nat) -> List(Nat) =>
             match n <= List/length(l) | true => List/slice(l, 0, n) | false => [] end;
         /std/print(Str/concat(Nat/to_str(List/length(take([1, 2, 3], 2))), "\n"))
         "#;

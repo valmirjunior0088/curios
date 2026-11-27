@@ -41,15 +41,15 @@ concept Painted(Canvas: Type): pub Type {
 }
 
 satisfy Painted(Colour) {
-    «paint»(shown) = shown,
+    «paint»(shown) => shown,
 }
 
-let twice(turn: (Colour) -> Colour, start: Colour) -> Colour =
+let twice(turn: (Colour) -> Colour, start: Colour) -> Colour =>
     turn(turn(start));
 
 let chosen: Colour = twice((given) => given, favourite);
 
-let depth(grown: Tree(Colour)) -> Colour =
+let depth(grown: Tree(Colour)) -> Colour =>
     match grown
     | «tip»() => chosen
     | «fork»(_, here, _) => Painted/paint(here)
@@ -59,16 +59,16 @@ let wrapped: Pairing(Colour) = Pairing { first = chosen, shade = /Shapes/favouri
 
 let stated: Pairing(Colour) = Pairing(Colour) { first = chosen, shade = favourite };
 
-let opened(held: Pairing(Colour)) -> Colour =
+let opened(held: Pairing(Colour)) -> Colour =>
     let Pairing { first = inner, shade = _ } = held;
     inner;
 
-let again(count: Colour) -> Colour = again(count);
+let again(count: Colour) -> Colour => again(count);
 
-let even_step(count: Colour) -> Colour = odd_step(count)
-and odd_step(count: Colour) -> Colour = even_step(count);
+let even_step(count: Colour) -> Colour => odd_step(count)
+and odd_step(count: Colour) -> Colour => even_step(count);
 
-test stays_painted = depth(Tree/tip());
+test stays_painted => depth(Tree/tip());
 
 depth(Tree/fork(Tree/tip(), wrapped.shade, Tree/tip()))
 "#;
@@ -241,7 +241,7 @@ fn a_declaration_kept_from_an_earlier_text_answers_where_it_now_stands() {
 /// The term a program closes with writes three, each placed where it is written, a term before the ones it holds: the application, the name it applies and the literal it applies it to.
 #[test]
 fn a_texts_terms_are_each_place_it_writes_one() {
-    const WRITTEN: &str = "let pick(given: Type) -> Type = given;\npick(7)\n";
+    const WRITTEN: &str = "let pick(given: Type) -> Type => given;\npick(7)\n";
     let entrypoint = WRITTEN.parse::<Entrypoint>().unwrap();
     let loader = fixture_loader();
     let (unit, entry) = into_core_entry(

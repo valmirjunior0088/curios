@@ -133,7 +133,7 @@ fn an_import_used_only_in_a_type_annotation_is_used() {
             pub let T : Type = Type;
         end
         use /Foo/{T};
-        let f(x : T) -> Type = x;
+        let f(x : T) -> Type => x;
         f
     "#
         ),

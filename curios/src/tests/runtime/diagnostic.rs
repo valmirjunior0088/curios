@@ -6,7 +6,7 @@ use {crate::test_support::*, curios_common::fill};
 fn uses_source_binder_names() {
     let source = r#"
         use /std/{Nat};
-        let f(n : Nat) -> Nat = n;
+        let f(n : Nat) -> Nat => n;
         let bad : Nat = f;
         bad
         "#;
@@ -24,7 +24,7 @@ fn uses_source_binder_names() {
 fn disambiguates_shadowed_binders() {
     let source = r#"
         use /std/{Nat};
-        let f(n : Nat) -> ((n : Nat) -> Nat) = (k : Nat) => n;
+        let f(n : Nat) -> ((n : Nat) -> Nat) => (k : Nat) => n;
         let bad : Nat = f;
         bad
         "#;
@@ -42,7 +42,7 @@ fn disambiguates_shadowed_binders() {
 fn shortens_global_names() {
     let source = r#"
         use /std/{Nat, Vec};
-        let bad(n : Nat, v : Vec(Nat, n)) -> Nat = v;
+        let bad(n : Nat, v : Vec(Nat, n)) -> Nat => v;
         bad
         "#;
 
@@ -66,7 +66,7 @@ fn shortens_global_names() {
 fn collapses_witness_dispatch_in_index() {
     let source = r#"
         use /std/{Nat, Vec};
-        let bad(@n : Nat) -> Vec(Nat, n) = Vec/cons(0, Vec/nil());
+        let bad(@n : Nat) -> Vec(Nat, n) => Vec/cons(0, Vec/nil());
         bad
         "#;
 
@@ -86,7 +86,7 @@ fn collapses_witness_dispatch_in_index() {
 fn spells_index_arithmetic_infix() {
     let source = r#"
         use /std/{Nat, Vec};
-        let bad(@n : Nat, @m : Nat, v : Vec(Nat, n), w : Vec(Nat, m)) -> Vec(Nat, n) =
+        let bad(@n : Nat, @m : Nat, v : Vec(Nat, n), w : Vec(Nat, m)) -> Vec(Nat, n) =>
             Vec/cons(0, Vec/append(v, w));
         bad
         "#;
@@ -103,7 +103,7 @@ fn spells_index_arithmetic_infix() {
 fn parenthesizes_a_reduced_successor_operand() {
     let source = r#"
         use /std/{Nat, Eq};
-        let claim(n: Nat, k: Nat) -> Eq()(n - (k + 1), 0) = Eq/refl();
+        let claim(n: Nat, k: Nat) -> Eq()(n - (k + 1), 0) => Eq/refl();
         claim
         "#;
 
@@ -123,8 +123,8 @@ fn parenthesizes_a_reduced_successor_operand() {
 fn keeps_the_name_of_a_stalled_unfolding() {
     let source = r#"
         use /std/{Nat, Eq};
-        let double(n: Nat) -> Nat = match n | 0 => 0 | p + 1 => double(p) + 2 end;
-        let claim(n: Nat) -> Eq()(double(n), n * 2) = Eq/refl();
+        let double(n: Nat) -> Nat => match n | 0 => 0 | p + 1 => double(p) + 2 end;
+        let claim(n: Nat) -> Eq()(double(n), n * 2) => Eq/refl();
         claim
         "#;
 
@@ -148,7 +148,7 @@ fn keeps_the_name_of_a_stalled_unfolding() {
 fn keeps_the_call_of_a_method_whose_unfolding_stalls() {
     let source = r#"
         use /std/{Nat, Eq, Ordering}; use /std/ops/{Ord};
-        let claim(a: Nat, b: Nat) -> Eq()(Ord/ord(a, b), Ordering/eq()) = Eq/refl();
+        let claim(a: Nat, b: Nat) -> Eq()(Ord/ord(a, b), Ordering/eq()) => Eq/refl();
         claim
         "#;
 
@@ -176,7 +176,7 @@ fn names_a_family_in_a_report_raised_on_a_reduct() {
             induct Holder(F: (Nat) -> Type): pub Type
             | hold(x: F(0))
             end
-            let Wrap(F: (Nat) -> Type) -> Type = (F(0)) -> Nat;
+            let Wrap(F: (Nat) -> Type) -> Type => (F(0)) -> Nat;
             pub let held: Holder(Sized(Nat)) = Holder/hold(Sized/empty());
             pub let wrapped: Wrap(Sized(Nat)) = (_s) => 0;
             ${declaration}

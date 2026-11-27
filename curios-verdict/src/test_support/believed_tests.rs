@@ -55,7 +55,7 @@ pub struct Box(A: Sort): pub Type {
     a: A,
 }
 
-pub let loop(@A: Sort, n: Nat) -> Box(A) = loop(n);
+pub let loop(@A: Sort, n: Nat) -> Box(A) => loop(n);
 ";
 
 /// A proof position reaching `/lib/loop` at `Prop`, at `False`.
@@ -916,17 +916,17 @@ pub induct N: pub Type
 | s(p: N)
 end
 
-pub let depth(n: N) -> Nat =
+pub let depth(n: N) -> Nat =>
     match n
     | z() => 0
     | s(p) => depth(p) + 1
     end;
 
-pub let no_fix_nat(n: Nat, e: Eq()(n, n + 1)) -> False =
+pub let no_fix_nat(n: Nat, e: Eq()(n, n + 1)) -> False =>
     let h: Holds(n + 1 < n + 1) = Eq/subst((m: Nat) => Holds(m < n + 1), e, proved());
     proved(@False);
 
-pub let no_fix(n: N, e: Eq()(n, N/s(n))) -> False =
+pub let no_fix(n: N, e: Eq()(n, N/s(n))) -> False =>
     no_fix_nat(depth(n), Eq/cong(depth, e));
 ";
 
@@ -938,7 +938,7 @@ fn applying(below: bool) -> &'static str {
 use /std/{Nat};
 use /base/{N};
 
-pub let apply(x: Nat, k: (Nat) -> N) -> N =
+pub let apply(x: Nat, k: (Nat) -> N) -> N =>
     match x
     | 0 => N/z()
     | n + 1 => match apply(n, k) | z() => k(n) | s(_) => k(n) end
@@ -950,7 +950,7 @@ pub let apply(x: Nat, k: (Nat) -> N) -> N =
 use /std/{Nat};
 use /base/{N};
 
-pub let apply(x: Nat, k: (Nat) -> N) -> N =
+pub let apply(x: Nat, k: (Nat) -> N) -> N =>
     match x
     | 0 => k(0)
     | n + 1 => apply(n, k)
@@ -966,7 +966,7 @@ use /std/{Nat};
 use /base/{N};
 use /lib/{apply};
 
-pub let loop(x: Nat) -> N =
+pub let loop(x: Nat) -> N =>
     apply(x, (y) => N/s(loop(y)));
 ";
 
@@ -1039,7 +1039,7 @@ fn applying_field(below: bool) -> &'static str {
 use /std/{Nat};
 use /base/{N};
 
-pub let apply(x: Nat, k: {(Nat) -> N}) -> N =
+pub let apply(x: Nat, k: {(Nat) -> N}) -> N =>
     match x
     | 0 => N/z()
     | n + 1 => match apply(n, k) | z() => k.0(n) | s(_) => k.0(n) end
@@ -1051,7 +1051,7 @@ pub let apply(x: Nat, k: {(Nat) -> N}) -> N =
 use /std/{Nat};
 use /base/{N};
 
-pub let apply(x: Nat, k: {(Nat) -> N}) -> N =
+pub let apply(x: Nat, k: {(Nat) -> N}) -> N =>
     match x
     | 0 => k.0(0)
     | n + 1 => apply(n, k)
@@ -1067,7 +1067,7 @@ use /std/{Nat};
 use /base/{N};
 use /lib/{apply};
 
-pub let loop(x: Nat) -> N =
+pub let loop(x: Nat) -> N =>
     apply(x, ((y) => N/s(loop(y)),));
 ";
 
@@ -1120,16 +1120,16 @@ fn forwarding(identity: bool) -> String {
         "\
 use /base/{N};
 
-pub let fwd(n: N) -> N =
+pub let fwd(n: N) -> N =>
     ${body};
 
-pub let apply(x: N, k: (N) -> N) -> N =
+pub let apply(x: N, k: (N) -> N) -> N =>
     match x
     | z() => N/z()
     | s(p) => match apply(p, k) | z() => k(fwd(p)) | s(_) => k(fwd(p)) end
     end;
 
-pub let loop(x: N) -> N =
+pub let loop(x: N) -> N =>
     apply(x, (y) => N/s(loop(y)));
 ",
         body,
@@ -1176,7 +1176,7 @@ pub concept Down(T: Type): pub Type {
 }
 
 satisfy Down(N) {
-    down(n) = ${body},
+    down(n) => ${body},
 }
 ",
         carrier = SUCCESSOR,
@@ -1193,7 +1193,7 @@ fn iterating(edited: bool) -> String {
 
     fill!(
         "${carrier}
-pub let each(x: N, k: (N) -> N) -> N =
+pub let each(x: N, k: (N) -> N) -> N =>
     match x
     | z() => N/z()
     | s(p) => match each(p, k) | z() => k(${at}) | s(_) => k(${at}) end
@@ -1208,7 +1208,7 @@ pub let each(x: N, k: (N) -> N) -> N =
 const APPLYING_THROUGH_A_WITNESS: &str = "\
 use /base/{N, Down};
 
-pub let apply(x: N, k: (N) -> N) -> N =
+pub let apply(x: N, k: (N) -> N) -> N =>
     match x
     | z() => N/z()
     | s(p) => match apply(p, k) | z() => k(Down/down(p)) | s(_) => k(Down/down(p)) end
@@ -1219,7 +1219,7 @@ pub let apply(x: N, k: (N) -> N) -> N =
 const APPLYING_THROUGH_EACH: &str = "\
 use /base/{N, each};
 
-pub let apply(x: N, k: (N) -> N) -> N =
+pub let apply(x: N, k: (N) -> N) -> N =>
     match x
     | z() => N/z()
     | s(p) => match apply(p, k) | z() => each(x, (y) => k(y)) | s(_) => each(x, (y) => k(y)) end
@@ -1231,7 +1231,7 @@ const LOOPING_THROUGH_APPLY_AT_N: &str = "\
 use /base/{N};
 use /lib/{apply};
 
-pub let loop(x: N) -> N =
+pub let loop(x: N) -> N =>
     apply(x, (y) => N/s(loop(y)));
 ";
 

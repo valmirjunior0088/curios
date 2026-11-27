@@ -12,46 +12,46 @@ pub let empty: Field =
     Field { text = "", cursor = Str/At/start("") };
 
 --- `s` with the cursor at its end.
-pub let of_str(s: Str) -> Field =
+pub let of_str(s: Str) -> Field =>
     Field { text = s, cursor = Str/At/finish(s) };
 
 -- `left` and `right` joined, with the cursor between them.
-let joined(left: Str, right: Str) -> Field =
+let joined(left: Str, right: Str) -> Field =>
     Field {
         text = Str/concat(left, right),
         cursor = Str/At/of_left(left, right, Str/At/finish(left)) };
 
 --- `s` put in at the cursor, the cursor after it: what a typed character and a paste are.
-pub let insert(i: Field, s: Str) -> Field =
+pub let insert(i: Field, s: Str) -> Field =>
     joined(Str/concat(Str/before(i.text, i.cursor), s), Str/after(i.text, i.cursor));
 
 -- The field with its cursor at `at`.
-let moved(i: Field, at: Str/At(i.text)) -> Field =
+let moved(i: Field, at: Str/At(i.text)) -> Field =>
     Field { text = i.text, cursor = at };
 
 -- Where the cluster before `at` begins, or `at` where none is before it.
-let back(s: Str, at: Str/At(s)) -> Str/At(s) =
+let back(s: Str, at: Str/At(s)) -> Str/At(s) =>
     match Str/At/try_prev_grapheme(s, at)
     | some(b) => b.past
     | none() => at
     end;
 
 -- Where the cluster at `at` ends, or `at` where none begins there.
-let forth(s: Str, at: Str/At(s)) -> Str/At(s) =
+let forth(s: Str, at: Str/At(s)) -> Str/At(s) =>
     match Str/At/try_next_grapheme(s, at)
     | some(f) => f.past
     | none() => at
     end;
 
 -- Whether the cluster that begins at `at` is a space between words.
-let spaced(s: Str, at: Str/At(s)) -> Bool =
+let spaced(s: Str, at: Str/At(s)) -> Bool =>
     match Str/At/try_next(s, at)
     | some(n) => Char/is_whitespace(n.char)
     | none() => false
     end;
 
 -- Where the word before `at` begins: back over the spaces before it, then over the word.
-let word_back(s: Str, at: Str/At(s)) -> Str/At(s) =
+let word_back(s: Str, at: Str/At(s)) -> Str/At(s) =>
     Str/At/backward(
         (_) => (Bool) -> Str/At(s),
         (here, again) =>
@@ -69,7 +69,7 @@ let word_back(s: Str, at: Str/At(s)) -> Str/At(s) =
         false);
 
 -- Where the word at or after `at` ends: on over the spaces before it, then over the word.
-let word_forth(s: Str, at: Str/At(s)) -> Str/At(s) =
+let word_forth(s: Str, at: Str/At(s)) -> Str/At(s) =>
     Str/At/forward(
         (_) => (Bool) -> Str/At(s),
         (here, again) =>
@@ -87,7 +87,7 @@ let word_forth(s: Str, at: Str/At(s)) -> Str/At(s) =
         false);
 
 -- What a key with Ctrl does, as readline has it: A and E to either end, B and F a cluster back and on, K and U the text cut to either end, and W the word before the cursor cut.
-let controlled(i: Field, c: Char) -> Field =
+let controlled(i: Field, c: Char) -> Field =>
     match c
     | 'a' => moved(i, Str/At/start(i.text))
     | 'e' => moved(i, Str/At/finish(i.text))
@@ -100,7 +100,7 @@ let controlled(i: Field, c: Char) -> Field =
     end;
 
 -- What a key with Alt does, as readline has it: B and F a word back and on.
-let alternate(i: Field, c: Char) -> Field =
+let alternate(i: Field, c: Char) -> Field =>
     match c
     | 'b' => moved(i, word_back(i.text, i.cursor))
     | 'f' => moved(i, word_forth(i.text, i.cursor))
@@ -108,7 +108,7 @@ let alternate(i: Field, c: Char) -> Field =
     end;
 
 --- What `k` does to the field: a character put in, a cluster cut before or after the cursor, the cursor moved a cluster or to either end, and the keys readline gives Ctrl and Alt. A key with Super, and any other, leaves the field.
-pub let handle(i: Field, k: Key) -> Field =
+pub let handle(i: Field, k: Key) -> Field =>
     match
     | k.super => i
     | k.ctrl => match k.code | char(c) => controlled(i, c) | _ => i end
@@ -129,11 +129,11 @@ pub let handle(i: Field, k: Key) -> Field =
     end;
 
 -- How many columns `s` takes, as a view shows it.
-let columns(s: Str) -> Nat =
+let columns(s: Str) -> Nat =>
     Line/width(Line/of_str(s));
 
 --- The leftmost position of `s` a view of `room` columns may start at and still hold everything from there to `at`: walking back from `at`, a cluster joins the view while the view has room for it.
-let scrolled(s: Str, at: Str/At(s), room: Nat) -> Str/At(s) =
+let scrolled(s: Str, at: Str/At(s), room: Nat) -> Str/At(s) =>
     Str/At/backward(
         (_) => (Nat) -> Str/At(s),
         (here, again) =>
@@ -151,7 +151,7 @@ let scrolled(s: Str, at: Str/At(s), room: Nat) -> Str/At(s) =
         0);
 
 --- The text in `style` on the first row, scrolled so the cursor is in view, and the terminal's cursor asked for where the field's stands.
-pub let view(i: Field, style: Style) -> Pane =
+pub let view(i: Field, style: Style) -> Pane =>
     (w, h) =>
         let first = scrolled(i.text, i.cursor, w - 1);
         let x = columns(Str/before(i.text, i.cursor)) - columns(Str/before(i.text, first));

@@ -21,8 +21,8 @@ fn a_body_carried_level_is_minimized_rather_than_generalized() {
         | any(@A: Type, a: A)
         end
         let carrier : Box = Box/wrap(Type);
-        let holder(@A : Type) -> Box = Box/wrap(A);
-        let lifted(S : Type) -> Any = Any/any(S);
+        let holder(@A : Type) -> Box => Box/wrap(A);
+        let lifted(S : Type) -> Any => Any/any(S);
         /std/print("both")
         "#;
 
@@ -61,7 +61,7 @@ fn a_family_takes_no_level_its_instances_cannot_differ_in() {
         pub induct Tree: pub Type | leaf(Str) | node(List(Tree)) end
         pub induct Wrap(A: Type): pub Type | wrap(a: A, rest: List(Wrap(A))) end
         pub struct Kept: pub Type { A: Type }
-        pub let leaves(t: Tree) -> List(Tree) = [t];
+        pub let leaves(t: Tree) -> List(Tree) => [t];
         /std/print("sorted")
         "#;
 
@@ -83,10 +83,10 @@ fn a_field_read_through_a_definition_holds_what_its_value_holds() {
         struct Config: Type { t: Type }
         let small: Config = Config { t = Nat };
         let large: Config = Config { t = Type };
-        let through_small(x: small.t) -> Nat = 0;
-        let through_large(x: large.t) -> Nat = 0;
-        let one(n: Nat) -> Eq()(n / 256, n / 256) = Eq/refl();
-        let two(n: Nat, m: Nat) -> Eq()(n / 256 + m / 16, n / 256 + m / 16) = Eq/refl();
+        let through_small(x: small.t) -> Nat => 0;
+        let through_large(x: large.t) -> Nat => 0;
+        let one(n: Nat) -> Eq()(n / 256, n / 256) => Eq/refl();
+        let two(n: Nat, m: Nat) -> Eq()(n / 256 + m / 16, n / 256 + m / 16) => Eq/refl();
         /std/print("read")
         "#;
 
@@ -114,11 +114,11 @@ fn a_definition_that_forwards_a_field_holds_what_the_field_holds() {
         use /std/{Nat};
         struct Config: Type { t: Type }
         let small: Config = Config { t = Nat };
-        let get(c: Config) -> Type = c.t;
-        let through_get(x: get(small)) -> Nat = 0;
+        let get(c: Config) -> Type => c.t;
+        let through_get(x: get(small)) -> Nat => 0;
         concept Sized(T: Type): Type { Carrier: Type }
         satisfy Sized(Nat) { Carrier = Nat }
-        let named(x: Sized/Carrier(@Nat)) -> Nat = 0;
+        let named(x: Sized/Carrier(@Nat)) -> Nat => 0;
         /std/print("read")
         "#;
 
@@ -176,7 +176,7 @@ fn a_witness_leaves_its_method_levels_to_its_callers() {
         | box(A)
         end
         satisfy Mon((A: Type) => Box(A)) {
-            ret(@_, a) = Box/box(a),
+            ret(@_, a) => Box/box(a),
         }
         let small: Box(Nat) = Mon/ret(3);
         let large: Box(Type) = Mon/ret(Nat);
@@ -195,8 +195,8 @@ fn an_occurrence_level_settles_at_its_argument_rather_than_generalizing() {
         | leaf(Nat)
         | node(List(Tree))
         end
-        let pair_of(x: List(Nat)) -> Io({List(Nat), List(Nat)}) = Io/pure((x, x));
-        let keep(@A: Type, x: List(A)) -> List(A) = x;
+        let pair_of(x: List(Nat)) -> Io({List(Nat), List(Nat)}) => Io/pure((x, x));
+        let keep(@A: Type, x: List(A)) -> List(A) => x;
         /std/print("settled")
         "#;
 
@@ -223,14 +223,14 @@ fn an_occurrence_level_settles_at_its_argument_rather_than_generalizing() {
 #[test]
 fn a_declarations_levels_do_not_follow_where_its_witnesses_are_written() {
     let through_bang = (
-        "let rewrap(@A: Type, b: Box(A)) -> Box(A) = let a = b!; Box { value = a };",
-        "satisfy Monad(Box) { pure(@_, a) = Box { value = a }, bind(@_, @_, m, f) = f(m.value) }",
+        "let rewrap(@A: Type, b: Box(A)) -> Box(A) => let a = b!; Box { value = a };",
+        "satisfy Monad(Box) { pure(@_, a) => Box { value = a }, bind(@_, @_, m, f) => f(m.value) }",
         "let big: Box(Type) = rewrap(Box { value = Nat });",
         "/rewrap",
     );
     let through_a_premise = (
-        "let same(@A: Type, b: Box(A)) -> Bytes = Hash/of(b);",
-        "satisfy (@A: Type) => Hash(Box(A)) { hash(_) = 0x[], }",
+        "let same(@A: Type, b: Box(A)) -> Bytes => Hash/of(b);",
+        "satisfy (@A: Type) -> Hash(Box(A)) { hash(_) => 0x[], }",
         "let big: Bytes = same(Box { value = Nat });",
         "/same",
     );
@@ -272,18 +272,18 @@ fn a_rec_result_sort_level_is_minimized_like_a_let_s() {
     let source = r#"
         use /std/{Nat, Eq};
         induct N : pub Type | z() | s(N) end
-        let f(n: N) -> Type = N;
-        let g(n: N) -> Type =
+        let f(n: N) -> Type => N;
+        let g(n: N) -> Type =>
             match n
             | z() => N
             | s(m) => g(m)
             end;
-        let count(n: N) -> Nat =
+        let count(n: N) -> Nat =>
             match n
             | z() => 0
             | s(m) => count(m) + 1
             end;
-        let count_self(n: N) -> Eq()(count(n), count(n)) =
+        let count_self(n: N) -> Eq()(count(n), count(n)) =>
             match n
             | z() => Eq/refl()
             | s(m) => Eq/refl()
@@ -316,18 +316,18 @@ fn a_level_a_signature_holds_stays_its_callers_through_a_bound_from_the_body() {
     let source = r#"
         use /std/{Str, List, Result};
         pub struct Value: pub Type { A: Type, read: (Str) -> Result(Str, A) }
-        let all(v: Value, xs: List(Str)) -> Result(Str, List(v.A)) =
-            let read_with(w: Value, s: Str) -> Result(Str, w.A) =
+        let all(v: Value, xs: List(Str)) -> Result(Str, List(v.A)) =>
+            let read_with(w: Value, s: Str) -> Result(Str, w.A) =>
                 Result/map_failure(w.read(s), (reason) => Str/concat("bad: ", reason));
             List/traverse(xs, (s) => read_with(v, s));
-        let one(v: Value, xs: List(Str)) -> Result(Str, List(v.A)) =
-            let read_with(w: Value, s: Str) -> Result(Str, w.A) =
+        let one(v: Value, xs: List(Str)) -> Result(Str, List(v.A)) =>
+            let read_with(w: Value, s: Str) -> Result(Str, w.A) =>
                 Result/map_failure(w.read(s), (reason) => Str/concat("bad: ", reason));
             match xs
             | [] => Result/success([])
             | [s, .._] => Result/map(read_with(v, s), (a) => [a])
             end;
-        let plain(v: Value, xs: List(Str)) -> Result(Str, List(v.A)) =
+        let plain(v: Value, xs: List(Str)) -> Result(Str, List(v.A)) =>
             List/traverse(xs, (s) => v.read(s));
         /std/print("settled")
         "#;
@@ -347,11 +347,11 @@ fn a_type_valued_definitions_body_level_is_its_callers() {
             r#"
             use /std/{Str, Nat, List, Result};
             pub struct Value: pub Type { A: Type, read: (Str) -> Result(Str, A) }
-            pub let Holder(v: Value) -> Type = {held: Value, tag: Nat};
-            pub let hold(v: Value) -> Holder(v) = (held = v, tag = 0);
+            pub let Holder(v: Value) -> Type => {held: Value, tag: Nat};
+            pub let hold(v: Value) -> Holder(v) => (held = v, tag = 0);
             pub let Types: Type = List(Type);
-            pub let Tower(n: Nat) -> Type = match n | 0 => Value | k + 1 => {head: Value, rest: Tower(k)} end;
-            pub let top(v: Value) -> Tower(0) = v;
+            pub let Tower(n: Nat) -> Type => match n | 0 => Value | k + 1 => {head: Value, rest: Tower(k)} end;
+            pub let top(v: Value) -> Tower(0) => v;
             ${use_}
             /std/print("held")
             "#,
@@ -423,9 +423,9 @@ fn a_weak_equation_decides_no_level_a_signature_holds() {
         | one(v: Value)
         | two(v: Value)
         end
-        let Carrier(k: Kind) -> Type = match k | one(v) => v.A | two(v) => v.A end;
-        let read_hoisted(v: Value, s: Str) -> Result(Str, v.A) = v.read(s);
-        pub let both(k: Kind, s: Str) -> Result(Str, Carrier(k)) =
+        let Carrier(k: Kind) -> Type => match k | one(v) => v.A | two(v) => v.A end;
+        let read_hoisted(v: Value, s: Str) -> Result(Str, v.A) => v.read(s);
+        pub let both(k: Kind, s: Str) -> Result(Str, Carrier(k)) =>
             match k
             | one(v) => read_hoisted(v, s)
             | two(v) => read_hoisted(v, s)
@@ -438,7 +438,7 @@ fn a_weak_equation_decides_no_level_a_signature_holds() {
     let region = r#"
         use /std/{Nat, State};
         let tick: State(Nat, {}) = State/update((n) => n + 1);
-        pub let counted(@A: Type, a: A) -> State(Nat, A) =
+        pub let counted(@A: Type, a: A) -> State(Nat, A) =>
             let _ = tick!;
             State/pure(a);
         pub let at_type: State(Nat, Type) = counted(Nat);
@@ -458,15 +458,15 @@ fn a_level_nothing_holds_settles_at_its_least_value() {
             pull(s: S) -> M(Nat),
         }
         satisfy Source(Io, Nat) {
-            pull(n) = Io/pure(n),
+            pull(n) => Io/pure(n),
         }
-        pub let drained(@M: (Type) -> Type, @S: Type, use Monad(M), use Source(M, S), s: S) -> M(Nat) =
+        pub let drained(@M: (Type) -> Type, @S: Type, use Monad(M), use Source(M, S), s: S) -> M(Nat) =>
             Source/pull(s);
-        pub let large() -> Io(Type) =
+        pub let large() -> Io(Type) =>
             let _n = drained(3)!;
             Io/pure(Nat);
-        pub let parameters(n: Nat) -> Option({nums: List(Nat), final: Nat}) =
-            let go(j: Nat) -> Option({nums: List(Nat), final: Nat}) =
+        pub let parameters(n: Nat) -> Option({nums: List(Nat), final: Nat}) =>
+            let go(j: Nat) -> Option({nums: List(Nat), final: Nat}) =>
                 match j
                 | 0 => Option/none()
                 | m + 1 => go(m)
@@ -487,7 +487,7 @@ fn a_level_nothing_holds_settles_at_its_least_value() {
 fn a_declaration_under_a_key_and_an_order_over_one_carrier_is_judged_alike() {
     let source = r#"
         use /std/{Nat, List, Map, Hash}; use /std/ops/{Ord};
-        pub let both(@K: Type, use Hash/Key(K), use Ord(K), keys: List(K)) -> List(K) =
+        pub let both(@K: Type, use Hash/Key(K), use Ord(K), keys: List(K)) -> List(K) =>
             let m: Map(K, Nat) = Map/of_list(List/map(keys, (k: K) => (k, 0)));
             List/sort(Map/keys(m));
         /std/print("both")

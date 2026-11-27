@@ -23,7 +23,7 @@ fn a_goal_batch_classifies_as_incomplete_and_a_hard_error_as_failure() {
 fn solved_goal_reports_its_solution() {
     // `id ? 5`: the type argument `?` is solved to `Nat` from the value `5` (`id ? x`) — but a written goal never compiles: the module still elaborates fully, then zonk reports what it determined.
     let source = r#"
-        let id(A : Type, a : A) -> A = a;
+        let id(A : Type, a : A) -> A => a;
         let subject : /std/Nat = id(?, 5);
         /std/Io/pure(())
     "#;
@@ -68,7 +68,7 @@ fn pinned_through_the_expected_type_reports_the_pin() {
     // `id ? true` checked against `/std/Bool`: the turnaround pins the type argument `?` to `Bool` through the expected type (a type-level pin), and the goal report names that solution.
     let source = r#"
         use /std/{Bool};
-        let id(A : Type, a : A) -> A = a;
+        let id(A : Type, a : A) -> A => a;
         let subject : /std/Bool = id(?, true);
         /std/Io/pure(())
     "#;
@@ -107,7 +107,7 @@ fn report_includes_the_local_scope() {
     // The goal sits under `x`'s binder, so the Γ frozen at its birth — just that binder — appears in the report.
     let source = r#"
         use /std/{Nat};
-        let f(x : Nat) -> Nat = ?;
+        let f(x : Nat) -> Nat => ?;
         let subject : /std/Nat = f(1);
         /std/Io/pure(())
     "#;
@@ -186,7 +186,7 @@ fn solved_and_unsolved_goals_share_one_batch() {
     // An unconstrained goal and a solved one: the batch keeps each entry's own verdict — no solution line for the first, `? = Nat` for the second.
     let source = r#"
         use /std/{Nat};
-        let id(A : Type, a : A) -> A = a;
+        let id(A : Type, a : A) -> A => a;
         let m : Nat = ?;
         let subject : /std/Nat = id(?, 5);
         /std/Io/pure(())
@@ -212,8 +212,8 @@ fn each_goal_in_a_batch_names_its_binders_as_written() {
     // Two items each bind `n`. The rename map is per report, so both goals say `n`; a batch-wide map would suffix the second `n2` — a collision with a binder from a goal this one cannot see.
     let source = r#"
         use /std/{Nat};
-        let first(n : Nat) -> Nat = ?;
-        let second(n : Nat) -> Nat = ?;
+        let first(n : Nat) -> Nat => ?;
+        let second(n : Nat) -> Nat => ?;
         /std/print("")
     "#;
 
@@ -248,8 +248,8 @@ fn a_hole_where_a_congruences_function_belongs_reports_as_a_goal_with_its_obliga
     // Pasting the refinement above: `?f(double(p))` against `double(p) + 2` is a metavariable-headed application against a value, which has no imitation to try but no refutation either — a constant solution could exist. A survivor held up by written goals alone is the goals' own report — neither a hard `type mismatch` telling the author the program is wrong nor a postponed-conversion error: the batch names the hole, its type, and — as `? such that` lines — the conversions it has to make true, which is what tells the author `f` sends `double(p)` to `double(p) + 2`. A program with a goal in it never compiles, so the surrendered conversion is never unchecked; the classification is incomplete, not failure.
     let source = r#"
         use /std/{Nat, Eq};
-        let double(n : Nat) -> Nat = match n | 0 => 0 | p + 1 => double(p) + 2 end;
-        let double_correct(n : Nat) -> Eq()(double(n), n * 2) =
+        let double(n : Nat) -> Nat => match n | 0 => 0 | p + 1 => double(p) + 2 end;
+        let double_correct(n : Nat) -> Eq()(double(n), n * 2) =>
             match n
             | 0 => Eq/refl()
             | p + 1 => Eq/cong(?, double_correct(p))

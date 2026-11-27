@@ -5,7 +5,7 @@ use {crate::parse::test_support::*, crate::*};
 /// A `---` block attaches to the declaration below it, line by line, with a bare `---` as a paragraph break; blank lines and plain comments between the block and the declaration are insignificant, and the plain comment stays a comment.
 #[test]
 fn a_documentation_comment_attaches_to_the_declaration_below_it() {
-    let source = "--- Doubles.\n---\n--- Twice, that is.\n\n-- plain\npub let double(n: Nat) -> Nat = n + n;";
+    let source = "--- Doubles.\n---\n--- Twice, that is.\n\n-- plain\npub let double(n: Nat) -> Nat => n + n;";
     let module = source.parse::<Module>().unwrap();
     let TopItem::Let(members) = &module.items[0] else {
         panic!("expected a let item");
@@ -113,7 +113,7 @@ fn a_documentation_comment_before_use_or_test_is_refused() {
         .format();
     assert!(error.contains("cannot precede `use`"), "{error}");
 
-    let error = "--- lost\ntest t = Test/assert(true);"
+    let error = "--- lost\ntest t => Test/assert(true);"
         .parse::<Module>()
         .unwrap_err()
         .format();

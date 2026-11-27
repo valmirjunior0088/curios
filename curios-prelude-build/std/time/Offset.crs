@@ -38,22 +38,22 @@ pub let utc: Offset =
     Offset/known(+0);
 
 --- The offset `seconds` east of UTC, decided: `none` for a day or more.
-pub let try_of_seconds(seconds: Int) -> Option(Offset) =
+pub let try_of_seconds(seconds: Int) -> Option(Offset) =>
     match Bool/holds(Int/abs(seconds) <= 86399)
     | some(ok) => Option/some(Offset/known(seconds, @ok))
     | none() => Option/none()
     end;
 
 --- How far ahead of UTC a time stated at `o` is: none for `unknown()`, which states its time in UTC.
-pub let ahead(o: Offset) -> Int =
+pub let ahead(o: Offset) -> Int =>
     match o | unknown() => +0 | known(seconds) => seconds end;
 
 --- The offset as ISO 8601 writes it: `Z` where the local offset is unknown, `+05:30` otherwise, and `+05:30:15` past ISO 8601, as java.time writes one with seconds.
-pub let to_str(o: Offset) -> Str =
+pub let to_str(o: Offset) -> Str =>
     iso8601/write_offset(o);
 
 --- The Offset ISO 8601's extended format writes as `s`, or `none` for text that writes none.
-pub let of_str(s: Str) -> Option(Offset) =
+pub let of_str(s: Str) -> Option(Offset) =>
     iso8601/whole(iso8601/offset(), s);
 
 satisfy Show(Offset) {

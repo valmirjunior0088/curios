@@ -3,11 +3,11 @@ use /std/Flt/{Rounding, exact};
 use /std/Flt/internal/{Dyadic};
 use /std/Bool/{Holds};
 
-pub let pow2(k: Nat) -> Nat =
+pub let pow2(k: Nat) -> Nat =>
     Nat/shl(1, k);
 
 --- The quotient and remainder of `r` by a positive `s`.
-pub let div_mod(r: Nat, s: Nat, @positive: Holds(0 < s)) -> {Nat, Nat} =
+pub let div_mod(r: Nat, s: Nat, @positive: Holds(0 < s)) -> {Nat, Nat} =>
     (r / s, r % s);
 
 -- A scale and the decimal exponent it stands at, the scale positive.
@@ -16,7 +16,7 @@ pub let Scaled: Type =
 
 -- A positive scale grows under each ten, so every step leaves less of `rpm` above it, and the walk descends on what is left: it is what lets `to_str` stand in a type with no count beside it.
 --- `s` raised by tens until `rpm` is no longer above it, and `k` by one each time.
-pub let scale_up(rpm: Nat, s: Nat, k: Int, @positive: Holds(0 < s)) -> Scaled =
+pub let scale_up(rpm: Nat, s: Nat, k: Int, @positive: Holds(0 < s)) -> Scaled =>
     Nat/descend(
         (gap: Nat) => gap,
         (gap: Nat) =>
@@ -45,7 +45,7 @@ pub let scale_down(
     k: Int,
     @above: Holds(0 < mp),
     @below: Holds(0 < mm),
-) -> Lowered =
+) -> Lowered =>
     Nat/descend(
         (gap: Nat) => gap,
         (gap: Nat) =>
@@ -70,7 +70,7 @@ pub let scale_down(
         k);
 
 -- The digit that ends a spelling: `d`, or the one above it. Where the interval admits one of the two, that one; where it admits both, the nearer to the remainder `rem` of `s`, a tie going up.
-pub let closing(d: Nat, rem: Nat, s: Nat, low: Bool, high: Bool) -> Nat =
+pub let closing(d: Nat, rem: Nat, s: Nat, low: Bool, high: Bool) -> Nat =>
     match
     | Bool/not(low) => d + 1
     | Bool/not(high) => d
@@ -88,7 +88,7 @@ pub let generate(
     even: Bool,
     @scale: Holds(0 < s),
     @below: Holds(0 < mm),
-) -> List(Nat) =
+) -> List(Nat) =>
     Nat/descend(
         (gap: Nat) => gap,
         (gap: Nat) =>
@@ -119,11 +119,11 @@ pub let generate(
         mp,
         mm);
 
-pub let digits_to_str(ds: List(Nat)) -> Str =
+pub let digits_to_str(ds: List(Nat)) -> Str =>
     List/fold(ds, "", (d, acc) => Str/concat(acc, Nat/to_str(d)));
 
 --- The decimal digits of `n`, most significant first.
-pub let digits_of(n: Nat) -> List(Nat) =
+pub let digits_of(n: Nat) -> List(Nat) =>
     match n < 10
     | true => [n]
     | false =>
@@ -132,7 +132,7 @@ pub let digits_of(n: Nat) -> List(Nat) =
         [..digits_of(n / 10), digit]
     end;
 
-pub let normalize(ds: List(Nat)) -> {List(Nat), Bool} =
+pub let normalize(ds: List(Nat)) -> {List(Nat), Bool} =>
     match ds
     | [] => ([], false)
     | [10] => ([0], true)
@@ -157,7 +157,7 @@ pub let Start: Type =
         above: Holds(0 < mp),
         below: Holds(0 < mm)};
 
-pub let setup(f_mant: Nat, exp_field: Nat) -> Start =
+pub let setup(f_mant: Nat, exp_field: Nat) -> Start =>
     let hidden = pow2(52);
     match exp_field >= 1075
     | true =>
@@ -207,7 +207,7 @@ pub let setup(f_mant: Nat, exp_field: Nat) -> Start =
     end;
 
 --- The digits `ds` with the decimal point `k` places into them: before them, after zeros, when `k` is not positive; between two of them when it falls inside; and after them, behind zeros, when it falls past the end.
-pub let layout(ds: List(Nat), k: Int) -> Str =
+pub let layout(ds: List(Nat), k: Int) -> Str =>
     let length = List/length(ds);
     let leading = (pad: Nat) => Str/flatten(["0.", Str/repeat("0", pad), digits_to_str(ds)]);
     match k >= +0
@@ -227,7 +227,7 @@ pub let layout(ds: List(Nat), k: Int) -> Str =
         end
     end;
 
-pub let render(f_mant: Nat, exp_field: Nat, even: Bool) -> Str =
+pub let render(f_mant: Nat, exp_field: Nat, even: Bool) -> Str =>
     let start = setup(f_mant, exp_field);
     let up = scale_up(start.r + start.mp, start.s, +0, @start.scale);
     let down = scale_down(start.r, start.mp, start.mm, up.s, up.k, @start.above, @start.below);
@@ -239,7 +239,7 @@ pub let render(f_mant: Nat, exp_field: Nat, even: Bool) -> Str =
     end;
 
 --- `m · 2^e / 10^k` rounded to an integer in the direction `r`, of `negative`'s sign.
-pub let decimal_digits(r: Rounding, negative: Bool, m: Nat, e: Int, k: Int) -> Nat =
+pub let decimal_digits(r: Rounding, negative: Bool, m: Nat, e: Int, k: Int) -> Nat =>
     let numerator = Nat/shl(m, Int/abs(Int/max(e, +0))) * Nat/pow(10, Int/abs(Int/min(k, +0)));
     let denominator = Nat/shl(1, Int/abs(Int/min(e, +0))) * Nat/pow(10, Int/abs(Int/max(k, +0)));
     let (q, rem) = div_mod(numerator, denominator);
@@ -254,14 +254,14 @@ pub let decimal_digits(r: Rounding, negative: Bool, m: Nat, e: Int, k: Int) -> N
     match up | true => q + 1 | false => q end;
 
 --- `to_str_significant` in the direction `r`. The exponent of the last digit is estimated from the binary exponent, within one since `log₁₀ 2` is `0.30103` to five places, and then corrected by the digits it yields.
-pub let to_str_significant_in(r: Rounding, f: Flt, n: Nat) -> Str =
+pub let to_str_significant_in(r: Rounding, f: Flt, n: Nat) -> Str =>
     match Dyadic/try_of(f)
     | some(d), d.mantissa != +0 => significant(r, d, n)
     | _ => Flt/to_str(f)
     end;
 
 --- A finite nonzero `d` with `n` significant digits in the direction `r`.
-pub let significant(r: Rounding, d: Dyadic, n: Nat) -> Str =
+pub let significant(r: Rounding, d: Dyadic, n: Nat) -> Str =>
     let negative = d.mantissa < +0;
     let magnitude = Int/abs(d.mantissa);
     let sign = match negative | true => "-" | false => "+" end;

@@ -20,8 +20,8 @@ fn concept_method_call_matches_direct_intrinsic_codegen() {
     let through_concept = r#"
         use /std/{Nat, List, Str, Proc};
         use /std/ops/{Add};
-        pub let bump(x : Nat) -> Nat = Add/add(x, 1);
-        let entry() -> /std/Io({}) =
+        pub let bump(x : Nat) -> Nat => Add/add(x, 1);
+        let entry() -> /std/Io({}) =>
             let taint = List/length(Proc/args()!);
             let n : Nat = taint;
             /std/print(Nat/to_str(bump(n)));
@@ -29,8 +29,8 @@ fn concept_method_call_matches_direct_intrinsic_codegen() {
         "#;
     let direct = r#"
         use /std/{Nat, List, Str, Proc};
-        pub let bump(x : Nat) -> Nat = Nat/add(x, 1);
-        let entry() -> /std/Io({}) =
+        pub let bump(x : Nat) -> Nat => Nat/add(x, 1);
+        let entry() -> /std/Io({}) =>
             let taint = List/length(Proc/args()!);
             let n : Nat = taint;
             /std/print(Nat/to_str(bump(n)));
@@ -45,7 +45,7 @@ fn concept_method_call_matches_direct_intrinsic_codegen() {
 fn a_match_with_no_head_matches_hand_nested_bool_codegen() {
     let ladder = r#"
         use /std/{Nat, List, Str, Proc};
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let taint = List/length(Proc/args()!);
             let n : Nat = taint;
             let result =
@@ -59,7 +59,7 @@ fn a_match_with_no_head_matches_hand_nested_bool_codegen() {
         "#;
     let nested = r#"
         use /std/{Nat, List, Str, Proc};
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let taint = List/length(Proc/args()!);
             let n : Nat = taint;
             let result =
@@ -83,12 +83,12 @@ fn a_match_with_no_head_matches_hand_nested_bool_codegen() {
 fn a_bind_guard_matches_headed_catch_all_codegen() {
     let bind = r#"
         use /std/{Option, Nat, List, Str, Proc};
-        let f(o : Option(Nat)) -> Nat =
+        let f(o : Option(Nat)) -> Nat =>
             match
             | some(x) = o => x + 10
             | _ => 99
             end;
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let taint = List/length(Proc/args()!);
             let n : Nat = taint;
             /std/print(Nat/to_str(f(Option/some(n))));
@@ -96,12 +96,12 @@ fn a_bind_guard_matches_headed_catch_all_codegen() {
         "#;
     let headed = r#"
         use /std/{Option, Nat, List, Str, Proc};
-        let f(o : Option(Nat)) -> Nat =
+        let f(o : Option(Nat)) -> Nat =>
             match o
             | some(x) => x + 10
             | _ => 99
             end;
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let taint = List/length(Proc/args()!);
             let n : Nat = taint;
             /std/print(Nat/to_str(f(Option/some(n))));
@@ -116,8 +116,8 @@ fn a_bind_guard_matches_headed_catch_all_codegen() {
 fn concept_comparison_matches_direct_intrinsic_codegen() {
     let through_concept = r#"
         use /std/{Nat, Bool, List, Str, Proc}; use /std/ops/{Ord};
-        pub let small(x : Nat) -> Bool = Ord/lt(x, 10);
-        let entry() -> /std/Io({}) =
+        pub let small(x : Nat) -> Bool => Ord/lt(x, 10);
+        let entry() -> /std/Io({}) =>
             let taint = List/length(Proc/args()!);
             let n : Nat = taint;
             /std/print(Bool/to_str(small(n)));
@@ -125,8 +125,8 @@ fn concept_comparison_matches_direct_intrinsic_codegen() {
         "#;
     let direct = r#"
         use /std/{Nat, Bool, List, Str, Proc};
-        pub let small(x : Nat) -> Bool = Nat/lt(x, 10);
-        let entry() -> /std/Io({}) =
+        pub let small(x : Nat) -> Bool => Nat/lt(x, 10);
+        let entry() -> /std/Io({}) =>
             let taint = List/length(Proc/args()!);
             let n : Nat = taint;
             /std/print(Bool/to_str(small(n)));

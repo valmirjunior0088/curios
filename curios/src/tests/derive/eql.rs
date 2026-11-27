@@ -11,8 +11,8 @@ fn derived_equality_is_structural() {
         use /std/ops/{Eql};
         induct Tree: pub Type | leaf(Nat) | node(Tree, Tree) end
         satisfy Eql(Tree) { .. }
-        let show(b: Bool) -> Str = Str/concat(Bool/to_str(b), " ");
-        let entry() -> /std/Io({}) =
+        let show(b: Bool) -> Str => Str/concat(Bool/to_str(b), " ");
+        let entry() -> /std/Io({}) =>
             let _ = print(show(Tree/leaf(1) == Tree/leaf(1)))!;
             let _ = print(show(Tree/leaf(1) == Tree/leaf(2)))!;
             let _ = print(show(Tree/node(Tree/leaf(1), Tree/leaf(2)) == Tree/node(Tree/leaf(1), Tree/leaf(2))))!;
@@ -33,9 +33,9 @@ fn a_struct_and_a_parameterized_family_compare_fieldwise() {
         struct Point: pub Type { x: Nat, y: Nat }
         induct Box(A: Type): pub Type | boxed(A) end
         satisfy Eql(Point) { .. }
-        satisfy (@A: Type, use Eql(A)) => Eql(Box(A)) { .. }
-        let show(b: Bool) -> Str = Str/concat(Bool/to_str(b), " ");
-        let entry() -> /std/Io({}) =
+        satisfy (@A: Type, use Eql(A)) -> Eql(Box(A)) { .. }
+        let show(b: Bool) -> Str => Str/concat(Bool/to_str(b), " ");
+        let entry() -> /std/Io({}) =>
             let _ = print(show(Point { x = 1, y = 2 } == Point { x = 1, y = 2 }))!;
             let _ = print(show(Point { x = 1, y = 2 } != Point { x = 1, y = 3 }))!;
             let _ = print(show(Box/boxed("a") == Box/boxed("a")))!;
@@ -58,9 +58,9 @@ fn proofs_take_no_part_in_equality() {
         | cons(@n: Nat, head: T, tail: Vec(T)(n)): (n + 1)
         end
         satisfy Eql(Certified) { .. }
-        satisfy (@T: Type, @n: Nat, use Eql(T)) => Eql(Vec(T)(n)) { .. }
-        let show(b: Bool) -> Str = Str/concat(Bool/to_str(b), " ");
-        let entry() -> /std/Io({}) =
+        satisfy (@T: Type, @n: Nat, use Eql(T)) -> Eql(Vec(T)(n)) { .. }
+        let show(b: Bool) -> Str => Str/concat(Bool/to_str(b), " ");
+        let entry() -> /std/Io({}) =>
             let _ = print(show(Certified/cert(1, Eq/refl()) == Certified/cert(1, Eq/refl())))!;
             let _ = print(show(Certified/cert(1, Eq/refl()) == Certified/cert(2, Eq/refl())))!;
             let _ = print(show(Vec/cons(1, Vec/cons(2, Vec/nil())) == Vec/cons(1, Vec/cons(2, Vec/nil()))))!;
@@ -84,7 +84,7 @@ fn a_hidden_member_takes_part_in_a_derived_witness_under_its_mark() {
         struct Sized: Type { @len: Nat, items: Nat }
         satisfy Eql(Sized) { .. }
         satisfy Spell(Sized) { .. }
-        let size(t: Tagged) -> Nat = match t | tag(@s, _) => s end;
+        let size(t: Tagged) -> Nat => match t | tag(@s, _) => s end;
         let (a, b) = (Tagged/tag(@9, 1), Tagged/tag(@2, 1));
         let _ = print(Str/flatten([Bool/to_str(a == b), " ", Bool/to_str(Bytes/eql(Hash/hash(a), Hash/hash(b))), " ", Spell/spell(a), " ", Nat/to_str(size(a)), " ", Nat/to_str(size(b))]))!;
         print(Str/flatten([" ", Spell/spell(Sized { @len = 9, items = 1 }), " ", Bool/to_str(Sized { @len = 9, items = 1 } == Sized { @len = 2, items = 1 })]))
@@ -102,7 +102,7 @@ fn the_eql_derivation_shares_the_provenance() {
         use /std/{Str};
         use /std/ops/{Eql};
         induct Box(A: Type): pub Type | boxed(A) end
-        satisfy (@A: Type) => Eql(Box(A)) { .. }
+        satisfy (@A: Type) -> Eql(Box(A)) { .. }
         /std/print("")
         "#;
     let report = error(premise);
@@ -119,9 +119,9 @@ fn the_standard_library_derives_option_result_and_order() {
     let source = r#"
         use /std/{Nat, Bool, Str, Option, Result, Ordering, Spell, print};
         use /std/ops/{Eql};
-        let show(b: Bool) -> Str = Str/concat(Bool/to_str(b), " ");
+        let show(b: Bool) -> Str => Str/concat(Bool/to_str(b), " ");
         let failing: Result(Str, Nat) = Result/failure("no");
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let _ = print(Spell/spell(Option/some(1)))!;
             let _ = print("\n")!;
             let _ = print(Spell/spell(Option/none(@Nat)))!;
@@ -167,24 +167,24 @@ fn a_derived_witness_proves_both_laws() {
 
         satisfy Eql(Tree) { .. }
         satisfy Eql(Doc) { .. }
-        satisfy (@A: Type, use Eql(A)) => Eql(Rose(A)) { .. }
+        satisfy (@A: Type, use Eql(A)) -> Eql(Rose(A)) { .. }
         satisfy Eql(Certified) { .. }
         satisfy Eql(Small) { .. }
 
-        let one(@A: Type, use Eql(A), a: A, b: A, h: Holds(a == b)) -> Eq()(a, b) =
+        let one(@A: Type, use Eql(A), a: A, b: A, h: Holds(a == b)) -> Eq()(a, b) =>
             Eql/eq(a, b, h);
-        let itself(@A: Type, use Eql(A), a: A) -> Holds(a == a) = Eql/refl(a);
+        let itself(@A: Type, use Eql(A), a: A) -> Holds(a == a) => Eql/refl(a);
 
-        let _trees(a: Tree, b: Tree, h: Holds(a == b)) -> Eq()(a, b) = one(a, b, h);
-        let _docs(a: Doc, b: Doc, h: Holds(a == b)) -> Eq()(a, b) = one(a, b, h);
-        let _roses(a: Rose(Doc), b: Rose(Doc), h: Holds(a == b)) -> Eq()(a, b) = one(a, b, h);
-        let _certified(a: Certified, b: Certified, h: Holds(a == b)) -> Eq()(a, b) = one(a, b, h);
-        let _small(a: Small, b: Small, h: Holds(a == b)) -> Eq()(a, b) = one(a, b, h);
+        let _trees(a: Tree, b: Tree, h: Holds(a == b)) -> Eq()(a, b) => one(a, b, h);
+        let _docs(a: Doc, b: Doc, h: Holds(a == b)) -> Eq()(a, b) => one(a, b, h);
+        let _roses(a: Rose(Doc), b: Rose(Doc), h: Holds(a == b)) -> Eq()(a, b) => one(a, b, h);
+        let _certified(a: Certified, b: Certified, h: Holds(a == b)) -> Eq()(a, b) => one(a, b, h);
+        let _small(a: Small, b: Small, h: Holds(a == b)) -> Eq()(a, b) => one(a, b, h);
 
-        let _a_tree(a: Tree) -> Holds(a == a) = itself(a);
-        let _a_doc(a: Doc) -> Holds(a == a) = itself(a);
-        let _a_rose(a: Rose(Doc)) -> Holds(a == a) = itself(a);
-        let _a_small(a: Small) -> Holds(a == a) = itself(a);
+        let _a_tree(a: Tree) -> Holds(a == a) => itself(a);
+        let _a_doc(a: Doc) -> Holds(a == a) => itself(a);
+        let _a_rose(a: Rose(Doc)) -> Holds(a == a) => itself(a);
+        let _a_small(a: Small) -> Holds(a == a) => itself(a);
 
         let _closed: Eq()(Doc/obj([("a", Doc/arr([Doc/num(1)]))]), Doc/obj([("a", Doc/arr([Doc/num(1)]))])) =
             Eql/eq(
@@ -216,34 +216,34 @@ fn a_witness_whose_equality_breaks_a_law_is_refused_where_it_is_declared() {
     };
     let lawful = program(
         r#"satisfy Eql(Side) {
-                eql(a, b) =
+                eql(a, b) =>
                     match a
                     | left() => match b | left() => true | right() => false end
                     | right() => match b | left() => false | right() => true end
                     end,
-                eq(a, b, h) =
+                eq(a, b, h) =>
                     match a
                     | left() => match b | left() => Eq/refl() | right() => match h end end
                     | right() => match b | left() => match h end | right() => Eq/refl() end
                     end,
-                refl(a) = match a | left() => True/qed() | right() => True/qed() end,
+                refl(a) => match a | left() => True/qed() | right() => True/qed() end,
             }"#,
     );
     let conflating = program(
         r#"satisfy Eql(Side) {
-                eql(a, b) = true,
-                eq(a, b, h) = Eq/refl(),
-                refl(a) = True/qed(),
+                eql(a, b) => true,
+                eq(a, b, h) => Eq/refl(),
+                refl(a) => True/qed(),
             }"#,
     );
     let parting = program(
         r#"satisfy Eql(Side) {
-                eql(a, b) = false,
-                eq(a, b, h) = match h end,
-                refl(a) = True/qed(),
+                eql(a, b) => false,
+                eq(a, b, h) => match h end,
+                refl(a) => True/qed(),
             }"#,
     );
-    let lawless = program("satisfy Eql(Side) { eql(a, b) = true, }");
+    let lawless = program("satisfy Eql(Side) { eql(a, b) => true, }");
 
     assert_eq!(
         run(&lawful.replace("print(\"unreachable\")", "print(\"ok\")")),

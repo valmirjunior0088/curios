@@ -104,7 +104,7 @@ fn false_prop() -> TopItem {
     }])
 }
 
-// `pub let Holds(b: Bool) -> Prop = match b | true => True | false => False end;` — the reflection of a decision into a claim, which every decided bound this roster states is built from. A refined comparison reduces the match away, which is what discharges an obligation with nothing written.
+// `pub let Holds(b: Bool) -> Prop => match b | true => True | false => False end;` — the reflection of a decision into a claim, which every decided bound this roster states is built from. A refined comparison reduces the match away, which is what discharges an obligation with nothing written.
 fn holds() -> Decl {
     documented(
         &[

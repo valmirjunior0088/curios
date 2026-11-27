@@ -5,7 +5,7 @@ use /std/Bool/{True, Holds};
 --- Whether `a` and `b` part at a byte where `a`'s is the smaller, neither running out before it.
 ---
 --- It is `ord`'s `lt` decided at a byte rather than by one run ending first, so it holds whatever follows either run. That is what one value's encoding must guarantee against another's where encodings are concatenated, and what complementing every byte reverses.
-pub let below(a: Bytes, b: Bytes) -> Bool =
+pub let below(a: Bytes, b: Bytes) -> Bool =>
     match a
     | 0x[] => false
     | 0x[h, ..t] =>
@@ -27,7 +27,7 @@ pub let of_heads(
     t: Bytes,
     r: Bytes,
     under: Holds(h < k),
-) -> Holds(below(0x[h, ..t], 0x[k, ..r])) =
+) -> Holds(below(0x[h, ..t], 0x[k, ..r])) =>
     Eq/subst(
         (o: Ordering) => Holds(
             match o | eq() => below(t, r) | lt() => true | gt() => false end),
@@ -35,7 +35,11 @@ pub let of_heads(
         True/qed());
 
 --- A run below another at a byte is `lt` to it.
-pub let lt(a: Bytes, b: Bytes, parted: Holds(below(a, b))) -> Eq()(Bytes/ord(a, b), Ordering/lt()) =
+pub let lt(
+    a: Bytes,
+    b: Bytes,
+    parted: Holds(below(a, b)),
+) -> Eq()(Bytes/ord(a, b), Ordering/lt()) =>
     match a
     | 0x[] => match parted end
     | 0x[h, ..t] =>
@@ -57,7 +61,7 @@ pub let onto(
     s: Bytes,
     u: Bytes,
     parted: Holds(below(a, b)),
-) -> Holds(below(0x[..a, ..s], 0x[..b, ..u])) =
+) -> Holds(below(0x[..a, ..s], 0x[..b, ..u])) =>
     match a
     | 0x[] => match parted end
     | 0x[h, ..t] =>
@@ -78,5 +82,5 @@ pub let past(
     a: Bytes,
     b: Bytes,
     parted: Holds(below(a, b)),
-) -> Holds(below(0x[..p, ..a], 0x[..p, ..b])) =
+) -> Holds(below(0x[..p, ..a], 0x[..p, ..b])) =>
     match p | 0x[] => parted | 0x[_, ..t] => past(t, a, b, parted) end;

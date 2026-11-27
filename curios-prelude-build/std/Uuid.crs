@@ -14,23 +14,23 @@ pub struct Uuid: pub Type {
 }
 
 --- The UUID the sixteen bytes `b` spell, in the order RFC 9562 lays them out: any sixteen bytes, of any version and variant, as a UUID read off a wire or out of a store is. Their count is decided where `b` is written, so a literal needs nothing more.
-pub let of_bytes(b: Bytes, @sixteen: Holds(Bytes/length(b) == 16)) -> Uuid =
+pub let of_bytes(b: Bytes, @sixteen: Holds(Bytes/length(b) == 16)) -> Uuid =>
     Uuid { bytes = b };
 
 --- The sixteen bytes, in the order RFC 9562 lays them out.
-pub let to_bytes(u: Uuid) -> Bytes =
+pub let to_bytes(u: Uuid) -> Bytes =>
     u.bytes;
 
 -- The byte of `b` at `i`, or `0` past its end: what a UUID is made of where `b` holds fewer bytes than were drawn.
-let byte_at(b: Bytes, i: Nat) -> Byte =
+let byte_at(b: Bytes, i: Nat) -> Byte =>
     match Bytes/try_get(b, i) | some(byte) => byte | none() => 0 end;
 
 -- `byte` with its high bits `high` in place of its own, as many of them as `mask` clears: a version's nibble or a variant's two bits.
-let marked(byte: Byte, mask: Byte, high: Byte) -> Byte =
+let marked(byte: Byte, mask: Byte, high: Byte) -> Byte =>
     Byte/or(Byte/and(byte, mask), high);
 
 -- The sixteen bytes of `drawn` as a UUID of version `version`, its version's nibble and its variant's bits, `10`, set.
-let versioned(drawn: Bytes, version: Byte) -> Uuid =
+let versioned(drawn: Bytes, version: Byte) -> Uuid =>
     Uuid {
         bytes =
             0x[
@@ -52,16 +52,16 @@ let versioned(drawn: Bytes, version: Byte) -> Uuid =
                 byte_at(drawn, 15)] };
 
 --- A random UUID, version 4 (RFC 9562 §5.4): 122 random bits beside its version and variant.
-pub let random() -> Io(Uuid) =
+pub let random() -> Io(Uuid) =>
     let drawn = rand/bytes(16)!;
     Io/pure(versioned(drawn, 0x40));
 
 -- The byte of `n` at `place`, counted from its least significant.
-let byte_of(n: Nat, place: Nat) -> Byte =
+let byte_of(n: Nat, place: Nat) -> Byte =>
     Nat/to_byte(n / Nat/pow(256, place) % 256);
 
 -- The UUID of version 7 `nanos` nanoseconds after 1970 makes of `drawn`: the milliseconds in the first 48 bits, the fraction of the millisecond in twelve, and the 62 bits after the variant drawn. A moment before 1970 is read as 1970, which RFC 9562's unsigned timestamp has no earlier moment than.
-let at_time(nanos: Int, drawn: Bytes) -> Uuid =
+let at_time(nanos: Int, drawn: Bytes) -> Uuid =>
     let since = Int/to_nat(Int/max(nanos, +0));
     let millis = since / 1000000 % Nat/pow(2, 48);
     let fraction = since % 1000000 * 4096 / 1000000;
@@ -86,13 +86,13 @@ let at_time(nanos: Int, drawn: Bytes) -> Uuid =
                 byte_at(drawn, 7)] };
 
 --- A UUID ordered by when it was made, version 7 (RFC 9562 §5.7): the milliseconds since 1970 in its first 48 bits, the fraction of the millisecond in the twelve after its version, read off the nanosecond clock as §6.2's third method reads it, and 62 random bits after its variant, so the UUIDs a program makes sort by when it made them to about a quarter of a microsecond, as far as the wall clock moves forward. A clock before 1970 is read as 1970.
-pub let now() -> Io(Uuid) =
+pub let now() -> Io(Uuid) =>
     let at = Timestamp/now()!;
     let drawn = rand/bytes(8)!;
     Io/pure(at_time(Timestamp/to_unix_nanos(at), drawn));
 
 --- The canonical text (RFC 9562 §4): 32 lowercase hexadecimal digits in groups of eight, four, four, four and twelve, a hyphen between each, `919108f7-52d1-4320-9bac-f847db4148a8`.
-pub let to_str(u: Uuid) -> Str =
+pub let to_str(u: Uuid) -> Str =>
     let written =
         Bytes/fold(
             u.bytes,
@@ -111,7 +111,7 @@ pub let to_str(u: Uuid) -> Str =
     written.0;
 
 -- The bytes the hexadecimal digits `digits` spell, two a byte, or `none` where one is no digit or one is left over.
-let of_digits(digits: List(Char)) -> Option(Bytes) =
+let of_digits(digits: List(Char)) -> Option(Bytes) =>
     match digits
     | [] => Option/some(0x[])
     | [high, low, ..rest] =>
@@ -124,14 +124,14 @@ let of_digits(digits: List(Char)) -> Option(Bytes) =
     end;
 
 -- Whether `chars`, the `i`th of the text on, end at its thirty-sixth and hold a hyphen exactly where the canonical text does.
-let hyphened(chars: List(Char), i: Nat) -> Bool =
+let hyphened(chars: List(Char), i: Nat) -> Bool =>
     match chars
     | [] => i == 36
     | [c, ..rest] => c == '-' == (i == 8 || i == 13 || i == 18 || i == 23) && hyphened(rest, i + 1)
     end;
 
 --- The UUID the canonical text `s` writes (RFC 9562 §4), its digits in either case as the RFC reads them, or `none` where `s` is not 36 characters, its hyphens after the eighth, twelfth, sixteenth and twentieth digit, and the rest hexadecimal.
-pub let of_str(s: Str) -> Option(Uuid) =
+pub let of_str(s: Str) -> Option(Uuid) =>
     let chars = Str/to_list(s);
     match hyphened(chars, 0)
     | false => Option/none()
@@ -144,7 +144,7 @@ pub let of_str(s: Str) -> Option(Uuid) =
     end;
 
 --- Two UUIDs of the same bytes are one UUID: the count of sixteen is a proof, and any two of it are one.
-pub let eq_of_bytes(a: Uuid, b: Uuid, p: Eq()(a.bytes, b.bytes)) -> Eq()(a, b) =
+pub let eq_of_bytes(a: Uuid, b: Uuid, p: Eq()(a.bytes, b.bytes)) -> Eq()(a, b) =>
     Eq/subst(
         (bytes: Bytes) =>
             (sixteen: Holds(Bytes/length(bytes) == 16)) -> Eq()(
@@ -155,21 +155,21 @@ pub let eq_of_bytes(a: Uuid, b: Uuid, p: Eq()(a.bytes, b.bytes)) -> Eq()(a, b) =
         b.sixteen);
 
 satisfy Eql(Uuid) {
-    eql(a, b) = a.bytes == b.bytes,
-    eq(a, b, h) = eq_of_bytes(a, b, proved()),
-    refl(a) = Eql/refl(a.bytes),
+    eql(a, b) => a.bytes == b.bytes,
+    eq(a, b, h) => eq_of_bytes(a, b, proved()),
+    refl(a) => Eql/refl(a.bytes),
 }
 
 --- The order of their bytes, which is the order a version 7's were made in.
 satisfy Ord(Uuid) {
-    ord(a, b) = Bytes/ord(a.bytes, b.bytes),
-    lt(a, b) = Ordering/is_lt(Bytes/ord(a.bytes, b.bytes)),
-    le(a, b) = Ordering/is_le(Bytes/ord(a.bytes, b.bytes)),
-    flips(a, b) = Ord/flips(a.bytes, b.bytes),
-    trans(a, b, c, p, q) = Ord/trans(a.bytes, b.bytes, c.bytes, p, q),
-    eq(a, b, h) = eq_of_bytes(a, b, Ord/eq(a.bytes, b.bytes, h)),
-    is_lt(_, _) = Eq/refl(),
-    is_le(_, _) = Eq/refl(),
+    ord(a, b) => Bytes/ord(a.bytes, b.bytes),
+    lt(a, b) => Ordering/is_lt(Bytes/ord(a.bytes, b.bytes)),
+    le(a, b) => Ordering/is_le(Bytes/ord(a.bytes, b.bytes)),
+    flips(a, b) => Ord/flips(a.bytes, b.bytes),
+    trans(a, b, c, p, q) => Ord/trans(a.bytes, b.bytes, c.bytes, p, q),
+    eq(a, b, h) => eq_of_bytes(a, b, Ord/eq(a.bytes, b.bytes, h)),
+    is_lt(_, _) => Eq/refl(),
+    is_le(_, _) => Eq/refl(),
 }
 
 --- The sixteen bytes.
@@ -179,7 +179,7 @@ satisfy Hash(Uuid) {
 
 --- The sixteen bytes, whose order is the UUIDs'.
 satisfy Hash/Key(Uuid) {
-    mono(_, _) = Eq/refl(),
+    mono(_, _) => Eq/refl(),
 }
 
 --- The canonical text.
@@ -189,5 +189,5 @@ satisfy Show(Uuid) {
 
 --- As the call over its bytes that makes it: `Uuid/of_bytes(0x[145, 145, …])`.
 satisfy Spell(Uuid) {
-    spell(u) = Fmt/render("Uuid/of_bytes(#)")(u.bytes),
+    spell(u) => Fmt/render("Uuid/of_bytes(#)")(u.bytes),
 }

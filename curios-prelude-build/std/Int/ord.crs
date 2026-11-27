@@ -3,7 +3,7 @@ use /std/ops/{Ord};
 use /std/Bool/{True, False, Holds};
 
 --- The order of the two.
-pub let ord(x: Int, y: Int) -> Ordering =
+pub let ord(x: Int, y: Int) -> Ordering =>
     match
     | Int/lt(x, y) => Ordering/lt()
     | x == y => Ordering/eq()
@@ -12,7 +12,7 @@ pub let ord(x: Int, y: Int) -> Ordering =
 
 -- By the two decisions `ord` reads, each by name, as every law `Ord`'s witness at `Int` names is: `a < b` would read that witness back.
 --- `ord(a, b)` is `eq` only where `a` is `b`: the order agrees with equality.
-let eq(a: Int, b: Int, h: Eq()(ord(a, b), Ordering/eq())) -> Eq()(a, b) =
+let eq(a: Int, b: Int, h: Eq()(ord(a, b), Ordering/eq())) -> Eq()(a, b) =>
     match Int/lt(a, b)
     | true => match h end
     | false =>
@@ -23,7 +23,7 @@ let eq(a: Int, b: Int, h: Eq()(ord(a, b), Ordering/eq())) -> Eq()(a, b) =
     end;
 
 -- No two integers are each below the other: `a < b` is `a + 1 <= b`, and the two bounds in a row put `a + 1` at most `a - 1`.
-let apart(a: Int, b: Int, p: Holds(Int/lt(a, b)), q: Holds(Int/lt(b, a))) -> False =
+let apart(a: Int, b: Int, p: Holds(Int/lt(a, b)), q: Holds(Int/lt(b, a))) -> False =>
     Int/le/trans(@a + 1, @b, @a - 1, p, q);
 
 -- Two integers neither of which is below the other are one: a comparison that failed is the dual one holding.
@@ -32,7 +32,7 @@ let level(
     b: Int,
     p: Holds(Bool/not(Int/lt(a, b))),
     q: Holds(Bool/not(Int/lt(b, a))),
-) -> Eq()(a, b) =
+) -> Eq()(a, b) =>
     Int/le/antisym(a, b, q, p);
 
 -- By the decisions `ord` reads on each side. Where both sides are decided alike the answers are read off; the arms no two integers reach are closed by [`apart`], by [`level`], and by an equation carried into the decision that failed.
@@ -72,14 +72,14 @@ let flips: Ord/Flips(ord) =
         end;
 
 --- `a < b` is `ord` answering `lt`.
-let is_lt(a: Int, b: Int) -> Eq()(Int/lt(a, b), Ordering/is_lt(ord(a, b))) =
+let is_lt(a: Int, b: Int) -> Eq()(Int/lt(a, b), Ordering/is_lt(ord(a, b))) =>
     match Int/lt(a, b)
     | true => Eq/refl()
     | false => match Int/eql(a, b) | true | false => Eq/refl() end
     end;
 
 --- `a <= b` is `ord` answering `lt` or `eq`.
-let is_le(a: Int, b: Int) -> Eq()(Int/le(a, b), Ordering/is_le(ord(a, b))) =
+let is_le(a: Int, b: Int) -> Eq()(Int/le(a, b), Ordering/is_le(ord(a, b))) =>
     match Int/lt(a, b)
     | true =>
         match Int/le(a, b)

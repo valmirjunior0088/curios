@@ -2,18 +2,18 @@
 use /std/{Nat, Str, List, Test};
 use /std/Tui/{Style, Frame, View, Pane};
 
-let shown(@w: Nat, @h: Nat, v: View/Sized(w, h)) -> Str =
+let shown(@w: Nat, @h: Nat, v: View/Sized(w, h)) -> Str =>
     Str/join("/", Frame/to_lines(Frame/of_view(v)));
 
-let shares(cs: List(Pane/Constraint), avail: Nat) -> Str =
+let shares(cs: List(Pane/Constraint), avail: Nat) -> Str =>
     Str/join(",", List/map(Pane/Constraint/distribute(cs, avail), Nat/to_str));
 
 -- Each pane is painted as its name, fitted to the size the split gave it, so the view reads back as which pane landed where.
-let named(name: Str) -> Pane =
+let named(name: Str) -> Pane =>
     (w, h) => View/fit(View/text(Style/plain, name), w, h);
 
 -- A length takes what it claims, and a floor takes its own and then a share of what is left, as a fill of weight one does.
-test a_length_is_taken_as_written_and_a_floor_grows =
+test a_length_is_taken_as_written_and_a_floor_grows =>
     Test/equal(
         Str/join(" ", [
             shares([Pane/Constraint/length(2), Pane/Constraint/length(3)], 10),
@@ -21,11 +21,11 @@ test a_length_is_taken_as_written_and_a_floor_grows =
         "2,3 2,8");
 
 -- A percentage is of the whole axis, and the fill takes what it leaves.
-test a_percentage_is_of_the_whole_axis =
+test a_percentage_is_of_the_whole_axis =>
     Test/equal(shares([Pane/Constraint/percent(50), Pane/Constraint/fill(1)], 10), "5,5");
 
 -- Fills share the spare by weight, and the rounding shortfall goes to the last of them.
-test fills_share_by_weight_and_the_last_absorbs_the_rounding =
+test fills_share_by_weight_and_the_last_absorbs_the_rounding =>
     Test/equal(
         Str/join(" ", [
             shares([Pane/Constraint/fill(1), Pane/Constraint/fill(3)], 8),
@@ -35,11 +35,11 @@ test fills_share_by_weight_and_the_last_absorbs_the_rounding =
         "2,6 3,3,4");
 
 -- An over-committed axis answers the claims as written; the view cuts the result where the axis ends.
-test an_over_committed_axis_keeps_its_claims =
+test an_over_committed_axis_keeps_its_claims =>
     Test/equal(shares([Pane/Constraint/length(8), Pane/Constraint/fill(1)], 5), "8,0");
 
 -- `rows` stacks its panes at the heights the shares gave them, and the whole is the view asked for.
-test rows_stack_panes_at_their_shares =
+test rows_stack_panes_at_their_shares =>
     let l =
         Pane/rows([
             (Pane/Constraint/length(1), named("head")),
@@ -48,13 +48,13 @@ test rows_stack_panes_at_their_shares =
     Test/equal(shown(l(6, 4)), "head  /body  /      /foot  ");
 
 -- `cols` sets its panes side by side at the widths the shares gave them.
-test cols_set_panes_side_by_side =
+test cols_set_panes_side_by_side =>
     let l =
         Pane/cols([(Pane/Constraint/length(2), named("l")), (Pane/Constraint/fill(1), named("r"))]);
     Test/equal(shown(l(5, 1)), "l r  ");
 
 -- One axis nested in the other: the inner split is at the size the outer gave it.
-test one_axis_nests_in_the_other =
+test one_axis_nests_in_the_other =>
     let l =
         Pane/rows([
             (Pane/Constraint/length(1), named("top")),
@@ -66,7 +66,7 @@ test one_axis_nests_in_the_other =
     Test/equal(shown(l(4, 3)), "top /a b /    ");
 
 -- A pane the constraints leave at nothing takes no room, and the rest is drawn as if it were not there.
-test a_pane_left_at_nothing_takes_no_room =
+test a_pane_left_at_nothing_takes_no_room =>
     let l =
         Pane/rows([
             (Pane/Constraint/length(0), named("gone")),
@@ -74,7 +74,7 @@ test a_pane_left_at_nothing_takes_no_room =
     Test/equal(shown(l(3, 2)), "all/   ");
 
 -- A pane is drawn within its share: one that draws two rows in a share of one keeps to it, and the pane beneath stands where its share puts it.
-test a_pane_is_drawn_within_its_share_whatever_it_holds =
+test a_pane_is_drawn_within_its_share_whatever_it_holds =>
     let tall: Pane =
         (w, h) =>
             View/fit(View/above(View/text(Style/plain, "x"), View/text(Style/plain, "y")), w, h);

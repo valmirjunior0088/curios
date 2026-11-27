@@ -6,14 +6,14 @@ use {crate::test_support::*, curios_common::fill};
 const FIBONACCI: &str = r#"
 use /std/{Eq, Nat};
 
-let fib(n: Nat) -> Nat =
+let fib(n: Nat) -> Nat =>
     match n
     | 0 => 0
     | 1 => 1
     | _ => fib(n - 1) + fib(n - 2)
     end;
 
-let law(k: Nat) -> Eq()(fib(k + 2), fib(k) + fib(k + 1)) = Eq/refl();
+let law(k: Nat) -> Eq()(fib(k + 2), fib(k) + fib(k + 1)) => Eq/refl();
 
 /std/print(Nat/to_str(fib(10)))
 "#;
@@ -31,8 +31,8 @@ fn a_dispatch_on_a_successor_a_key_may_be_stays_stuck() {
         fill!(
             r#"
             use /std/{Eq, Nat};
-            let f(n: Nat) -> Nat = match n ${keys} | _ => 7 end;
-            let past(k: Nat) -> Eq()(f(k + 2), 7) = Eq/refl();
+            let f(n: Nat) -> Nat => match n ${keys} | _ => 7 end;
+            let past(k: Nat) -> Eq()(f(k + 2), 7) => Eq/refl();
             /std/print(Nat/to_str(f(5)))
             "#,
             keys
@@ -54,8 +54,8 @@ fn a_dispatchs_catch_all_knows_its_value_is_none_of_its_keys() {
         let source = fill!(
             r#"
             use /std/{Bool, Nat};
-            let need(n: Nat, @ok: Bool/Holds(1 < n)) -> Nat = n;
-            let f(n: Nat) -> Nat = match n ${arms} end;
+            let need(n: Nat, @ok: Bool/Holds(1 < n)) -> Nat => n;
+            let f(n: Nat) -> Nat => match n ${arms} end;
             /std/print(Nat/to_str(f(0) + f(5)))
             "#,
             arms
@@ -70,7 +70,7 @@ fn a_dispatchs_catch_all_knows_its_value_is_none_of_its_keys() {
 fn a_dispatchs_catch_all_discharges_a_divisors_bound() {
     let source = r#"
         use /std/{Nat};
-        let f(n: Nat) -> Nat = match n | 0 => 0 | 1 => 5 | _ => 10 / n end;
+        let f(n: Nat) -> Nat => match n | 0 => 0 | 1 => 5 | _ => 10 / n end;
         /std/print(Nat/to_str(f(0) + f(1) + f(5)))
         "#;
 

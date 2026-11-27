@@ -14,7 +14,7 @@ end
 pub use Node/*;
 
 --- The encoding of the first key of the first twig that holds any; nothing where none does.
-pub let first_in(@K: Type, use Hash/Key(K), @V: Type, l: List(Node(K, V))) -> Bytes =
+pub let first_in(@K: Type, use Hash/Key(K), @V: Type, l: List(Node(K, V))) -> Bytes =>
     match l
     | [] => 0x[]
     | [h, ..r] =>
@@ -26,7 +26,7 @@ pub let first_in(@K: Type, use Hash/Key(K), @V: Type, l: List(Node(K, V))) -> By
     end;
 
 --- The encoding of a node's first key, the one of its first twig that holds any; nothing for an empty node.
-pub let first(@K: Type, use Hash/Key(K), @V: Type, t: Node(K, V)) -> Bytes =
+pub let first(@K: Type, use Hash/Key(K), @V: Type, t: Node(K, V)) -> Bytes =>
     match t
     | empty() => 0x[]
     | leaf(k, _) => Hash/hash(k)
@@ -34,15 +34,15 @@ pub let first(@K: Type, use Hash/Key(K), @V: Type, t: Node(K, V)) -> Bytes =
     end;
 
 --- Whether a node's own position, where it has one, is past `c`.
-pub let deeper(@K: Type, @V: Type, t: Node(K, V), c: Nat) -> Bool =
+pub let deeper(@K: Type, @V: Type, t: Node(K, V), c: Nat) -> Bool =>
     match t | branch(at, _) => c < at | _ => true end;
 
 --- Whether a node holds anything.
-pub let filled(@K: Type, @V: Type, t: Node(K, V)) -> Bool =
+pub let filled(@K: Type, @V: Type, t: Node(K, V)) -> Bool =>
     match t | empty() => false | _ => true end;
 
 --- How many of a list's twigs hold anything.
-pub let count(@K: Type, @V: Type, l: List(Node(K, V))) -> Nat =
+pub let count(@K: Type, @V: Type, l: List(Node(K, V))) -> Nat =>
     match l
     | [] => 0
     | [h, ..r] => match h | empty() => count(r) | _ => 1 + count(r) end
@@ -63,7 +63,7 @@ pub struct Branched(Held: Prop, many: Bool): pub Prop {
 }
 
 --- A trie is sound where every branch of it is.
-pub let Sound(@K: Type, use Hash/Key(K), @V: Type, t: Node(K, V)) -> Prop =
+pub let Sound(@K: Type, use Hash/Key(K), @V: Type, t: Node(K, V)) -> Prop =>
     match t
     | empty() | leaf(_, _) => True
     | branch(at, tw) => Branched(Twigs(tw.list, at, 0, first_in(tw.list)), 1 < count(tw.list))
@@ -77,7 +77,7 @@ pub and Twigs(
     at: Nat,
     d: Nat,
     a: Bytes,
-) -> Prop =
+) -> Prop =>
     match l
     | [] => True
     | [h, ..r] => {Twig(h, at, d, a), Twigs(r, at, d + 1, a)}
@@ -91,14 +91,14 @@ pub and Twig(
     at: Nat,
     d: Nat,
     a: Bytes,
-) -> Prop =
+) -> Prop =>
     match h
     | empty() => True
     | leaf(_, _) | branch(_, _) => Placed(Sound(h), first(h), a, at, d, deeper(h, at))
     end;
 
 --- The twig at `i`, empty past the end: what `List/get` reads, total, so a proof may name it at any index.
-pub let pick(@K: Type, @V: Type, l: List(Node(K, V)), i: Nat) -> Node(K, V) =
+pub let pick(@K: Type, @V: Type, l: List(Node(K, V)), i: Nat) -> Node(K, V) =>
     match l
     | [] => Node/empty()
     | [h, ..r] => match i | 0 => h | j + 1 => pick(r, j) end
@@ -111,7 +111,7 @@ pub let picked(
     l: List(Node(K, V)),
     i: Nat,
     @within: Holds(i < List/length(l)),
-) -> Eq()(List/get(l, i), pick(l, i)) =
+) -> Eq()(List/get(l, i), pick(l, i)) =>
     match l
     | [] => match within end
     | [_, ..r] =>
@@ -119,7 +119,7 @@ pub let picked(
     end;
 
 --- The value of the key whose encoding is `k` under `t`: a branch's twig at `k`'s digit there holds it where anything does.
-pub let find(@K: Type, use Hash/Key(K), @V: Type, t: Node(K, V), k: Bytes) -> Option(V) =
+pub let find(@K: Type, use Hash/Key(K), @V: Type, t: Node(K, V), k: Bytes) -> Option(V) =>
     match t
     | empty() => Option/none()
     | leaf(k0, v0) =>
@@ -133,13 +133,13 @@ pub let find(@K: Type, use Hash/Key(K), @V: Type, t: Node(K, V), k: Bytes) -> Op
     end;
 
 --- The keys under a node, its twigs' in order.
-pub let keys(@K: Type, @V: Type, t: Node(K, V)) -> List(K) =
+pub let keys(@K: Type, @V: Type, t: Node(K, V)) -> List(K) =>
     match t
     | empty() => []
     | leaf(k, _) => [k]
     | branch(_, tw) => keys_in(tw.list)
     end
-pub and keys_in(@K: Type, @V: Type, l: List(Node(K, V))) -> List(K) =
+pub and keys_in(@K: Type, @V: Type, l: List(Node(K, V))) -> List(K) =>
     match l | [] => [] | [h, ..r] => [..keys(h), ..keys_in(r)] end;
 
 --- A node that forks past a position forks past every one before it.
@@ -151,7 +151,7 @@ pub let deeper_down(
     d: Nat,
     past: Holds(deeper(t, c)),
     le: Holds(d <= c),
-) -> Holds(deeper(t, d)) =
+) -> Holds(deeper(t, d)) =>
     match t
     | empty() | leaf(_, _) => True/qed()
     | branch(_, _) => proved()
@@ -170,7 +170,7 @@ pub let within(
     i: Member()(x, keys(t)),
     j: Nat,
     under: Holds(j <= c),
-) -> Eq()(digit(Hash/hash(x), j), digit(first(t), j)) =
+) -> Eq()(digit(Hash/hash(x), j), digit(first(t), j)) =>
     match t
     | empty() => match Member/absent(i) end
     | leaf(_, _) =>
@@ -194,7 +194,7 @@ pub and within_in(
     i: Member()(x, keys_in(l)),
     j: Nat,
     under: Holds(j < at),
-) -> Eq()(digit(Hash/hash(x), j), digit(a, j)) =
+) -> Eq()(digit(Hash/hash(x), j), digit(a, j)) =>
     match l
     | [] => match Member/absent(i) end
     | [h, ..r] =>
@@ -233,7 +233,7 @@ pub let found(
     sound: Sound(t),
     x: K,
     i: Member()(x, keys(t)),
-) -> Holds(Option/is_some(find(t, Hash/hash(x)))) =
+) -> Holds(Option/is_some(find(t, Hash/hash(x)))) =>
     match t
     | empty() => match Member/absent(i) end
     | leaf(k0, v0) =>
@@ -267,7 +267,7 @@ pub and found_in(
     i: Member()(x, keys_in(l)),
 ) -> {
     Holds(d <= digit(Hash/hash(x), at)),
-    Holds(Option/is_some(find(pick(l, digit(Hash/hash(x), at) - d), Hash/hash(x))))} =
+    Holds(Option/is_some(find(pick(l, digit(Hash/hash(x), at) - d), Hash/hash(x))))} =>
     match l
     | [] => match Member/absent(i) end
     | [h, ..r] =>
@@ -327,7 +327,7 @@ pub let missing(
     past: Holds(deeper(t, c)),
     k: Bytes,
     apart: Holds(digit(k, c) != digit(first(t), c)),
-) -> Eq()(find(t, k), Option/none()) =
+) -> Eq()(find(t, k), Option/none()) =>
     match t
     | empty() => Eq/refl()
     | leaf(k0, _) =>
@@ -372,7 +372,7 @@ pub and missing_in(
     under: Holds(c < at),
     k: Bytes,
     apart: Holds(digit(k, c) != digit(a, c)),
-) -> Eq()(find(pick(l, i), k), Option/none()) =
+) -> Eq()(find(pick(l, i), k), Option/none()) =>
     match l
     | [] => Eq/refl()
     | [h, ..r] =>
@@ -418,7 +418,7 @@ pub let pick_set(
     j: Nat,
 ) -> Eq()(
     pick(List/set(l, i, n), j),
-    match i == j | true => n | false => pick(l, j) end) =
+    match i == j | true => n | false => pick(l, j) end) =>
     match l
     | [] => match ok end
     | [_, ..r] =>
@@ -433,7 +433,7 @@ pub let pick_set(
     end;
 
 --- One for a twig that holds anything, none for an empty one.
-pub let present(@K: Type, @V: Type, h: Node(K, V)) -> Nat =
+pub let present(@K: Type, @V: Type, h: Node(K, V)) -> Nat =>
     match h | empty() => 0 | _ => 1 end;
 
 --- An update at `i` counts what it writes in place of what was there.
@@ -444,7 +444,7 @@ pub let count_set(
     i: Nat,
     @ok: Holds(i < List/length(l)),
     n: Node(K, V),
-) -> Eq()(count(List/set(l, i, n)) + present(pick(l, i)), count(l) + present(n)) =
+) -> Eq()(count(List/set(l, i, n)) + present(pick(l, i)), count(l) + present(n)) =>
     match l
     | [] => match ok end
     | [h, ..r] =>
@@ -474,7 +474,7 @@ pub let twig_at(
     a: Bytes,
     twigs: Twigs(l, at, d, a),
     i: Nat,
-) -> Twig(pick(l, i), at, d + i, a) =
+) -> Twig(pick(l, i), at, d + i, a) =>
     match l
     | [] => True/qed()
     | [_, ..r] =>
@@ -498,7 +498,7 @@ pub let twigs_set(
     @ok: Holds(i < List/length(l)),
     n: Node(K, V),
     twig: Twig(n, at, d + i, a),
-) -> Twigs(List/set(l, i, n), at, d, a) =
+) -> Twigs(List/set(l, i, n), at, d, a) =>
     match l
     | [] => match ok end
     | [_, ..r] =>
@@ -518,7 +518,7 @@ pub let vacant(
     d: Nat,
     a: Bytes,
     none: Holds(count(l) == 0),
-) -> Twigs(l, at, d, a) =
+) -> Twigs(l, at, d, a) =>
     match l
     | [] => True/qed()
     | [h, ..r] =>
@@ -540,7 +540,7 @@ pub let twig_moved(
     b: Bytes,
     twig: Twig(h, at, d, a),
     agree: (j: Nat, under: Holds(j < at)) -> Eq()(digit(a, j), digit(b, j)),
-) -> Twig(h, at, d, b) =
+) -> Twig(h, at, d, b) =>
     match h
     | empty() => True/qed()
     | leaf(_, _) =>
@@ -569,7 +569,7 @@ pub let moved(
     b: Bytes,
     twigs: Twigs(l, at, d, a),
     agree: (j: Nat, under: Holds(j < at)) -> Eq()(digit(a, j), digit(b, j)),
-) -> Twigs(l, at, d, b) =
+) -> Twigs(l, at, d, b) =>
     match l
     | [] => True/qed()
     | [h, ..r] =>
@@ -589,7 +589,7 @@ pub let first_agrees(
     some: Holds(0 < count(l)),
     j: Nat,
     under: Holds(j < at),
-) -> Eq()(digit(first_in(l), j), digit(a, j)) =
+) -> Eq()(digit(first_in(l), j), digit(a, j)) =>
     match l
     | [] => match some end
     | [h, ..r] =>
@@ -609,7 +609,7 @@ pub let twig_sound(
     d: Nat,
     a: Bytes,
     twig: Twig(h, at, d, a),
-) -> Sound(h) =
+) -> Sound(h) =>
     match h
     | empty() => True/qed()
     | leaf(_, _) | branch(_, _) => twig.sound
@@ -624,7 +624,7 @@ pub let Answers(
     t: Node(K, V),
     k: Bytes,
     x: Option(V),
-) -> Prop =
+) -> Prop =>
     (j: Bytes) -> Eq()(
         find(n, j),
         match k == j | true => x | false => find(t, j) end);
@@ -643,7 +643,7 @@ pub struct Stands(@K: Type, use Hash/Key(K), @V: Type, n: Node(K, V), t: Node(K,
 }
 
 --- Sixteen empty twigs.
-pub let empties(@K: Type, @V: Type) -> Vec(Node(K, V), 16) =
+pub let empties(@K: Type, @V: Type) -> Vec(Node(K, V), 16) =>
     Vec {
         list =
             [
@@ -671,7 +671,7 @@ pub let pick_vacant(
     l: List(Node(K, V)),
     none: Holds(count(l) == 0),
     i: Nat,
-) -> Eq()(pick(l, i), Node/empty()) =
+) -> Eq()(pick(l, i), Node/empty()) =>
     match l
     | [] => Eq/refl()
     | [h, ..r] =>
@@ -693,7 +693,7 @@ pub let placing(
     a: Bytes,
     full: Holds(filled(h)),
     placed: Placed(Sound(h), first(h), a, at, d, deeper(h, at)),
-) -> Twig(h, at, d, a) =
+) -> Twig(h, at, d, a) =>
     match h
     | empty() => match full end
     | leaf(_, _) | branch(_, _) => placed
@@ -710,7 +710,7 @@ pub let placed_of(
     a: Bytes,
     full: Holds(filled(h)),
     twig: Twig(h, at, d, a),
-) -> Placed(Sound(h), first(h), a, at, d, deeper(h, at)) =
+) -> Placed(Sound(h), first(h), a, at, d, deeper(h, at)) =>
     match h
     | empty() => match full end
     | leaf(_, _) | branch(_, _) => twig
@@ -729,7 +729,7 @@ pub let restand(
     full: Holds(filled(h)),
     twig: Twig(h, at, d, a),
     stands: Stands(n, h),
-) -> Twig(n, at, d, a) =
+) -> Twig(n, at, d, a) =>
     let old = placed_of(h, at, d, a, full, twig);
     let held = stands.kept(at, old.under);
     placing(
@@ -757,7 +757,7 @@ pub let branch_stands(
     n: Node(K, V),
     twig: Twig(n, at, i, first_in(tw.list)),
     full: Holds(filled(n)),
-) -> Stands(Node/branch(at, Vec/set(tw, i, n)), Node/branch(at, tw)) =
+) -> Stands(Node/branch(at, Vec/set(tw, i, n)), Node/branch(at, tw)) =>
     let l = tw.list;
     let a = first_in(l);
     let twigs = twigs_set(l, at, 0, a, sound.twigs, i, @proved(), n, twig);
@@ -820,7 +820,7 @@ pub let rebased(
     c: Nat,
     apart: Apart(k, f, c),
     agree: (j: Nat, within: Holds(j <= c)) -> Eq()(digit(a, j), digit(f, j)),
-) -> Apart(k, a, c) =
+) -> Apart(k, a, c) =>
     turned(a, k, c, reheaded(f, a, k, c, turned(k, f, c, apart), agree));
 
 --- Updating the twig `k`'s digit picks to a node that answers `x` at `k` gives a branch that answers `x` at `k`: an encoding with another digit there finds what it found before, and is not `k`.
@@ -837,7 +837,7 @@ pub let branch_answers(
     x: Option(V),
     at_i: Eq()(digit(k, at), i),
     answers: Answers(n, pick(tw.list, i), k, x),
-) -> Answers(Node/branch(at, Vec/set(tw, i, n)), Node/branch(at, tw), k, x) =
+) -> Answers(Node/branch(at, Vec/set(tw, i, n)), Node/branch(at, tw), k, x) =>
     (j) =>
         let l = tw.list;
         let dj = digit(j, at);
@@ -879,7 +879,7 @@ pub let leaf_answers(
     v: V,
     k: Bytes,
     same: Eq()(Hash/hash(k0), k),
-) -> Answers(Node/leaf(k0, v), Node/leaf(k0, v0), k, Option/some(v)) =
+) -> Answers(Node/leaf(k0, v), Node/leaf(k0, v0), k, Option/some(v)) =>
     (j) =>
         Eq/subst(
             (e: Bytes) =>
@@ -902,7 +902,7 @@ pub let vacant_answers(
     v: V,
     k: Bytes,
     same: Eq()(Hash/hash(key), k),
-) -> Answers(Node/leaf(key, v), Node/empty(), k, Option/some(v)) =
+) -> Answers(Node/leaf(key, v), Node/empty(), k, Option/some(v)) =>
     (j) =>
         Eq/subst(
             (e: Bytes) =>
@@ -923,7 +923,7 @@ pub let wedge_vec(
     k: Bytes,
     v: V,
     @small_d: Holds(d < 16),
-) -> Vec(Node(K, V), 16) =
+) -> Vec(Node(K, V), 16) =>
     let s = small(k, c);
     Vec/set(Vec/set(empties(), d, h), digit(k, c), Node/leaf(key, v));
 
@@ -938,7 +938,7 @@ pub let wedge(
     k: Bytes,
     v: V,
     @small_d: Holds(d < 16),
-) -> Node(K, V) =
+) -> Node(K, V) =>
     Node/branch(c, wedge_vec(c, d, h, key, k, v, @small_d));
 
 -- The twigs of a wedge, placed under `k`.
@@ -959,7 +959,7 @@ let wedge_twigs(
     apart: Apart(k, first(h), c),
     past: Holds(deeper(h, c)),
     at_d: Eq()(digit(first(h), c), d),
-) -> Twigs(wedge_vec(c, d, h, key, k, v).list, c, 0, k) =
+) -> Twigs(wedge_vec(c, d, h, key, k, v).list, c, 0, k) =>
     let s = small(k, c);
     let e = empties(@K, @V).list;
     let twig_h =
@@ -1012,7 +1012,7 @@ let wedge_count(
     full: Holds(filled(h)),
     apart: Apart(k, first(h), c),
     at_d: Eq()(digit(first(h), c), d),
-) -> Holds(1 < count(wedge_vec(c, d, h, key, k, v).list)) =
+) -> Holds(1 < count(wedge_vec(c, d, h, key, k, v).list)) =>
     let s = small(k, c);
     let e = empties(@K, @V).list;
     let one = List/set(e, d, h);
@@ -1065,7 +1065,7 @@ pub let wedge_first(
     at_d: Eq()(digit(first(h), c), d),
     j: Nat,
     under: Holds(j < c),
-) -> Eq()(digit(first(wedge(c, d, h, key, k, v)), j), digit(k, j)) =
+) -> Eq()(digit(first(wedge(c, d, h, key, k, v)), j), digit(k, j)) =>
     let twigs = wedge_twigs(c, d, h, key, k, v, @small_d, same, sound, full, apart, past, at_d);
     let two = wedge_count(c, d, h, key, k, v, @small_d, full, apart, at_d);
     first_agrees(wedge_vec(c, d, h, key, k, v).list, c, 0, k, twigs, proved(), j, under);
@@ -1088,7 +1088,7 @@ pub let wedged(
     apart: Apart(k, first(h), c),
     past: Holds(deeper(h, c)),
     at_d: Eq()(digit(first(h), c), d),
-) -> Sound(wedge(c, d, h, key, k, v)) =
+) -> Sound(wedge(c, d, h, key, k, v)) =>
     let l = wedge_vec(c, d, h, key, k, v).list;
     let twigs = wedge_twigs(c, d, h, key, k, v, @small_d, same, sound, full, apart, past, at_d);
     let two = wedge_count(c, d, h, key, k, v, @small_d, full, apart, at_d);
@@ -1122,7 +1122,7 @@ pub let wedge_answers(
     apart: Apart(k, first(h), c),
     past: Holds(deeper(h, c)),
     at_d: Eq()(digit(first(h), c), d),
-) -> Answers(wedge(c, d, h, key, k, v, @small_d), h, k, Option/some(v)) =
+) -> Answers(wedge(c, d, h, key, k, v, @small_d), h, k, Option/some(v)) =>
     (j) =>
         let s = small(k, c);
         let sj = small(j, c);
@@ -1205,7 +1205,7 @@ pub let first_filled(
     a: Bytes,
     twigs: Twigs(l, at, d, a),
     some: Holds(0 < count(l)),
-) -> {Holds(d <= digit(first_in(l), at)), Holds(filled(pick(l, digit(first_in(l), at) - d)))} =
+) -> {Holds(d <= digit(first_in(l), at)), Holds(filled(pick(l, digit(first_in(l), at) - d)))} =>
     match l
     | [] => match some end
     | [h, ..r] =>
@@ -1278,7 +1278,7 @@ pub let insert(
     v: V,
     @same: Eq()(Hash/hash(key), k),
     @sound: Sound(t),
-) -> Inserted(K, V, t, k, v) =
+) -> Inserted(K, V, t, k, v) =>
     match t
     | empty() => Inserted/vacant(Eq/refl())
     | leaf(k0, v0) =>
@@ -1602,7 +1602,7 @@ pub let insert(
     end;
 
 --- That nothing is left of `t` once the key encoding to `k` goes: `t` answers nothing at any other encoding.
-pub let Gone(@K: Type, use Hash/Key(K), @V: Type, t: Node(K, V), k: Bytes) -> Prop =
+pub let Gone(@K: Type, use Hash/Key(K), @V: Type, t: Node(K, V), k: Bytes) -> Prop =>
     (j: Bytes) -> Eq()(
         match k == j | true => Option/none() | false => find(t, j) end,
         Option/none());
@@ -1627,7 +1627,7 @@ let leaf_gone(
     v0: V,
     k: Bytes,
     same: Eq()(Hash/hash(k0), k),
-) -> Gone(Node/leaf(k0, v0), k) =
+) -> Gone(Node/leaf(k0, v0), k) =>
     (j) =>
         Eq/subst(
             (e: Bytes) =>
@@ -1650,7 +1650,7 @@ let leaf_absent(
     v0: V,
     k: Bytes,
     differs: Holds(Bool/not(Hash/hash(k0) == k)),
-) -> Answers(Node/leaf(k0, v0), Node/leaf(k0, v0), k, Option/none()) =
+) -> Answers(Node/leaf(k0, v0), Node/leaf(k0, v0), k, Option/none()) =>
     (j) =>
         match k == j
         | false => Eq/refl()
@@ -1671,7 +1671,7 @@ let leaf_absent(
         end;
 
 --- The first twig that holds anything; nothing where none does.
-pub let lone(@K: Type, @V: Type, l: List(Node(K, V))) -> Node(K, V) =
+pub let lone(@K: Type, @V: Type, l: List(Node(K, V))) -> Node(K, V) =>
     match l
     | [] => Node/empty()
     | [h, ..r] =>
@@ -1692,7 +1692,7 @@ pub let lone_at(
 ) -> {
     Eq()(pick(l, digit(first_in(l), at) - d), lone(l)),
     Holds(filled(lone(l))),
-    Eq()(first(lone(l)), first_in(l))} =
+    Eq()(first(lone(l)), first_in(l))} =>
     match l
     | [] => match some end
     | [h, ..r] =>
@@ -1740,7 +1740,7 @@ pub let only_one(
     full: Holds(filled(pick(l, f))),
     g: Nat,
     other: Holds(g != f),
-) -> Eq()(pick(l, g), Node/empty()) =
+) -> Eq()(pick(l, g), Node/empty()) =>
     match l
     | [] => Eq/refl()
     | [h, ..r] =>
@@ -1792,7 +1792,7 @@ pub let collapsed(
     twigs: Twigs(tw.list, at, 0, a),
     one: Holds(count(tw.list) == 1),
     j: Bytes,
-) -> Eq()(find(lone(tw.list), j), find(Node/branch(at, tw), j)) =
+) -> Eq()(find(lone(tw.list), j), find(Node/branch(at, tw), j)) =>
     let l = tw.list;
     let alone = lone_at(l, at, 0, a, twigs, proved());
     let f = digit(first_in(l), at);
@@ -1849,7 +1849,7 @@ pub let lone_stands(
     Sound(lone(tw.list)),
     Holds(filled(lone(tw.list))),
     Holds(deeper(lone(tw.list), at)),
-    (j: Nat, under: Holds(j < at)) -> Eq()(digit(first(lone(tw.list)), j), digit(b, j))} =
+    (j: Nat, under: Holds(j < at)) -> Eq()(digit(first(lone(tw.list)), j), digit(b, j))} =>
     let l = tw.list;
     let alone = lone_at(l, at, 0, a, twigs, proved());
     let f = digit(first_in(l), at);
@@ -1879,11 +1879,11 @@ let exactly_one(
     many: Holds(1 < c),
     most: Holds(p <= 1),
     few: Holds(x < 2),
-) -> Holds(x == 1) =
+) -> Holds(x == 1) =>
     proved();
 
 --- A twig is counted once at most.
-pub let present_small(@K: Type, @V: Type, h: Node(K, V)) -> Holds(present(h) <= 1) =
+pub let present_small(@K: Type, @V: Type, h: Node(K, V)) -> Holds(present(h) <= 1) =>
     match h | empty() | leaf(_, _) | branch(_, _) => True/qed() end;
 
 --- A sound branch one of whose twigs empties, two twigs still holding something, may stand where the branch did.
@@ -1897,7 +1897,7 @@ pub let branch_emptied(
     i: Nat,
     @ok: Holds(i < 16),
     many: Holds(1 < count(List/set(tw.list, i, Node/empty()))),
-) -> Stands(Node/branch(at, Vec/set(tw, i, Node/empty())), Node/branch(at, tw)) =
+) -> Stands(Node/branch(at, Vec/set(tw, i, Node/empty())), Node/branch(at, tw)) =>
     let l = tw.list;
     let a = first_in(l);
     let l2 = List/set(l, i, Node/empty());
@@ -1946,7 +1946,7 @@ pub let remove(
     t: Node(K, V),
     k: Bytes,
     @sound: Sound(t),
-) -> Removed(K, V, t, k) =
+) -> Removed(K, V, t, k) =>
     match t
     | empty() => Removed/absent(t, @Eq/refl(), (j) =>
         match k == j | true | false => Eq/refl() end)
@@ -2098,13 +2098,20 @@ pub let remove(
     end;
 
 --- Over the entries in the order of their keys, with `f(key, value, acc)`: each twig's in turn.
-pub let fold(@K: Type, @V: Type, @A: Type, t: Node(K, V), acc: A, f: (K, V, A) -> A) -> A =
+pub let fold(@K: Type, @V: Type, @A: Type, t: Node(K, V), acc: A, f: (K, V, A) -> A) -> A =>
     match t
     | empty() => acc
     | leaf(k, v) => f(k, v, acc)
     | branch(_, tw) => fold_in(tw.list, acc, f)
     end
-pub and fold_in(@K: Type, @V: Type, @A: Type, l: List(Node(K, V)), acc: A, f: (K, V, A) -> A) -> A =
+pub and fold_in(
+    @K: Type,
+    @V: Type,
+    @A: Type,
+    l: List(Node(K, V)),
+    acc: A,
+    f: (K, V, A) -> A,
+) -> A =>
     match l | [] => acc | [h, ..r] => fold_in(r, fold(h, acc, f), f) end;
 
 -- Keys are compared by their encodings, which `Hash/Key`'s law makes equality, so a map's own dictionary is all that equality of maps asks of its keys. A value is compared where the trie holds it, a leaf's own payload, so a family whose values are maps of itself descends through this as it does through a list's equality.
@@ -2116,7 +2123,7 @@ pub let same(
     use Eql(V),
     a: Node(K, V),
     b: Node(K, V),
-) -> Bool =
+) -> Bool =>
     match a
     | empty() => match b | empty() => true | _ => false end
     | leaf(k1, v1) =>
@@ -2137,7 +2144,7 @@ pub and same_in(
     use Eql(V),
     a: List(Node(K, V)),
     b: List(Node(K, V)),
-) -> Bool =
+) -> Bool =>
     match a
     | [] => match b | [] => true | [_, .._] => false end
     | [x, ..xs] =>
@@ -2154,7 +2161,7 @@ pub let eq_of_same(
     a: Node(K, V),
     b: Node(K, V),
     h: Holds(same(a, b)),
-) -> Eq()(a, b) =
+) -> Eq()(a, b) =>
     match a
     | empty() =>
         match b
@@ -2196,7 +2203,7 @@ pub and eq_of_same_in(
     a: List(Node(K, V)),
     b: List(Node(K, V)),
     h: Holds(same_in(a, b)),
-) -> Eq()(a, b) =
+) -> Eq()(a, b) =>
     match a
     | [] =>
         match b
@@ -2220,7 +2227,7 @@ pub let same_refl(
     @V: Type,
     use Eql(V),
     a: Node(K, V),
-) -> Holds(same(a, a)) =
+) -> Holds(same(a, a)) =>
     match a
     | empty() => True/qed()
     | leaf(k, v) =>
@@ -2234,14 +2241,14 @@ pub and same_refl_in(
     @V: Type,
     use Eql(V),
     a: List(Node(K, V)),
-) -> Holds(same_in(a, a)) =
+) -> Holds(same_in(a, a)) =>
     match a
     | [] => True/qed()
     | [x, ..xs] => Bool/and/both(same(x, x), same_in(xs, xs), same_refl(x), same_refl_in(xs))
     end;
 
 --- `f` on every value, the keys and the branches as they were.
-pub let map(@K: Type, @V: Type, @W: Type, t: Node(K, V), f: (V) -> W) -> Node(K, W) =
+pub let map(@K: Type, @V: Type, @W: Type, t: Node(K, V), f: (V) -> W) -> Node(K, W) =>
     match t
     | empty() => Node/empty()
     | leaf(k, v) => Node/leaf(k, f(v))
@@ -2250,13 +2257,13 @@ pub let map(@K: Type, @V: Type, @W: Type, t: Node(K, V), f: (V) -> W) -> Node(K,
     end;
 
 --- The keys under a node appended to `acc`, in order: [`keys`] by one walk that builds its answer from the back.
-pub let collect(@K: Type, @V: Type, t: Node(K, V), acc: List(K)) -> List(K) =
+pub let collect(@K: Type, @V: Type, t: Node(K, V), acc: List(K)) -> List(K) =>
     match t
     | empty() => acc
     | leaf(k, _) => [..acc, k]
     | branch(_, tw) => collect_in(tw.list, acc)
     end
-pub and collect_in(@K: Type, @V: Type, l: List(Node(K, V)), acc: List(K)) -> List(K) =
+pub and collect_in(@K: Type, @V: Type, l: List(Node(K, V)), acc: List(K)) -> List(K) =>
     match l | [] => acc | [h, ..r] => collect_in(r, collect(h, acc)) end;
 
 --- The walk leaves the node's keys behind what it began with.
@@ -2265,7 +2272,7 @@ pub let collected(
     @V: Type,
     t: Node(K, V),
     acc: List(K),
-) -> Eq()(collect(t, acc), [..acc, ..keys(t)]) =
+) -> Eq()(collect(t, acc), [..acc, ..keys(t)]) =>
     match t
     | empty() | leaf(_, _) => Eq/refl()
     | branch(_, tw) => collected_in(tw.list, acc)
@@ -2275,7 +2282,7 @@ pub and collected_in(
     @V: Type,
     l: List(Node(K, V)),
     acc: List(K),
-) -> Eq()(collect_in(l, acc), [..acc, ..keys_in(l)]) =
+) -> Eq()(collect_in(l, acc), [..acc, ..keys_in(l)]) =>
     match l
     | [] => Eq/refl()
     | [h, ..r] =>
@@ -2285,13 +2292,13 @@ pub and collected_in(
     end;
 
 --- The entries under a node, in the order of their keys.
-pub let entries(@K: Type, @V: Type, t: Node(K, V)) -> List({K, V}) =
+pub let entries(@K: Type, @V: Type, t: Node(K, V)) -> List({K, V}) =>
     match t
     | empty() => []
     | leaf(k, v) => [(k, v)]
     | branch(_, tw) => entries_in(tw.list)
     end
-pub and entries_in(@K: Type, @V: Type, l: List(Node(K, V))) -> List({K, V}) =
+pub and entries_in(@K: Type, @V: Type, l: List(Node(K, V))) -> List({K, V}) =>
     match l | [] => [] | [h, ..r] => [..entries(h), ..entries_in(r)] end;
 
 --- Appending each entry in turn leaves the node's entries behind what the walk began with.
@@ -2300,7 +2307,7 @@ pub let listed(
     @V: Type,
     t: Node(K, V),
     acc: List({K, V}),
-) -> Eq()(fold(t, acc, (k: K, v: V, a: List({K, V})) => [..a, (k, v)]), [..acc, ..entries(t)]) =
+) -> Eq()(fold(t, acc, (k: K, v: V, a: List({K, V})) => [..a, (k, v)]), [..acc, ..entries(t)]) =>
     match t
     | empty() | leaf(_, _) => Eq/refl()
     | branch(_, tw) => listed_in(tw.list, acc)
@@ -2312,7 +2319,7 @@ pub and listed_in(
     acc: List({K, V}),
 ) -> Eq()(
     fold_in(l, acc, (k: K, v: V, a: List({K, V})) => [..a, (k, v)]),
-    [..acc, ..entries_in(l)]) =
+    [..acc, ..entries_in(l)]) =>
     match l
     | [] => Eq/refl()
     | [h, ..r] =>
@@ -2329,7 +2336,7 @@ pub let map_first_in(
     @W: Type,
     l: List(Node(K, V)),
     f: (V) -> W,
-) -> Eq()(first_in(List/map(l, (c: Node(K, V)) => map(c, f))), first_in(l)) =
+) -> Eq()(first_in(List/map(l, (c: Node(K, V)) => map(c, f))), first_in(l)) =>
     match l
     | [] => Eq/refl()
     | [h, ..r] =>
@@ -2348,7 +2355,7 @@ pub let map_first(
     @W: Type,
     t: Node(K, V),
     f: (V) -> W,
-) -> Eq()(first(map(t, f)), first(t)) =
+) -> Eq()(first(map(t, f)), first(t)) =>
     match t
     | empty() | leaf(_, _) => Eq/refl()
     | branch(_, tw) => map_first_in(tw.list, f)
@@ -2361,7 +2368,7 @@ let map_count(
     @W: Type,
     l: List(Node(K, V)),
     f: (V) -> W,
-) -> Eq()(count(List/map(l, (c: Node(K, V)) => map(c, f))), count(l)) =
+) -> Eq()(count(List/map(l, (c: Node(K, V)) => map(c, f))), count(l)) =>
     match l
     | [] => Eq/refl()
     | [h, ..r] =>
@@ -2380,7 +2387,7 @@ pub let mapped(
     t: Node(K, V),
     f: (V) -> W,
     sound: Sound(t),
-) -> Sound(map(t, f)) =
+) -> Sound(map(t, f)) =>
     match t
     | empty() | leaf(_, _) => True/qed()
     | branch(at, tw) =>
@@ -2404,7 +2411,7 @@ pub and mapped_in(
     a: Bytes,
     f: (V) -> W,
     twigs: Twigs(l, at, d, a),
-) -> Twigs(List/map(l, (c: Node(K, V)) => map(c, f)), at, d, a) =
+) -> Twigs(List/map(l, (c: Node(K, V)) => map(c, f)), at, d, a) =>
     match l
     | [] => True/qed()
     | [h, ..r] =>
@@ -2440,7 +2447,7 @@ pub let mapped_find(
     t: Node(K, V),
     f: (V) -> W,
     k: Bytes,
-) -> Eq()(find(map(t, f), k), Option/map(find(t, k), f)) =
+) -> Eq()(find(map(t, f), k), Option/map(find(t, k), f)) =>
     match t
     | empty() => Eq/refl()
     | leaf(k0, _) =>
@@ -2462,7 +2469,7 @@ pub let twig_digit(
     twig: Twig(h, at, d, a),
     x: K,
     i: Member()(x, keys(h)),
-) -> Eq()(digit(Hash/hash(x), at), d) =
+) -> Eq()(digit(Hash/hash(x), at), d) =>
     match h
     | empty() => match Member/absent(i) end
     | leaf(_, _) => Eq/trans(within(h, twig.sound, at, twig.under, x, i, at, proved()), twig.placed)
@@ -2484,7 +2491,7 @@ pub let twig_agree(
     i: Member()(x, keys(h)),
     j: Nat,
     under: Holds(j < at),
-) -> Eq()(digit(Hash/hash(x), j), digit(a, j)) =
+) -> Eq()(digit(Hash/hash(x), j), digit(a, j)) =>
     match h
     | empty() => match Member/absent(i) end
     | leaf(_, _) =>
@@ -2519,7 +2526,7 @@ pub let across(
     i: Member()(x, keys(h)),
     y: K,
     j: Member()(y, keys_in(r)),
-) -> Eq()(Bytes/ord(Hash/hash(x), Hash/hash(y)), Ordering/lt()) =
+) -> Eq()(Bytes/ord(Hash/hash(x), Hash/hash(y)), Ordering/lt()) =>
     let at_x = twig_digit(h, at, d, a, twig, x, i);
     let at_y = found_in(r, at, d + 1, a, twigs, y, j).0;
     before(
@@ -2542,7 +2549,7 @@ pub let ascending(
     @V: Type,
     t: Node(K, V),
     sound: Sound(t),
-) -> Pairwise(Ord/lt_by((a: K, b: K) => Ord/ord(a, b)))(keys(t)) =
+) -> Pairwise(Ord/lt_by((a: K, b: K) => Ord/ord(a, b)))(keys(t)) =>
     match t
     | empty() => Pairwise/empty()
     | leaf(_, _) => Pairwise/cons((_, i) => match Member/absent(i) end, Pairwise/empty())
@@ -2558,7 +2565,7 @@ pub and ascending_in(
     d: Nat,
     a: Bytes,
     twigs: Twigs(l, at, d, a),
-) -> Pairwise(Ord/lt_by((a: K, b: K) => Ord/ord(a, b)))(keys_in(l)) =
+) -> Pairwise(Ord/lt_by((a: K, b: K) => Ord/ord(a, b)))(keys_in(l)) =>
     match l
     | [] => Pairwise/empty()
     | [h, ..r] =>
@@ -2577,13 +2584,13 @@ pub and ascending_in(
     end;
 
 --- The entry of the least key, the first twig's that holds any; none of an empty node.
-pub let least(@K: Type, @V: Type, t: Node(K, V)) -> Option({K, V}) =
+pub let least(@K: Type, @V: Type, t: Node(K, V)) -> Option({K, V}) =>
     match t
     | empty() => Option/none()
     | leaf(k, v) => Option/some((k, v))
     | branch(_, tw) => least_in(tw.list)
     end
-pub and least_in(@K: Type, @V: Type, l: List(Node(K, V))) -> Option({K, V}) =
+pub and least_in(@K: Type, @V: Type, l: List(Node(K, V))) -> Option({K, V}) =>
     match l
     | [] => Option/none()
     | [h, ..r] =>
@@ -2591,13 +2598,13 @@ pub and least_in(@K: Type, @V: Type, l: List(Node(K, V))) -> Option({K, V}) =
     end;
 
 --- The entry of the greatest key, the last twig's that holds any; none of an empty node.
-pub let greatest(@K: Type, @V: Type, t: Node(K, V)) -> Option({K, V}) =
+pub let greatest(@K: Type, @V: Type, t: Node(K, V)) -> Option({K, V}) =>
     match t
     | empty() => Option/none()
     | leaf(k, v) => Option/some((k, v))
     | branch(_, tw) => greatest_in(tw.list)
     end
-pub and greatest_in(@K: Type, @V: Type, l: List(Node(K, V))) -> Option({K, V}) =
+pub and greatest_in(@K: Type, @V: Type, l: List(Node(K, V))) -> Option({K, V}) =>
     match l
     | [] => Option/none()
     | [h, ..r] =>
@@ -2614,7 +2621,7 @@ pub let held(
     t: Node(K, V),
     x: K,
     i: Member()(x, keys(t)),
-) -> {Holds(Option/is_some(least(t))), Holds(Option/is_some(greatest(t)))} =
+) -> {Holds(Option/is_some(least(t))), Holds(Option/is_some(greatest(t)))} =>
     match t
     | empty() => match Member/absent(i) end
     | leaf(_, _) => (True/qed(), True/qed())
@@ -2626,7 +2633,7 @@ pub and held_in(
     l: List(Node(K, V)),
     x: K,
     i: Member()(x, keys_in(l)),
-) -> {Holds(Option/is_some(least_in(l))), Holds(Option/is_some(greatest_in(l)))} =
+) -> {Holds(Option/is_some(least_in(l))), Holds(Option/is_some(greatest_in(l)))} =>
     match l
     | [] => match Member/absent(i) end
     | [h, ..r] =>
@@ -2659,7 +2666,7 @@ pub let least_among(
 ) -> match least(t)
 | none() => True
 | some(e) => Member()(e.0, keys(t))
-end =
+end =>
     match t
     | empty() => True/qed()
     | leaf(_, _) => Member/here()
@@ -2672,7 +2679,7 @@ pub and least_among_in(
 ) -> match least_in(l)
 | none() => True
 | some(e) => Member()(e.0, keys_in(l))
-end =
+end =>
     match l
     | [] => True/qed()
     | [h, ..r] =>
@@ -2694,7 +2701,7 @@ pub let greatest_among(
 ) -> match greatest(t)
 | none() => True
 | some(e) => Member()(e.0, keys(t))
-end =
+end =>
     match t
     | empty() => True/qed()
     | leaf(_, _) => Member/here()
@@ -2707,7 +2714,7 @@ pub and greatest_among_in(
 ) -> match greatest_in(l)
 | none() => True
 | some(e) => Member()(e.0, keys_in(l))
-end =
+end =>
     match l
     | [] => True/qed()
     | [h, ..r] =>
@@ -2726,7 +2733,7 @@ let le_self(
     @K: Type,
     use Hash/Key(K),
     k: K,
-) -> Holds(Ord/le_by((a: K, b: K) => Ord/ord(a, b))(k, k)) =
+) -> Holds(Ord/le_by((a: K, b: K) => Ord/ord(a, b))(k, k)) =>
     Eq/subst((r: Ordering) => Holds(Ordering/is_le(r)), Eq/sym(Ord/refl(k)), True/qed());
 
 -- A key before another by their encodings is at or below it.
@@ -2736,7 +2743,7 @@ let le_of_before(
     x: K,
     y: K,
     lt: Eq()(Bytes/ord(Hash/hash(x), Hash/hash(y)), Ordering/lt()),
-) -> Holds(Ord/le_by((a: K, b: K) => Ord/ord(a, b))(x, y)) =
+) -> Holds(Ord/le_by((a: K, b: K) => Ord/ord(a, b))(x, y)) =>
     Eq/subst(
         (r: Ordering) => Holds(Ordering/is_le(r)),
         Eq/sym(Eq/trans(Hash/Key/mono(x, y), lt)),
@@ -2754,7 +2761,7 @@ pub let least_below(
 ) -> match least(t)
 | none() => False
 | some(e) => Holds(Ord/le_by((a: K, b: K) => Ord/ord(a, b))(e.0, x))
-end =
+end =>
     match t
     | empty() => match Member/absent(i) end
     | leaf(k, _) =>
@@ -2782,7 +2789,7 @@ pub and least_below_in(
 ) -> match least_in(l)
 | none() => False
 | some(e) => Holds(Ord/le_by((a: K, b: K) => Ord/ord(a, b))(e.0, x))
-end =
+end =>
     match l
     | [] => match Member/absent(i) end
     | [h, ..r] =>
@@ -2818,7 +2825,7 @@ pub let greatest_above(
 ) -> match greatest(t)
 | none() => False
 | some(e) => Holds(Ord/le_by((a: K, b: K) => Ord/ord(a, b))(x, e.0))
-end =
+end =>
     match t
     | empty() => match Member/absent(i) end
     | leaf(k, _) =>
@@ -2846,7 +2853,7 @@ pub and greatest_above_in(
 ) -> match greatest_in(l)
 | none() => False
 | some(e) => Holds(Ord/le_by((a: K, b: K) => Ord/ord(a, b))(x, e.0))
-end =
+end =>
     match l
     | [] => match Member/absent(i) end
     | [h, ..r] =>
@@ -2891,7 +2898,7 @@ pub let folded(
     k: Bytes,
     f: (Option(V), R) -> R,
     r: R,
-) -> R =
+) -> R =>
     match l | [] => r | [h, ..t] => folded(t, k, f, f(find(h, k), r)) end;
 
 --- A twig standing at a digit other than `k`'s at the branch's position finds nothing at `k`.
@@ -2906,7 +2913,7 @@ pub let twig_miss(
     twig: Twig(h, at, d, a),
     k: Bytes,
     off: Holds(digit(k, at) != d),
-) -> Eq()(find(h, k), Option/none()) =
+) -> Eq()(find(h, k), Option/none()) =>
     match h
     | empty() => Eq/refl()
     | leaf(_, _) =>
@@ -2943,7 +2950,7 @@ pub let all_miss(
     f: (Option(V), R) -> R,
     keeps: (r: R) -> Eq()(f(Option/none(), r), r),
     r: R,
-) -> Eq()(folded(l, k, f, r), r) =
+) -> Eq()(folded(l, k, f, r), r) =>
     match l
     | [] => Eq/refl()
     | [h, ..t] =>
@@ -2959,7 +2966,7 @@ pub let all_miss(
     end;
 
 -- A number at or past another and not it is past it.
-let strictly(a: Nat, b: Nat, le: Holds(a <= b), other: Holds(b != a)) -> Holds(a < b) =
+let strictly(a: Nat, b: Nat, le: Holds(a <= b), other: Holds(b != a)) -> Holds(a < b) =>
     proved();
 
 --- What placed twigs answer at `k` asked in turn, by a combination that `none` leaves as it was, is what the twig at `k`'s digit answers, combined with what came before them all.
@@ -2978,7 +2985,7 @@ pub let either_in(
     f: (Option(V), R) -> R,
     keeps: (r: R) -> Eq()(f(Option/none(), r), r),
     r: R,
-) -> Eq()(folded(l, k, f, r), f(find(pick(l, digit(k, at) - d), k), r)) =
+) -> Eq()(folded(l, k, f, r), f(find(pick(l, digit(k, at) - d), k), r)) =>
     match l
     | [] => Eq/sym(keeps(r))
     | [h, ..t] =>
@@ -3023,7 +3030,7 @@ pub let entry_key(
     t: Node(K, V),
     e: {K, V},
     i: Member()(e, entries(t)),
-) -> Member()(e.0, keys(t)) =
+) -> Member()(e.0, keys(t)) =>
     match t
     | empty() => match Member/absent(i) end
     | leaf(_, _) =>
@@ -3039,7 +3046,7 @@ pub and entry_key_in(
     l: List(Node(K, V)),
     e: {K, V},
     i: Member()(e, entries_in(l)),
-) -> Member()(e.0, keys_in(l)) =
+) -> Member()(e.0, keys_in(l)) =>
     match l
     | [] => match Member/absent(i) end
     | [h, ..r] =>
@@ -3059,7 +3066,7 @@ pub let entry_found(
     sound: Sound(t),
     e: {K, V},
     i: Member()(e, entries(t)),
-) -> Eq()(find(t, Hash/hash(e.0)), Option/some(e.1)) =
+) -> Eq()(find(t, Hash/hash(e.0)), Option/some(e.1)) =>
     match t
     | empty() => match Member/absent(i) end
     | leaf(k, v) =>
@@ -3089,7 +3096,7 @@ pub and entry_found_in(
     twigs: Twigs(l, at, d, a),
     e: {K, V},
     i: Member()(e, entries_in(l)),
-) -> Eq()(find(pick(l, digit(Hash/hash(e.0), at) - d), Hash/hash(e.0)), Option/some(e.1)) =
+) -> Eq()(find(pick(l, digit(Hash/hash(e.0), at) - d), Hash/hash(e.0)), Option/some(e.1)) =>
     match l
     | [] => match Member/absent(i) end
     | [h, ..r] =>
@@ -3121,7 +3128,7 @@ pub let entry_lift(
     i: Nat,
     e: {K, V},
     m: Member()(e, entries(pick(l, i))),
-) -> Member()(e, entries_in(l)) =
+) -> Member()(e, entries_in(l)) =>
     match l
     | [] => match Member/absent(m) end
     | [h, ..r] =>
@@ -3140,7 +3147,7 @@ pub let found_entry(
     x: K,
     v: V,
     h: Eq()(find(t, Hash/hash(x)), Option/some(v)),
-) -> Member()((x, v), entries(t)) =
+) -> Member()((x, v), entries(t)) =>
     match t
     | empty() =>
         match Eq/subst((m: Option(V)) => Holds(Option/is_none(m)), h, True/qed())
@@ -3181,7 +3188,7 @@ let found_at(
     o: Option(V),
     e: Eq()(find(t, Hash/hash(x)), o),
     f: Holds(Option/is_some(o)),
-) -> Member()(x, keys(t)) =
+) -> Member()(x, keys(t)) =>
     match o
     | none() => match f end
     | some(v) => entry_key(t, (x, v), found_entry(t, x, v, e))
@@ -3195,7 +3202,7 @@ pub let found_key(
     t: Node(K, V),
     x: K,
     f: Holds(Option/is_some(find(t, Hash/hash(x)))),
-) -> Member()(x, keys(t)) =
+) -> Member()(x, keys(t)) =>
     found_at(t, x, find(t, Hash/hash(x)), Eq/refl(), f);
 
 --- A sound node that holds anything holds a key, which `then` is handed.
@@ -3208,7 +3215,7 @@ pub let node_key(
     sound: Sound(t),
     full: Holds(filled(t)),
     then: (x: K, i: Member()(x, keys(t))) -> P,
-) -> P =
+) -> P =>
     match t
     | empty() => match full end
     | leaf(k, _) => then(k, Member/here())
@@ -3228,7 +3235,7 @@ pub and one_key(
     twigs: Twigs(l, at, d, a),
     some: Holds(0 < count(l)),
     then: (x: K, i: Member()(x, keys_in(l)), at_x: Holds(d <= digit(Hash/hash(x), at))) -> P,
-) -> P =
+) -> P =>
     match l
     | [] => match some end
     | [h, ..r] =>
@@ -3279,7 +3286,7 @@ pub let two_keys(
         i: Member()(x, keys_in(l)),
         j: Member()(y, keys_in(l)),
         apart: Holds(digit(Hash/hash(x), at) != digit(Hash/hash(y), at))) -> P,
-) -> P =
+) -> P =>
     match l
     | [] => match many end
     | [h, ..r] =>
@@ -3348,7 +3355,7 @@ let leaf_code(
     v: V,
     x: K,
     f: Holds(Option/is_some(find(Node/leaf(k, v), Hash/hash(x)))),
-) -> Eq()(Hash/hash(x), Hash/hash(k)) =
+) -> Eq()(Hash/hash(x), Hash/hash(k)) =>
     match Hash/hash(k) == Hash/hash(x)
     | true => Eq/sym(proved())
     | false => match f end
@@ -3368,7 +3375,7 @@ let not_past(
     ix: Member()(x, keys(n)),
     iy: Member()(y, keys(n)),
     apart: Holds(digit(Hash/hash(x), c) != digit(Hash/hash(y), c)),
-) -> False =
+) -> False =>
     let ex = within(n, sound, c, past, x, ix, c, proved());
     let ey = within(n, sound, c, past, y, iy, c, proved());
     Eq/subst((v: Nat) => Holds(v != digit(Hash/hash(y), c)), Eq/trans(ex, Eq/sym(ey)), apart);
@@ -3383,7 +3390,7 @@ let carried_find(
     x: K,
     same: Eq()(find(a, Hash/hash(x)), find(b, Hash/hash(x))),
     f: Holds(Option/is_some(find(a, Hash/hash(x)))),
-) -> Holds(Option/is_some(find(b, Hash/hash(x)))) =
+) -> Holds(Option/is_some(find(b, Hash/hash(x)))) =>
     Eq/subst((o: Option(V)) => Holds(Option/is_some(o)), same, f);
 
 -- A sound branch's position is the first its keys differ at, which the keys alone decide, so two such branches stand at one position, and a key's twig there finds what the branch does; an empty node finds nothing, a leaf one key, and a branch two keys at least.
@@ -3397,7 +3404,7 @@ pub let canonical(
     s1: Sound(n1),
     s2: Sound(n2),
     same: (x: K) -> Eq()(find(n1, Hash/hash(x)), find(n2, Hash/hash(x))),
-) -> Eq()(n1, n2) =
+) -> Eq()(n1, n2) =>
     match n1
     | empty() =>
         match n2
@@ -3604,7 +3611,7 @@ pub and canonical_in(
     alike: (x: K, from: Holds(d <= digit(Hash/hash(x), at))) -> Eq()(
         find(pick(l1, digit(Hash/hash(x), at) - d), Hash/hash(x)),
         find(pick(l2, digit(Hash/hash(x), at) - d), Hash/hash(x))),
-) -> Eq()(l1, l2) =
+) -> Eq()(l1, l2) =>
     match l1
     | [] => match l2 | [] => Eq/refl() end
     | [h1, ..r1] =>

@@ -1843,7 +1843,7 @@ impl Displayed<'_> {
                 f.text("`!` outside a function");
                 f.stating("`!` sequences in a function's body, a test's body and a program's final term included");
                 f.stating("a top-level value and a witness's value hold none");
-                f.stating("write the value as a function, `let name() -> T = …;`, and call it");
+                f.stating("write the value as a function, `let name() -> T => …;`, and call it");
             }
             Error::OperatorUndefined { symbol, type_ } => {
                 f.text("undefined operator");
@@ -2053,7 +2053,7 @@ impl Displayed<'_> {
                 f.stating("a `use` member holds a place, typed by the expected function type");
                 f.stating("this lambda has none");
                 f.stating(
-                    "write the function as a `let` with a telescope, `let f(use C(A), ...) -> ... = ...`",
+                    "write the function as a `let` with a telescope, `let f(use C(A), ...) -> ... => ...`",
                 );
             }
             Error::HiddenMemberOutOfOrder {
@@ -2327,7 +2327,7 @@ impl Displayed<'_> {
                             "this one's type is {}",
                             Code(type_.spelled(spelling))
                         ));
-                        f.stating("a description of a test is declared, `test name = ...;`, and run by `curios test`");
+                        f.stating("a description of a test is declared, `test name => ...;`, and run by `curios test`");
                     }
                     Some(Need::Embedding(diagnosis)) => {
                         let source = diagnosis.source.spelled(spelling).to_string();

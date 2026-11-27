@@ -39,7 +39,7 @@ fn chained(name: &str, body: &str) -> Temporary {
     write(
         &root,
         "mid/lib.crs",
-        "use /std/{Nat};\nuse /base/{x};\n\npub let g(n: Nat) -> Nat = x(n);\n",
+        "use /std/{Nat};\nuse /base/{x};\n\npub let g(n: Nat) -> Nat => x(n);\n",
     );
     write(&root, "top/curios.toml", &manifest("top", Some("mid")));
     write(

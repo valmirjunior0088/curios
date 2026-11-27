@@ -3,7 +3,7 @@ use /std/{Str, Bool, Test};
 use /std/Str/{Form};
 
 -- A base and a combining mark are one text with the character that composes them under either canonical form: the one character under `nfc()`, the two under `nfd()`.
-test a_precomposed_and_a_decomposed_spelling_are_one_text_in_either_canonical_form =
+test a_precomposed_and_a_decomposed_spelling_are_one_text_in_either_canonical_form =>
     Test/all([
         Test/equal(Str/normalize("e\u{301}", Form/nfc()), "\u{E9}"),
         Test/equal(Str/normalize("\u{E9}", Form/nfc()), "\u{E9}"),
@@ -11,7 +11,7 @@ test a_precomposed_and_a_decomposed_spelling_are_one_text_in_either_canonical_fo
         Test/equal(Str/normalize("e\u{301}", Form/nfd()), "e\u{301}")]);
 
 -- A Hangul syllable decomposes into its leading consonant, its vowel and its trailing consonant by arithmetic, and the three compose back to it, as the two of a syllable with no trailing consonant do.
-test a_hangul_syllable_decomposes_into_its_jamo_and_composes_back =
+test a_hangul_syllable_decomposes_into_its_jamo_and_composes_back =>
     Test/all([
         Test/equal(Str/normalize("\u{D55C}", Form/nfd()), "\u{1112}\u{1161}\u{11AB}"),
         Test/equal(Str/normalize("\u{1112}\u{1161}\u{11AB}", Form/nfc()), "\u{D55C}"),
@@ -19,14 +19,14 @@ test a_hangul_syllable_decomposes_into_its_jamo_and_composes_back =
         Test/equal(Str/normalize("\u{AC00}", Form/nfd()), "\u{1100}\u{1161}")]);
 
 -- Marks after a base are put in the order of their combining classes, a dot below (220) before an acute accent (230) however they were written, and the base composes with the first mark it can.
-test marks_are_put_in_canonical_order_and_the_first_that_can_composes =
+test marks_are_put_in_canonical_order_and_the_first_that_can_composes =>
     Test/all([
         Test/equal(Str/normalize("a\u{301}\u{323}", Form/nfd()), "a\u{323}\u{301}"),
         Test/equal(Str/normalize("a\u{323}\u{301}", Form/nfd()), "a\u{323}\u{301}"),
         Test/equal(Str/normalize("a\u{301}\u{323}", Form/nfc()), "\u{1EA1}\u{301}")]);
 
 -- A compatibility character becomes what it stands for under the compatibility forms alone, however many characters that is, and a character whose composite is excluded never composes back.
-test the_compatibility_forms_replace_what_the_canonical_ones_keep =
+test the_compatibility_forms_replace_what_the_canonical_ones_keep =>
     Test/all([
         Test/equal(Str/normalize("\u{FB01}", Form/nfkc()), "fi"),
         Test/equal(Str/normalize("\u{FB01}", Form/nfc()), "\u{FB01}"),
@@ -35,7 +35,7 @@ test the_compatibility_forms_replace_what_the_canonical_ones_keep =
         Test/equal(Str/normalize("\u{2126}", Form/nfc()), "\u{3A9}")]);
 
 -- A text normalizing to itself is in that form, and one that changes is not: plain ASCII is in every form, and a decomposed accent in the decomposed ones alone.
-test a_text_is_normalized_where_normalizing_changes_nothing =
+test a_text_is_normalized_where_normalizing_changes_nothing =>
     Test/all([
         Test/assert("ASCII is in NFKC", Str/is_normalized("plain", Form/nfkc())),
         Test/assert("a decomposed accent is in NFD", Str/is_normalized("e\u{301}", Form/nfd())),

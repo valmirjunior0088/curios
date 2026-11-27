@@ -34,7 +34,7 @@ fn ended(source: &str, files: &[(&str, &str)]) -> (u8, Vec<u8>, Vec<u8>) {
 /// A program over a file it reads and prints the length of, closed by a description that may fail.
 const READS_A_FILE: &str = r#"
     use /std/{Nat, Bytes, Io, Try, File, Path, print};
-    let main() -> Try(Io, Io/Error, {}) =
+    let main() -> Try(Io, Io/Error, {}) =>
         let _ = print("before|")!;
         let held = File/read_all(Path/of_str("notes.txt"))!;
         print(Nat/to_str(Bytes/length(held)));
@@ -68,7 +68,7 @@ fn a_failure_of_the_programs_own_type_is_written_as_that_type_is_shown() {
         | broke()
         end
         satisfy Show(Broke) {
-            show(_) = "it broke",
+            show(_) => "it broke",
         }
         let main: Try(Io, Broke, {}) = Try/raise(Broke/broke());
         main
@@ -89,7 +89,7 @@ fn a_test_closes_no_program_and_is_told_where_one_is_declared() {
 
     assert!(
         error.contains(
-            "this one's type is `Test({})`\n│  a description of a test is declared, `test name = ...;`, and run by `curios test`"
+            "this one's type is `Test({})`\n│  a description of a test is declared, `test name => ...;`, and run by `curios test`"
         ),
         "{error}"
     );
@@ -102,11 +102,11 @@ fn the_arms_of_a_match_that_closes_a_program_are_each_executed() {
         let source = fill!(
             r#"
             use /std/{Nat, Str, Io, Try, File, Path, print};
-            let read(name: Str) -> Try(Io, Io/Error, {}) =
+            let read(name: Str) -> Try(Io, Io/Error, {}) =>
                 let _ = File/read_all(Path/of_str(name))!;
                 print("read");
             let choice: Nat = ${choice};
-            let named() -> Try(Io, Io/Error, {}) =
+            let named() -> Try(Io, Io/Error, {}) =>
                 let name = Io/pure("notes.txt")!;
                 read(name);
             match choice
@@ -129,7 +129,7 @@ fn a_step_that_may_fail_is_refused_in_an_io_function() {
     let error = typecheck(
         r#"
         use /std/{Io, Try, File, Path};
-        let step() -> Io({}) =
+        let step() -> Io({}) =>
             let _ = File/read_all(Path/of_str("notes.txt"))!;
             Io/pure(());
         step()
@@ -186,7 +186,7 @@ fn a_description_that_yields_a_value_closes_no_program() {
 #[test]
 fn a_program_that_closes_with_a_pure_description_ends_with_what_its_actions_did() {
     let (code, output, errors) = ended(
-        "use /std/{Io, print};\nlet main() -> Io({}) = let _ = print(\"done\")!; Io/pure(());\nmain()\n",
+        "use /std/{Io, print};\nlet main() -> Io({}) => let _ = print(\"done\")!; Io/pure(());\nmain()\n",
         &[],
     );
 
@@ -209,7 +209,7 @@ fn a_program_reads_a_number_and_prints_its_double() {
     const DOUBLES: &str = r#"
         use /std/{Nat, Str, Option, Io, Try, print, Proc};
         use /std/Io/{Reader};
-        let main() -> Try(Io, Io/Error, {}) =
+        let main() -> Try(Io, Io/Error, {}) =>
             let input = Reader/new(Proc/stdin)!;
             let line = Reader/line_text(input)!;
             match Option/bind(line, Nat/of_str)

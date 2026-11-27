@@ -7,14 +7,14 @@ use /std/Bool/{True, Holds};
 --- A power of a power is the power to the product of the exponents.
 ---
 --- Conversion decides a sum in an exponent but not a product: with `pow(x, 2) = x * x`, this law would give a power of a product, which at two literals would factor a base.
-pub let of_pow(x: Nat, a: Nat, b: Nat) -> Eq()(pow(pow(x, a), b), pow(x, a * b)) =
+pub let of_pow(x: Nat, a: Nat, b: Nat) -> Eq()(pow(pow(x, a), b), pow(x, a * b)) =>
     match b
     | 0 => Eq/refl()
     | bp + 1 => Eq/cong((t: Nat) => pow(x, a) * t, of_pow(x, a, bp))
     end;
 
 --- A power of a product is the product of the powers.
-pub let of_mul(x: Nat, y: Nat, a: Nat) -> Eq()(pow(x * y, a), pow(x, a) * pow(y, a)) =
+pub let of_mul(x: Nat, y: Nat, a: Nat) -> Eq()(pow(x * y, a), pow(x, a) * pow(y, a)) =>
     match a
     | 0 => Eq/refl()
     | ap + 1 => Eq/cong((t: Nat) => x * y * t, of_mul(x, y, ap))
@@ -23,7 +23,7 @@ pub let of_mul(x: Nat, y: Nat, a: Nat) -> Eq()(pow(x * y, a), pow(x, a) * pow(y,
 --- A power of a positive base is positive.
 ---
 --- Conversion sees that a power is at least one where it sees the base is, as in `pow(2, k)` or `pow(x + 1, k)`, but reads no hypothesis: under one, a proof takes this lemma.
-pub let positive(x: Nat, k: Nat, p: Holds(0 < x)) -> Holds(0 < pow(x, k)) =
+pub let positive(x: Nat, k: Nat, p: Holds(0 < x)) -> Holds(0 < pow(x, k)) =>
     match k
     | 0 => True/qed()
     | kp + 1 =>

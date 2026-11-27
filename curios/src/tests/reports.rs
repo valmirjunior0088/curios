@@ -41,21 +41,21 @@ fn a_witness_refusal_is_located_at_its_concept_application() {
     let telescoped = error(
         r#"
         use /std/{Str, Show, List};
-        satisfy (@A : Type, use Show(A)) => Show(List(A)) {
-            show(v) = "l"
+        satisfy (@A : Type, use Show(A)) -> Show(List(A)) {
+            show(v) => "l"
         }
         /std/Io/pure(())
         "#,
     );
     assert!(telescoped.contains("orphan witness"), "{telescoped}");
-    assert!(telescoped.contains("=> Show(List(A)) {"), "{telescoped}");
+    assert!(telescoped.contains("-> Show(List(A)) {"), "{telescoped}");
 
     // The nullary form, whose declared type *is* the application.
     let bare = error(
         r#"
         use /std/{Str, Show, Nat};
         satisfy Show(Nat) {
-            show(n) = "n"
+            show(n) => "n"
         }
         /std/Io/pure(())
         "#,
@@ -69,15 +69,15 @@ fn a_witness_refusal_is_located_at_its_concept_application() {
 fn an_operations_bound_is_reported_at_the_operation_inside_a_chain() {
     for (source, place) in [
         (
-            "use /std/{Bool, Nat};\nlet f(x: Nat) -> Bool =\n    10 / x > 1;\n/std/print(\"no\")\n",
+            "use /std/{Bool, Nat};\nlet f(x: Nat) -> Bool =>\n    10 / x > 1;\n/std/print(\"no\")\n",
             "│  3 │     10 / x > 1;\n│    │     ^^^^^^",
         ),
         (
-            "use /std/{Bool, Nat};\nlet f(x: Nat) -> Bool =\n    1 < 10 / x;\n/std/print(\"no\")\n",
+            "use /std/{Bool, Nat};\nlet f(x: Nat) -> Bool =>\n    1 < 10 / x;\n/std/print(\"no\")\n",
             "│  3 │     1 < 10 / x;\n│    │         ^^^^^^",
         ),
         (
-            "use /std/{Nat};\nlet f(x: Nat) -> Nat =\n    10 / x;\n/std/print(\"no\")\n",
+            "use /std/{Nat};\nlet f(x: Nat) -> Nat =>\n    10 / x;\n/std/print(\"no\")\n",
             "│  3 │     10 / x;\n│    │     ^^^^^^",
         ),
     ] {
@@ -96,15 +96,15 @@ fn a_goal_stands_where_its_question_mark_was_written() {
     for (declared, written) in [
         (
             "",
-            "let twice(a: Nat) -> Nat = /std/ops/Add/add(@Nat, a, ?);",
+            "let twice(a: Nat) -> Nat => /std/ops/Add/add(@Nat, a, ?);",
         ),
         (
             "",
-            "let half(a: Nat) -> Nat = match a > 0 | true => /std/ops/Div/div(@Nat, a, a, @?) | false => 0 end;",
+            "let half(a: Nat) -> Nat => match a > 0 | true => /std/ops/Div/div(@Nat, a, a, @?) | false => 0 end;",
         ),
         (
             "struct Pair(A: Type, B: Type): Type { fst: A, snd: B }",
-            "let first(a: Nat) -> Nat = let p: Pair(?, Nat) = Pair { fst = a, snd = a }; p.fst;",
+            "let first(a: Nat) -> Nat => let p: Pair(?, Nat) = Pair { fst = a, snd = a }; p.fst;",
         ),
     ] {
         let report = error(&fill!(
@@ -162,13 +162,13 @@ fn each_refusal_kind_reads_as_its_reader_wrote_at_its_place() {
         ),
         // Type mismatch at a bang.
         (
-            "use /std/{Nat, Io};\nlet both() -> Io({}) =\n    let x = 1!;\n    Io/pure(());\nboth()\n",
+            "use /std/{Nat, Io};\nlet both() -> Io({}) =>\n    let x = 1!;\n    Io/pure(());\nboth()\n",
             "type mismatch\n│  inferred: `Nat`\n│  expected: `Io(?)`\n",
             "│  3 │     let x = 1!;\n│    │             ^",
         ),
         // Undetermined type.
         (
-            "use /std/{Io, Str, Bool, Nat};\nconcept Joint(T: Type, R: Type): Type {\n    run(T) -> Io(R),\n}\nsatisfy (@A: Type, @B: Type, @C: Type) => Joint({Io(A), Io(B), Io(C)}, {A, B, C}) {\n    run(t) =\n        let (x, (y, z)) = Io/both(t.0, Io/both(t.1, t.2))!;\n        Io/pure((x, y, z)),\n}\nlet all_of(@T: Type, @R: Type, use Joint(T, R), actions: T) -> Io(R) =\n    Joint/run(actions);\nlet execute() -> Io({}) =\n    let (n, s, b) = all_of((Io/pure(7), Io/pure(\"seven\"), Io/pure(true)))!;\n    Io/pure(());\nexecute()\n",
+            "use /std/{Io, Str, Bool, Nat};\nconcept Joint(T: Type, R: Type): Type {\n    run(T) -> Io(R),\n}\nsatisfy (@A: Type, @B: Type, @C: Type) -> Joint({Io(A), Io(B), Io(C)}, {A, B, C}) {\n    run(t) =>\n        let (x, (y, z)) = Io/both(t.0, Io/both(t.1, t.2))!;\n        Io/pure((x, y, z)),\n}\nlet all_of(@T: Type, @R: Type, use Joint(T, R), actions: T) -> Io(R) =>\n    Joint/run(actions);\nlet execute() -> Io({}) =>\n    let (n, s, b) = all_of((Io/pure(7), Io/pure(\"seven\"), Io/pure(true)))!;\n    Io/pure(());\nexecute()\n",
             "undetermined type\n│  a tuple pattern of 3 fields takes apart a value whose type is not known here\n│  write the type where the value is bound, `let x: {A, B} = ...;`, and take `x` apart\n",
             "│  13 │     let (n, s, b) = all_of((Io/pure(7), Io/pure(\"seven\"), Io/pure(true)))!;\n│     │         ^^^^^^^^^",
         ),
@@ -180,57 +180,57 @@ fn each_refusal_kind_reads_as_its_reader_wrote_at_its_place() {
         ),
         // Undischarged bound under guards.
         (
-            "use /std/{Nat, List};\nlet pick(xs: List(Nat), i: Nat) -> Nat =\n    match i <= List/length(xs) | true => List/get(xs, i) | false => 0 end;\n/std/print(\"\")\n",
+            "use /std/{Nat, List};\nlet pick(xs: List(Nat), i: Nat) -> Nat =>\n    match i <= List/length(xs) | true => List/get(xs, i) | false => 0 end;\n/std/print(\"\")\n",
             "undischarged bound\n│  the bound `ok` of `List/get` was not discharged\n│  nothing discharged `/std/Bool/Holds(i < List/length(xs))`\n│  it does not follow from the facts in scope:\n│    a guard, `i <= List/length(xs)`\n│  it fails at `i = 0`, `List/length(xs) = 0`\n│  guard the call with `i < List/length(xs)`\n│  or supply it explicitly, `List/get(@...)`\n",
             "│  3 │     match i <= List/length(xs) | true => List/get(xs, i) | false => 0 end;\n│    │                                          ^^^^^^^^^^^^^^^",
         ),
         // Undischarged bound of an operator.
         (
-            "use /std/{Nat};\nlet share(total: Nat, people: Nat) -> Nat = total / people;\n/std/print(\"\")\n",
+            "use /std/{Nat};\nlet share(total: Nat, people: Nat) -> Nat => total / people;\n/std/print(\"\")\n",
             "undischarged bound\n│  the bound of the `/` operator was not discharged\n│  nothing discharged `/std/ops/Div/Ok(people)`\n│  it fails at `people = 0`\n│  an operator takes no written arguments\n│  guard the operation with `people != 0`\n│  or call `/std/ops/Div/div(@T, a, b, @proof)`\n",
-            "│  2 │ let share(total: Nat, people: Nat) -> Nat = total / people;\n│    │                                             ^^^^^^^^^^^^^^",
+            "│  2 │ let share(total: Nat, people: Nat) -> Nat => total / people;\n│    │                                              ^^^^^^^^^^^^^^",
         ),
         // Undischarged bound over a disequality, written back as the `!=` that elaborates to its negation.
         (
-            "use /std/{Nat};\nuse /std/Bool/{Holds};\nlet needs(b: Nat, @_: Holds(b != 0)) -> Nat = b;\nlet call(b: Nat) -> Nat = needs(b);\n/std/print(\"\")\n",
+            "use /std/{Nat};\nuse /std/Bool/{Holds};\nlet needs(b: Nat, @_: Holds(b != 0)) -> Nat => b;\nlet call(b: Nat) -> Nat => needs(b);\n/std/print(\"\")\n",
             "undischarged bound\n│  the bound of `needs` was not discharged\n│  nothing discharged `Holds(b != 0)`\n│  it fails at `b = 0`\n│  guard the call with `b != 0`\n│  or supply it explicitly, `needs(@...)`\n",
-            "│  4 │ let call(b: Nat) -> Nat = needs(b);\n│    │                           ^^^^^^^^",
+            "│  4 │ let call(b: Nat) -> Nat => needs(b);\n│    │                            ^^^^^^^^",
         ),
         // Undischarged bound over `>`, written back as the `<` over the operands swapped that it elaborates to.
         (
-            "use /std/{Nat};\nuse /std/Bool/{Holds};\nlet needs(b: Nat, @_: Holds(b > 3)) -> Nat = b;\nlet call(b: Nat) -> Nat = needs(b);\n/std/print(\"\")\n",
+            "use /std/{Nat};\nuse /std/Bool/{Holds};\nlet needs(b: Nat, @_: Holds(b > 3)) -> Nat => b;\nlet call(b: Nat) -> Nat => needs(b);\n/std/print(\"\")\n",
             "undischarged bound\n│  the bound of `needs` was not discharged\n│  nothing discharged `Holds(3 < b)`\n│  it fails at `b = 0`\n│  guard the call with `3 < b`\n│  or supply it explicitly, `needs(@...)`\n",
-            "│  4 │ let call(b: Nat) -> Nat = needs(b);\n│    │                           ^^^^^^^^",
+            "│  4 │ let call(b: Nat) -> Nat => needs(b);\n│    │                            ^^^^^^^^",
         ),
         // Undischarged bound over a product, which the search reads as an unknown of its own.
         (
-            "use /std/{Nat};\nuse /std/Bool/{Holds};\nlet small(x: Nat, y: Nat, @_: Holds(x * y <= 10)) -> Nat = x;\nlet call(x: Nat, y: Nat) -> Nat = small(x, y);\n/std/print(\"\")\n",
+            "use /std/{Nat};\nuse /std/Bool/{Holds};\nlet small(x: Nat, y: Nat, @_: Holds(x * y <= 10)) -> Nat => x;\nlet call(x: Nat, y: Nat) -> Nat => small(x, y);\n/std/print(\"\")\n",
             "undischarged bound\n│  the bound of `small` was not discharged\n│  nothing discharged `Holds(x * y <= 10)`\n│  the search finds no proof, and no values under which it fails\n│  it reads a product of unknowns as an unknown of its own\n│  supply it explicitly, `small(@...)`\n",
-            "│  4 │ let call(x: Nat, y: Nat) -> Nat = small(x, y);\n│    │                                   ^^^^^^^^^^^",
+            "│  4 │ let call(x: Nat, y: Nat) -> Nat => small(x, y);\n│    │                                    ^^^^^^^^^^^",
         ),
         // Argument count mismatch.
         (
-            "use /std/{Nat};\nlet double(n: Nat) -> Nat = n + n;\nlet four: Nat = double(1, 2);\n/std/print(\"\")\n",
+            "use /std/{Nat};\nlet double(n: Nat) -> Nat => n + n;\nlet four: Nat = double(1, 2);\n/std/print(\"\")\n",
             "argument count mismatch\n│  written: 2\n│  `double` takes 1 argument\n",
             "│  3 │ let four: Nat = double(1, 2);\n│    │                 ^^^^^^^^^^^^",
         ),
         // Surplus member.
         (
-            "use /std/{Nat};\nlet double(n: Nat) -> Nat = n + n;\nlet two: Nat = double(@1);\n/std/print(\"\")\n",
+            "use /std/{Nat};\nlet double(n: Nat) -> Nat => n + n;\nlet two: Nat = double(@1);\n/std/print(\"\")\n",
             "surplus member\n│  `double` takes no `@` argument\n│  write it with no mark\n",
             "│  3 │ let two: Nat = double(@1);\n│    │                        ^",
         ),
         // No witness for a returned action.
         (
-            "use /std/{Nat, Io, Option};\nlet wrap() -> Option(Nat) = Io/pure(1);\n/std/print(\"\")\n",
+            "use /std/{Nat, Io, Option};\nlet wrap() -> Option(Nat) => Io/pure(1);\n/std/print(\"\")\n",
             "no witness\n│  wanted: `/std/Monad/Lift(Io, Option)`\n│  needed to return an `Io` action where this `Option` region's is expected\n",
-            "│  2 │ let wrap() -> Option(Nat) = Io/pure(1);\n│    │                             ^^^^^^^^^^",
+            "│  2 │ let wrap() -> Option(Nat) => Io/pure(1);\n│    │                              ^^^^^^^^^^",
         ),
         // A word another language reserves.
         (
-            "use /std/{Nat};\nlet big(n: Nat) -> Nat = if n > 10 then 1 else 0;\n/std/print(\"\")\n",
+            "use /std/{Nat};\nlet big(n: Nat) -> Nat => if n > 10 then 1 else 0;\n/std/print(\"\")\n",
             "syntax error\n│  `if` is no keyword of Curios: a choice is a `match` on its condition, `match c | true => a | false => b end`\n",
-            "│  2 │ let big(n: Nat) -> Nat = if n > 10 then 1 else 0;\n│    │                          ^",
+            "│  2 │ let big(n: Nat) -> Nat => if n > 10 then 1 else 0;\n│    │                           ^",
         ),
         // A run between single quotes.
         (
@@ -240,9 +240,9 @@ fn each_refusal_kind_reads_as_its_reader_wrote_at_its_place() {
         ),
         // No such field.
         (
-            "use /std/{Nat, List};\nlet count(xs: List(Nat)) -> Nat = xs.len();\n/std/print(\"\")\n",
+            "use /std/{Nat, List};\nlet count(xs: List(Nat)) -> Nat => xs.len();\n/std/print(\"\")\n",
             "no such field\n│  `.len` reads a field, and a `List(Nat)` has none\n",
-            "│  2 │ let count(xs: List(Nat)) -> Nat = xs.len();\n│    │                                   ^^^^^^",
+            "│  2 │ let count(xs: List(Nat)) -> Nat => xs.len();\n│    │                                    ^^^^^^",
         ),
         // Not a concept.
         (
@@ -252,9 +252,9 @@ fn each_refusal_kind_reads_as_its_reader_wrote_at_its_place() {
         ),
         // Ambiguous witness.
         (
-            "use /std/{Str, Show};\nconcept Pretty(T: Type): Type { use Show(T), }\nconcept Loud(T: Type): Type { use Show(T), }\npub let say(@T: Type, use Pretty(T), use Loud(T), x: T) -> Str = Show/show(x);\n/std/print(\"\")\n",
+            "use /std/{Str, Show};\nconcept Pretty(T: Type): Type { use Show(T), }\nconcept Loud(T: Type): Type { use Show(T), }\npub let say(@T: Type, use Pretty(T), use Loud(T), x: T) -> Str => Show/show(x);\n/std/print(\"\")\n",
             "ambiguous witness\n│  wanted: `Show(T)`\n│  `use Pretty(T)` and `use Loud(T)` both hold it as a superclass, neither nearer than the other\n",
-            "│  4 │ pub let say(@T: Type, use Pretty(T), use Loud(T), x: T) -> Str = Show/show(x);\n│    │                                                                  ^^^^^^^^^^^^",
+            "│  4 │ pub let say(@T: Type, use Pretty(T), use Loud(T), x: T) -> Str => Show/show(x);\n│    │                                                                   ^^^^^^^^^^^^",
         ),
         // No witness for an argument.
         (
@@ -264,7 +264,7 @@ fn each_refusal_kind_reads_as_its_reader_wrote_at_its_place() {
         ),
         // Shape mismatch.
         (
-            "use /std/{Nat};\nlet pick(p: {Nat, Nat}) -> Nat =\n    match p | (a, b) => a | (a, b, c) => b end;\n/std/print(\"\")\n",
+            "use /std/{Nat};\nlet pick(p: {Nat, Nat}) -> Nat =>\n    match p | (a, b) => a | (a, b, c) => b end;\n/std/print(\"\")\n",
             "shape mismatch\n│  the arms' patterns disagree on shape in one column\n│  one arm takes apart a tuple of 2 fields, another a tuple of 3 fields\n",
             "│  3 │     match p | (a, b) => a | (a, b, c) => b end;\n│    │     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^",
         ),

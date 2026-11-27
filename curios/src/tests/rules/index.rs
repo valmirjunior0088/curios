@@ -14,13 +14,13 @@ fn a_non_injective_index_target_does_not_force_its_binder() {
         use /std/{Nat, Eq};
         use /std/Bool/{False};
 
-        let blur(a : Nat) -> Nat = 0;
+        let blur(a : Nat) -> Nat => 0;
 
         induct Loose : (n : Nat) -> pub Prop
         | mk(a : Nat) : (a)
         end
 
-        let extract(p : Loose(0)) -> Nat =
+        let extract(p : Loose(0)) -> Nat =>
             match p
             | mk(a) => a
             end;
@@ -65,7 +65,7 @@ fn a_proposition_valued_index_cannot_make_an_elimination_vacuous() {
 
         let coerce = Ind/only;
 
-        let boom(w : Ind(Two/b())) -> False =
+        let boom(w : Ind(Two/b())) -> False =>
             match w
             end;
 
@@ -79,7 +79,7 @@ fn a_proposition_valued_index_cannot_make_an_elimination_vacuous() {
         ("induct Two : pub Type", "induct Two : pub Prop"),
         (
             "let coerce = Ind/only;",
-            "let coerce(w : Ind(Two/a())) -> Ind(Two/b()) = w;",
+            "let coerce(w : Ind(Two/a())) -> Ind(Two/b()) => w;",
         ),
         (
             "let bad = boom;",
@@ -110,7 +110,7 @@ fn a_proposition_valued_index_cannot_excuse_an_omitted_arm() {
 
         let coerce = Ind/right;
 
-        let f(w : Ind(Two/a())) -> Nat =
+        let f(w : Ind(Two/a())) -> Nat =>
             match w
             | left() => 0
             end;
@@ -123,7 +123,7 @@ fn a_proposition_valued_index_cannot_excuse_an_omitted_arm() {
         ("induct Two : pub Type", "induct Two : pub Prop"),
         (
             "let coerce = Ind/right;",
-            "let coerce(w : Ind(Two/b())) -> Ind(Two/a()) = w;",
+            "let coerce(w : Ind(Two/b())) -> Ind(Two/a()) => w;",
         ),
         ("f(Ind/left())", "f(coerce(Ind/right()))"),
     ])
@@ -157,7 +157,7 @@ fn a_nested_proposition_valued_index_cannot_make_an_elimination_vacuous() {
 
         let coerce = Ind/only;
 
-        let boom(w : Ind(Pair/mk(0, Two/b()))) -> False =
+        let boom(w : Ind(Pair/mk(0, Two/b()))) -> False =>
             match w
             end;
 
@@ -171,7 +171,7 @@ fn a_nested_proposition_valued_index_cannot_make_an_elimination_vacuous() {
         ("induct Two : pub Type", "induct Two : pub Prop"),
         (
             "let coerce = Ind/only;",
-            "let coerce(w : Ind(Pair/mk(0, Two/a()))) -> Ind(Pair/mk(0, Two/b())) = w;",
+            "let coerce(w : Ind(Pair/mk(0, Two/a()))) -> Ind(Pair/mk(0, Two/b())) => w;",
         ),
         (
             "let bad = boom;",
@@ -205,7 +205,7 @@ fn a_nested_proposition_valued_index_cannot_excuse_an_omitted_arm() {
 
         let coerce = Ind/right;
 
-        let f(w : Ind(Pair/mk(0, Two/a()))) -> Nat =
+        let f(w : Ind(Pair/mk(0, Two/a()))) -> Nat =>
             match w
             | left() => 0
             end;
@@ -218,7 +218,7 @@ fn a_nested_proposition_valued_index_cannot_excuse_an_omitted_arm() {
         ("induct Two : pub Type", "induct Two : pub Prop"),
         (
             "let coerce = Ind/right;",
-            "let coerce(w : Ind(Pair/mk(0, Two/b()))) -> Ind(Pair/mk(0, Two/a())) = w;",
+            "let coerce(w : Ind(Pair/mk(0, Two/b()))) -> Ind(Pair/mk(0, Two/a())) => w;",
         ),
         ("f(Ind/left())", "f(coerce(Ind/right()))"),
     ])
@@ -263,7 +263,7 @@ fn two_proofs_forced_on_one_binder_do_not_clash() {
         | b()
         end
 
-        let absurd(h : Same()(Two/a(), Two/b())) -> False =
+        let absurd(h : Same()(Two/a(), Two/b())) -> False =>
             match h end;
 
         let forged = absurd;
@@ -310,7 +310,7 @@ fn two_proofs_forced_on_one_variable_of_the_indices_do_not_clash() {
         | apart() : (Two/a(), Two/b())
         end
 
-        let absurd(x : Two, h : Apart(x, x)) -> False =
+        let absurd(x : Two, h : Apart(x, x)) -> False =>
             match h end;
 
         let forged = absurd;
@@ -346,7 +346,7 @@ fn two_proofs_forced_on_one_variable_of_the_indices_do_not_clash() {
         | apart() : (Wrap/wrap(Two/a()), Wrap/wrap(Two/b()))
         end
 
-        let absurd(w : Wrap, h : Apart(w, w)) -> False =
+        let absurd(w : Wrap, h : Apart(w, w)) -> False =>
             match h end;
 
         let forged = absurd;
@@ -379,7 +379,7 @@ fn a_variable_of_the_indices_forced_to_one_value_twice_does_not_clash() {
         | mk() : (0, 1)
         end
 
-        let absurd(m : Nat, x : Two(m, m + 2)) -> False =
+        let absurd(m : Nat, x : Two(m, m + 2)) -> False =>
             match x end;
 
         let forged = absurd;
@@ -413,7 +413,7 @@ fn an_open_forcing_does_not_clash() {
         | green()
         end
 
-        let absurd(c : Color, h : Eq()(Color/green(), Color/red())) -> False =
+        let absurd(c : Color, h : Eq()(Color/green(), Color/red())) -> False =>
             match h end;
 
         /std/print("ok")
@@ -434,7 +434,7 @@ fn two_applications_of_one_opaque_function_do_not_clash() {
         use /std/{Eq, Nat};
         use /std/Bool/{False};
 
-        let absurd(f : (Nat) -> Nat, h : Eq()(f(0) + 1, 0)) -> False =
+        let absurd(f : (Nat) -> Nat, h : Eq()(f(0) + 1, 0)) -> False =>
             match h end;
 
         /std/print("ok")
@@ -455,7 +455,7 @@ fn a_parity_disagreement_is_not_a_clash() {
         use /std/{Eq, Nat};
         use /std/Bool/{False};
 
-        let absurd(x : Nat, y : Nat, h : Eq()(x * 2 + 1, 0)) -> False =
+        let absurd(x : Nat, y : Nat, h : Eq()(x * 2 + 1, 0)) -> False =>
             match h end;
 
         /std/print("ok")
@@ -476,7 +476,7 @@ fn a_truncated_difference_does_not_clash_with_zero() {
         use /std/{Eq, Nat};
         use /std/Bool/{False};
 
-        let absurd(a : Nat, h : Eq()(a + 1, 0)) -> False =
+        let absurd(a : Nat, h : Eq()(a + 1, 0)) -> False =>
             match h end;
 
         /std/print("ok")
@@ -497,7 +497,7 @@ fn an_int_successor_does_not_clash_with_zero() {
         use /std/{Eq, Int};
         use /std/Bool/{False};
 
-        let absurd(i : Int, h : Eq()(+1, +0)) -> False =
+        let absurd(i : Int, h : Eq()(+1, +0)) -> False =>
             match h end;
 
         /std/print("ok")
@@ -523,7 +523,7 @@ fn a_window_that_may_be_empty_does_not_clash_with_the_empty_value() {
             n : Nat,
             @ok : Holds(0 + n <= Bytes/length(b)),
             h : Eq()(0x[..Bytes/slice(b, 0, n), 0x01], 0x[]),
-        ) -> False =
+        ) -> False =>
             match h end;
 
         /std/print("ok")
@@ -547,7 +547,7 @@ fn a_value_extended_at_one_end_does_not_clash_with_one_extended_at_the_other() {
         use /std/{Eq, Bytes};
         use /std/Bool/{False};
 
-        let absurd(b : Bytes, c : Bytes, h : Eq()(0x[0x02, ..b], 0x[0x01, ..c])) -> False =
+        let absurd(b : Bytes, c : Bytes, h : Eq()(0x[0x02, ..b], 0x[0x01, ..c])) -> False =>
             match h end;
 
         /std/print("ok")
@@ -580,7 +580,7 @@ fn an_unmentioned_payload_binder_is_not_forced() {
         | mk(a : Nat) : (a)
         end
 
-        let extract(p : Tight(7)) -> Nat =
+        let extract(p : Tight(7)) -> Nat =>
             match p
             | mk(a) => a
             end;
@@ -614,14 +614,14 @@ fn a_singleton_carrying_a_type_does_not_eliminate_into_a_type() {
         | mk(A : Type)
         end
 
-        let unbox(b : Box) -> Type =
+        let unbox(b : Box) -> Type =>
             match b
             | mk(A) => A
             end;
 
-        let boxes_equal(A : Type) -> Eq()(Box/mk(A), Box/mk(A)) = Eq/refl();
+        let boxes_equal(A : Type) -> Eq()(Box/mk(A), Box/mk(A)) => Eq/refl();
 
-        let types_equal(A : Type) -> Eq()(A, A) =
+        let types_equal(A : Type) -> Eq()(A, A) =>
             Eq/cong(unbox, boxes_equal(A));
 
         let kept : Nat =
@@ -662,7 +662,7 @@ fn an_arm_learns_an_outer_variable_inside_an_index() {
         | one() : (1)
         end
 
-        let zero_below(n : Nat, x : One(n + 1)) -> Eq()(n, 0) =
+        let zero_below(n : Nat, x : One(n + 1)) -> Eq()(n, 0) =>
             match x | one() => Eq/refl() end;
 
         let _ = zero_below(0, One/one());
@@ -671,7 +671,7 @@ fn an_arm_learns_an_outer_variable_inside_an_index() {
         b"ok",
     )
     .refused(&[
-        ("let zero_below(n : Nat, x : One(n + 1)) -> Eq()(n, 0) =", "let one_below(n : Nat, x : One(n + 1)) -> Eq()(n, 1) ="),
+        ("let zero_below(n : Nat, x : One(n + 1)) -> Eq()(n, 0) =>", "let one_below(n : Nat, x : One(n + 1)) -> Eq()(n, 1) =>"),
         ("        let _ = zero_below(0, One/one());\n", ""),
     ])
     .by_elaborator_in(
@@ -691,7 +691,7 @@ fn a_dead_arm_retypes_no_local() {
         | mk() : (0, 1)
         end
 
-        let f(n : Nat, h : Eq()(n, 7), x : Two(n, n + 1)) -> Eq()(n, 7) =
+        let f(n : Nat, h : Eq()(n, 7), x : Two(n, n + 1)) -> Eq()(n, 7) =>
             match x | mk() => h end;
 
         /std/print("ok")
@@ -714,7 +714,7 @@ fn a_factor_both_indices_share_forces_no_equation_of_the_others() {
         r#"
         use /std/{Nat, Eq};
 
-        let cancel(x: Nat, a: Nat, b: Nat, p: Eq()(a, b)) -> Eq()(a, b) =
+        let cancel(x: Nat, a: Nat, b: Nat, p: Eq()(a, b)) -> Eq()(a, b) =>
             match p | refl() => Eq/refl() end;
 
         /std/print(Nat/to_str(0))
@@ -734,7 +734,7 @@ fn an_operand_two_float_operations_share_forces_no_equation_of_the_others() {
         r#"
         use /std/{Flt, Eq};
 
-        let cancel(a: Flt, b: Flt, c: Flt, p: Eq()(a, c)) -> Eq()(a, c) =
+        let cancel(a: Flt, b: Flt, c: Flt, p: Eq()(a, c)) -> Eq()(a, c) =>
             match p | refl() => Eq/refl() end;
 
         let _forged: Eq()(1.0, 1.0) = cancel(1.0, 1.0e300, 1.0, Eq/refl());
@@ -755,7 +755,7 @@ fn an_operand_two_float_operations_share_forces_no_equation_of_the_others() {
         r#"
         use /std/{Flt, Eq};
 
-        let cancel(a: Flt, b: Flt, c: Flt, d: Flt, p: Eq()(b, d)) -> Eq()(b, d) =
+        let cancel(a: Flt, b: Flt, c: Flt, d: Flt, p: Eq()(b, d)) -> Eq()(b, d) =>
             match p | refl() => Eq/refl() end;
 
         let _forged: Eq()(1.0, 1.0) = cancel(0.0, 1.0, 3.0, 1.0, Eq/refl());

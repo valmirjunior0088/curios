@@ -15,21 +15,21 @@ use {
 fn a_runtime_dependent_tuple_width_is_split_into_fields() {
     let source = r#"
         use /std/{Bool, Nat, List, Proc};
-        let Shape(b: Bool) -> Type =
+        let Shape(b: Bool) -> Type =>
             match b | true => {Nat, Nat} | false => {Nat, Nat, Nat} end;
-        let make(b: Bool, n: Nat) -> Shape(b) =
+        let make(b: Bool, n: Nat) -> Shape(b) =>
             match b
             | true => (n, 2)
             | false => (n, 4, 5)
             end;
-        let loop(b: Bool, x: Shape(b), n: Nat, fuel: Nat) -> Nat =
+        let loop(b: Bool, x: Shape(b), n: Nat, fuel: Nat) -> Nat =>
             match fuel
             | 0 => match b | true => x.0 | false => x.0 end
             | rest + 1 =>
                 let next = Bool/not(b);
                 loop(next, make(next, n + 1), n + 1, rest)
             end;
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let n = List/length(Proc/args()!);
             let b = Nat/eql(n, 1);
             /std/print(Nat/to_str(loop(b, make(b, n), n, n)));
@@ -113,7 +113,7 @@ fn a_runtime_dependent_tuple_width_is_split_into_fields() {
 fn an_unread_construction_in_an_exit_arm_leaves_the_loop_its_window() {
     let source = r#"
         use /std/{Nat, Bytes, List, Option, Proc};
-        let walk(b: Bytes, k: Nat) -> Nat =
+        let walk(b: Bytes, k: Nat) -> Nat =>
             match b
             | 0x[] => k
             | 0x[h, ..t] =>
@@ -122,7 +122,7 @@ fn an_unread_construction_in_an_exit_arm_leaves_the_loop_its_window() {
                 | false => walk(t, k + 1)
                 end
             end;
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let arguments = Proc/args()!;
             let bytes = Option/unwrap_or(List/try_get(arguments, 0), 0x[]);
             /std/print(Nat/to_str(walk(bytes, 0)));

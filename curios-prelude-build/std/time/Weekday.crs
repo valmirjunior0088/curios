@@ -35,7 +35,7 @@ satisfy Spell(Weekday) {
 }
 
 --- The day's number, as ISO 8601 writes it: Monday is 1 and Sunday 7.
-pub let to_nat(d: Weekday) -> Nat =
+pub let to_nat(d: Weekday) -> Nat =>
     match d
     | monday() => 1
     | tuesday() => 2
@@ -47,7 +47,7 @@ pub let to_nat(d: Weekday) -> Nat =
     end;
 
 --- The day numbered `n`, or `none` for a number no day has.
-pub let try_of_nat(n: Nat) -> Option(Weekday) =
+pub let try_of_nat(n: Nat) -> Option(Weekday) =>
     match n
     | 1 => Option/some(Weekday/monday())
     | 2 => Option/some(Weekday/tuesday())
@@ -60,7 +60,7 @@ pub let try_of_nat(n: Nat) -> Option(Weekday) =
     end;
 
 --- The day `n` days after a Monday: what `Date/weekday` reads a count of days through.
-pub let of_days_from_monday(n: Nat) -> Weekday =
+pub let of_days_from_monday(n: Nat) -> Weekday =>
     match n % 7
     | 0 => Weekday/monday()
     | 1 => Weekday/tuesday()

@@ -2,13 +2,13 @@ use /std/{Str, Parse, Toml};
 use /std/time/{Date, Time, DateTime, OffsetDateTime, rfc3339, iso8601};
 
 -- `built` over the evidence that `d`'s year has the four digits TOML writes. `rfc3339/date` reads no other, so the decision answers `some`, and its refusal is the one a date past them would have.
-let dated(d: Date, built: (ok: rfc3339/FourDigits(d)) -> Toml) -> Parse(Str, Toml) =
+let dated(d: Date, built: (ok: rfc3339/FourDigits(d)) -> Toml) -> Parse(Str, Toml) =>
     match rfc3339/four_digits(d)
     | some(ok) => Parse/pure(built(ok))
     | none() => Parse/fail("invalid date")
     end;
 
-let offset_tail(date: Date, time: Time) -> Parse(Str, Toml) =
+let offset_tail(date: Date, time: Time) -> Parse(Str, Toml) =>
     let offset = rfc3339/offset()!;
     let odt = OffsetDateTime { date_time = DateTime { date = date, time = time }, offset = offset };
     match rfc3339/whole_minutes(offset)
@@ -16,17 +16,17 @@ let offset_tail(date: Date, time: Time) -> Parse(Str, Toml) =
     | none() => Parse/fail("invalid offset")
     end;
 
-let date_time_tail(date: Date) -> Parse(Str, Toml) =
+let date_time_tail(date: Date) -> Parse(Str, Toml) =>
     let () = rfc3339/separator()!;
     let time = iso8601/time()!;
     Parse/or(
         offset_tail(date, time),
         dated(date, (ok) => Toml/local_date_time(DateTime { date = date, time = time }, @ok)));
 
-let date_led() -> Parse(Str, Toml) =
+let date_led() -> Parse(Str, Toml) =>
     let date = rfc3339/date()!;
     Parse/or(date_time_tail(date), dated(date, (ok) => Toml/local_date(date, @ok)));
 
 --- A date, a time, or the two together, with or without an offset, as RFC 3339 writes them.
-pub let date_time_value() -> Parse(Str, Toml) =
+pub let date_time_value() -> Parse(Str, Toml) =>
     Parse/or(date_led(), Parse/map(iso8601/time(), (time) => Toml/local_time(time)));

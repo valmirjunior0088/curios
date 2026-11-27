@@ -32,7 +32,7 @@ satisfy Spell(Refusal) {
 }
 
 --- The refusal as a line: what the reply to a refused request says in its body.
-pub let to_str(r: Refusal) -> Str =
+pub let to_str(r: Refusal) -> Str =>
     match r
     | malformed(why) => Str/concat("malformed: ", why)
     | incomplete() => "the message ended before it was whole"

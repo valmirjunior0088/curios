@@ -2,21 +2,21 @@
 use /std/{Nat, Bytes, Bool, List, Test, Tty};
 use /std/Tui/{Key, Input, Reply, Mode};
 
-let inputs(b: Bytes) -> List(Input) =
+let inputs(b: Bytes) -> List(Input) =>
     Input/decode(b).inputs;
 
-let k(code: Key/Code) -> Input =
+let k(code: Key/Code) -> Input =>
     Input/key(Key/plain(code));
 
 -- `b` read whole and then flushed, as a session reads what arrived before nothing more came.
-let settled(b: Bytes) -> List(Input) =
+let settled(b: Bytes) -> List(Input) =>
     let read = Input/decode(b);
     [..read.inputs, ..Input/flush(read.rest).inputs];
 
-test a_printable_byte_is_its_character =
+test a_printable_byte_is_its_character =>
     Test/equal(inputs(0x['a', 'Z']), [k(Key/Code/char('a')), k(Key/Code/char('Z'))]);
 
-test the_control_bytes_are_the_named_keys_and_ctrl_letters =
+test the_control_bytes_are_the_named_keys_and_ctrl_letters =>
     Test/equal(
         inputs(0x[0x0D, 0x09, 0x7F, 0x01, 0x1A]),
         [
@@ -26,7 +26,7 @@ test the_control_bytes_are_the_named_keys_and_ctrl_letters =
             Input/key(Key/with_ctrl(Key/Code/char('a'))),
             Input/key(Key/with_ctrl(Key/Code/char('z')))]);
 
-test the_legacy_sequences_name_their_keys =
+test the_legacy_sequences_name_their_keys =>
     Test/equal(
         inputs(0x[0x1B, '[', 'A', 0x1B, '[', 'H', 0x1B, '[', '3', '~', 0x1B, '[', '1', '5', '~',
             0x1B, 'O', 'P', 0x1B, '[', '2', '5', '~']),
@@ -38,7 +38,7 @@ test the_legacy_sequences_name_their_keys =
             k(Key/Code/f(1)),
             k(Key/Code/f(13))]);
 
-test a_modifier_parameter_sets_the_modifiers =
+test a_modifier_parameter_sets_the_modifiers =>
     Test/equal(
         inputs(0x[0x1B, '[', '1', ';', '5', 'C', 0x1B, '[', '3', ';', '2', '~']),
         [
@@ -46,12 +46,12 @@ test a_modifier_parameter_sets_the_modifiers =
             Input/key(Key { ..Key/plain(Key/Code/delete()), shift = true })]);
 
 -- Shift with Tab is the back-tab sequence in the legacy encoding.
-test back_tab_is_tab_with_shift =
+test back_tab_is_tab_with_shift =>
     Test/equal(
         inputs(0x[0x1B, '[', 'Z']),
         [Input/key(Key { ..Key/plain(Key/Code/tab()), shift = true })]);
 
-test the_kitty_form_reads_the_code_and_modifiers =
+test the_kitty_form_reads_the_code_and_modifiers =>
     Test/equal(
         inputs(0x[0x1B, '[', '9', '7', ';', '2', 'u', 0x1B, '[', '1', '3', ';', '5', 'u']),
         [
@@ -59,7 +59,7 @@ test the_kitty_form_reads_the_code_and_modifiers =
             Input/key(Key/with_ctrl(Key/Code/enter()))]);
 
 -- A named key the protocol numbers by its character's scalar is that key: Escape, Tab, and Backspace by either of the two characters a terminal sends for it.
-test the_kitty_form_names_the_control_keys_by_their_characters =
+test the_kitty_form_names_the_control_keys_by_their_characters =>
     Test/equal(
         inputs(0x[0x1B, '[', '2', '7', 'u', 0x1B, '[', '9', 'u', 0x1B, '[', '1', '2', '7', 'u',
             0x1B, '[', '8', 'u']),
@@ -70,14 +70,14 @@ test the_kitty_form_names_the_control_keys_by_their_characters =
             k(Key/Code/backspace())]);
 
 -- A code's sub-parameters are read past, Super is a modifier, and a lock key's bit is no modifier at all: Caps Lock on leaves `a` plain.
-test the_kitty_form_reads_super_and_leaves_the_locks_out =
+test the_kitty_form_reads_super_and_leaves_the_locks_out =>
     Test/equal(
         inputs(0x[0x1B, '[', '9', '7', ':', '6', '5', ';', '9', 'u', 0x1B, '[', '9', '7', ';', '6',
             '5', 'u']),
         [Input/key(Key { ..Key/plain(Key/Code/char('a')), super = true }), k(Key/Code/char('a'))]);
 
 -- F13 to F35 and the keypad's keys are the protocol's private-use numbers, and a keypad key is the key it stands for.
-test the_kitty_form_names_the_high_function_keys_and_the_keypad =
+test the_kitty_form_names_the_high_function_keys_and_the_keypad =>
     Test/equal(
         inputs(0x[0x1B, '[', '5', '7', '3', '7', '6', 'u', 0x1B, '[', '5', '7', '3', '9', '8', 'u',
             0x1B, '[', '5', '7', '3', '9', '9', 'u', 0x1B, '[', '5', '7', '4', '1', '4', 'u', 0x1B,
@@ -90,48 +90,48 @@ test the_kitty_form_names_the_high_function_keys_and_the_keypad =
             k(Key/Code/up())]);
 
 -- The kitty form names its key by its first parameter, so a sequence with none names no key rather than the character zero.
-test a_kitty_sequence_without_a_code_names_no_key =
+test a_kitty_sequence_without_a_code_names_no_key =>
     Test/equal(inputs(0x[0x1B, '[', 'u', 'q']), [k(Key/Code/char('q'))]);
 
 -- The `~` form names its key by its first parameter too, and an empty parameter before a separator is as absent as one left out: neither form reads it as 1.
-test a_sequence_whose_key_parameter_is_empty_names_no_key =
+test a_sequence_whose_key_parameter_is_empty_names_no_key =>
     Test/equal(
         inputs(0x[0x1B, '[', '~', 0x1B, '[', ';', '5', '~', 0x1B, '[', ';', '5', 'u', 'q']),
         [k(Key/Code/char('q'))]);
 
 -- A cursor key is named by its final byte, so its modifier is read past a first parameter left empty.
-test a_cursor_key_reads_its_modifier_past_an_empty_parameter =
+test a_cursor_key_reads_its_modifier_past_an_empty_parameter =>
     Test/equal(inputs(0x[0x1B, '[', ';', '5', 'A']), [Input/key(Key/with_ctrl(Key/Code/up()))]);
 
 -- A byte no control sequence can hold ends the one it falls in, which names nothing, and is read on its own.
-test a_byte_a_sequence_cannot_hold_ends_it =
+test a_byte_a_sequence_cannot_hold_ends_it =>
     Test/equal(inputs(0x[0x1B, '[', '1', 0x0D, 'q']), [k(Key/Code/enter()), k(Key/Code/char('q'))]);
 
-test an_escape_before_a_printable_byte_is_alt =
+test an_escape_before_a_printable_byte_is_alt =>
     Test/equal(inputs(0x[0x1B, 'x']), [Input/key(Key/with_alt(Key/Code/char('x')))]);
 
 -- The control bytes past the letters stand beside the signs, and an Escape before a control byte adds Alt to its key.
-test a_control_byte_past_the_letters_and_one_under_escape =
+test a_control_byte_past_the_letters_and_one_under_escape =>
     Test/equal(
         inputs(0x[0x1C, 0x1B, 0x01]),
         [
             Input/key(Key/with_ctrl(Key/Code/char('\\'))),
             Input/key(Key { ..Key/with_ctrl(Key/Code/char('a')), alt = true })]);
 
-test a_bracketed_paste_is_one_input =
+test a_bracketed_paste_is_one_input =>
     Test/equal(
         inputs(0x[0x1B, '[', '2', '0', '0', '~', 'h', 'i', 0x1B, '[', '2', '0', '1', '~', 'q']),
         [Input/paste("hi"), k(Key/Code/char('q'))]);
 
 -- Focus reported, and a size reported in band: its parameters are rows before columns, and the pixels after them are read past.
-test a_change_of_focus_and_a_reported_size_are_inputs =
+test a_change_of_focus_and_a_reported_size_are_inputs =>
     Test/equal(
         inputs(0x[0x1B, '[', 'I', 0x1B, '[', 'O', 0x1B, '[', '4', '8', ';', '2', '4', ';', '8', '0',
             ';', '4', '8', '0', ';', '6', '4', '0', 't']),
         [Input/focus(true), Input/focus(false), Input/resize(Tty/Size { w = 80, h = 24 })]);
 
 -- What a terminal answers of itself is no input: a mode's report, supported where the terminal holds it set or reset and not where it knows it not, the keyboard protocol's flags, and the device attributes.
-test the_terminal_s_replies_are_read_apart_from_its_inputs =
+test the_terminal_s_replies_are_read_apart_from_its_inputs =>
     let read =
         Input/decode(0x[0x1B, '[', '?', '2', '0', '4', '8', ';', '2', '$', 'y', 0x1B, '[', '?', '2',
             '0', '2', '7', ';', '0', '$', 'y', 0x1B, '[', '?', '1', 'u', 0x1B, '[', '?', '6', '2',
@@ -144,16 +144,16 @@ test the_terminal_s_replies_are_read_apart_from_its_inputs =
             Reply/attributes()]),
         Test/equal(read.inputs, [k(Key/Code/char('q'))])]);
 
-test a_multi_byte_scalar_is_one_character =
+test a_multi_byte_scalar_is_one_character =>
     Test/equal(inputs(0x[0xC3, 0xA9]), [k(Key/Code/char('é'))]);
 
-test a_scalar_of_three_and_of_four_bytes_is_one_character =
+test a_scalar_of_three_and_of_four_bytes_is_one_character =>
     Test/equal(
         inputs(0x[0xE2, 0x82, 0xAC, 0xF0, 0x9F, 0x98, 0x80]),
         [k(Key/Code/char('€')), k(Key/Code/char('😀'))]);
 
 -- A byte that begins no character is passed over alone, and so is a lead the bytes after it do not complete: what follows either is read on its own.
-test a_byte_that_begins_no_character_is_passed_over_alone =
+test a_byte_that_begins_no_character_is_passed_over_alone =>
     Test/equal(
         inputs(0x[0x80, 'a', 0xC3, 'b', 0xFF, 'c', 0xED, 0xA0, 0x80, 'd']),
         [
@@ -163,8 +163,8 @@ test a_byte_that_begins_no_character_is_passed_over_alone =
             k(Key/Code/char('d'))]);
 
 -- One keystroke is one key whichever encoding the terminal sends it in: the legacy bytes and the kitty protocol's, read once nothing more came.
-test a_keystroke_is_one_key_under_either_encoding =
-    let csi(body: Bytes) -> Bytes = 0x[0x1B, '[', ..body];
+test a_keystroke_is_one_key_under_either_encoding =>
+    let csi(body: Bytes) -> Bytes => 0x[0x1B, '[', ..body];
     let pairs =
         [
             (0x[0x01], csi(0x['9', '7', ';', '5', 'u'])),
@@ -182,7 +182,7 @@ test a_keystroke_is_one_key_under_either_encoding =
         List/map(pairs, (pair: {Bytes, Bytes}) => Test/equal(settled(pair.0), settled(pair.1))));
 
 -- What a cut leaves is read again with the next chunk, so an input read in any two pieces decodes as it does whole.
-let cut_anywhere(b: Bytes) -> Test({}) =
+let cut_anywhere(b: Bytes) -> Test({}) =>
     let whole = Input/decode(b);
     Test/all(
         List/map(
@@ -200,7 +200,7 @@ let cut_anywhere(b: Bytes) -> Test({}) =
                 end));
 
 -- Every shape a chunk can end inside: a scalar, a sequence and its parameters, an Escape before a key and before another, a paste and its end marker, a kitty key with sub-parameters, a reply, and a reported size.
-test every_cut_of_an_input_decodes_as_the_whole =
+test every_cut_of_an_input_decodes_as_the_whole =>
     Test/all(
         List/map(
             [
@@ -216,7 +216,7 @@ test every_cut_of_an_input_decodes_as_the_whole =
             cut_anywhere));
 
 -- Once the clock says nothing more is coming, a lone Escape is the Escape key and what followed it is read as itself.
-test flush_reads_a_lone_escape_as_the_key =
+test flush_reads_a_lone_escape_as_the_key =>
     Test/all([
         Test/equal(Input/flush(0x[0x1B]).inputs, [k(Key/Code/escape())]),
         Test/equal(
@@ -224,7 +224,7 @@ test flush_reads_a_lone_escape_as_the_key =
             [k(Key/Code/escape()), k(Key/Code/char('['))])]);
 
 -- `rest` is a suffix of the input: nothing is invented and nothing before the cut is kept. An open claim rather than a test, because the certifier does not settle it — the declaration below states it over the inputs whose branches it is worth stating over.
-let rest_is_a_suffix(b: Bytes) -> Test({}) =
+let rest_is_a_suffix(b: Bytes) -> Test({}) =>
     let read = Input/decode(b);
     let cut = Bytes/length(b) - Bytes/length(read.rest);
     match Bool/holds(cut <= Bytes/length(b))
@@ -236,7 +236,7 @@ let rest_is_a_suffix(b: Bytes) -> Test({}) =
     end;
 
 -- Every shape the decoder cuts differently: nothing to read, a complete key, a lone Escape and a truncated sequence it must hold back, a complete and an incomplete paste, a scalar cut short, and an end marker cut in half.
-test the_rest_is_a_suffix_of_every_shape_the_decoder_cuts =
+test the_rest_is_a_suffix_of_every_shape_the_decoder_cuts =>
     Test/all(
         List/map(
             [

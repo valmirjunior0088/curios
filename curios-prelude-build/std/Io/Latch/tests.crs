@@ -3,7 +3,7 @@ use /std/{Bool, Io, Test};
 use /std/Io/{Latch};
 
 -- A latch answers untripped until it is tripped.
-test a_latch_is_untripped_until_it_is_tripped =
+test a_latch_is_untripped_until_it_is_tripped =>
     let latch = Latch/new()!;
     let before = Latch/tripped(latch)!;
     let () = Latch/trip(latch)!;
@@ -13,7 +13,7 @@ test a_latch_is_untripped_until_it_is_tripped =
         Test/assert("a tripped latch is tripped", after)]);
 
 -- A latch tripped again stays tripped.
-test a_latch_tripped_again_stays_tripped =
+test a_latch_tripped_again_stays_tripped =>
     let latch = Latch/new()!;
     let () = Latch/trip(latch)!;
     let () = Latch/trip(latch)!;
@@ -21,7 +21,7 @@ test a_latch_tripped_again_stays_tripped =
     Test/assert("a second trip changes nothing", tripped);
 
 -- Tripping one latch leaves another untripped.
-test tripping_one_latch_leaves_another_untripped =
+test tripping_one_latch_leaves_another_untripped =>
     let a = Latch/new()!;
     let b = Latch/new()!;
     let () = Latch/trip(a)!;
@@ -29,7 +29,7 @@ test tripping_one_latch_leaves_another_untripped =
     Test/assert("the other latch is untripped", Bool/not(other));
 
 -- A wait on a latch nothing has tripped does not go on: beside a branch that only yields, the yielding branch answers first.
-test a_wait_does_not_go_on_before_the_latch_is_tripped =
+test a_wait_does_not_go_on_before_the_latch_is_tripped =>
     let latch = Latch/new()!;
     let first =
         Io/select([
@@ -38,7 +38,7 @@ test a_wait_does_not_go_on_before_the_latch_is_tripped =
     Test/equal(first, 2);
 
 -- A wait on a latch goes on once another branch trips it, and at once where it is tripped already.
-test a_wait_goes_on_once_the_latch_is_tripped =
+test a_wait_goes_on_once_the_latch_is_tripped =>
     let latch = Latch/new()!;
     let ((), ()) = Io/both(Latch/wait(latch), Latch/trip(latch))!;
     let () = Latch/wait(latch)!;

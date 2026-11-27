@@ -38,7 +38,7 @@
 (foreign_item name: (identifier) @function)
 (test_item name: (identifier) @function)
 (let_binding pattern: (identifier) @variable)
-(let_binding pattern: (identifier) @function parameters: (parameters))
+(let_binding pattern: (identifier) @function parameters: (sugar_parameters))
 (mod_item name: (identifier) @module)
 (induct_body name: (identifier) @type)
 (struct_member name: (identifier) @type)

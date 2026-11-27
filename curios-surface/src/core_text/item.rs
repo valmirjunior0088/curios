@@ -159,7 +159,7 @@ fn foreign_definition_read(
     )))
 }
 
-/// The definition a test's form implies, `test /t = value`, made against the scope's test family.
+/// The definition a test's form implies, `test /t => value`, made against the scope's test family.
 fn test_read(test: &TopTest<CoreText>, reader: &mut Reader<'_>) -> Result<Definition, ReadError> {
     let span = test.label.span();
     let mut fields = Fields::of(&test.core.fields, span)?;

@@ -11,12 +11,12 @@ fn a_function_type_is_not_aliased_across_a_mark() {
         r#"
         use /std/{Nat, Bool};
 
-        let F(b: Bool) -> Type =
+        let F(b: Bool) -> Type =>
             match b
             | true => (@x: Nat) -> Nat
             | false => (x: Nat) -> Nat
             end;
-        let pass(@T: Type, t: T) -> T = t;
+        let pass(@T: Type, t: T) -> T => t;
         let f: F(true) = (@x) => x;
         let g: F(true) = pass(@F(true), f);
         /std/print(Nat/to_str(g(@3)))
@@ -82,7 +82,7 @@ fn a_hidden_member_reduces_at_its_own_position() {
         end
         struct Sized: Type { a: Nat, @len: Nat, items: Nat }
         let f: (a: Nat, @b: Nat, c: Nat) -> Nat = (x, z) => z;
-        let read(t: Tagged) -> Nat = match t | tag(x, z) => z end;
+        let read(t: Tagged) -> Nat => match t | tag(x, z) => z end;
         let s: Sized = Sized { a = 1, @len = 2, items = 3 };
         let fact: Holds(f(1, @2, 3) + read(Tagged/tag(1, @2, 3)) + s.1 == 9) = True/qed();
         /std/print(Nat/to_str(f(1, @2, 3) + read(Tagged/tag(1, @2, 3)) + s.1))

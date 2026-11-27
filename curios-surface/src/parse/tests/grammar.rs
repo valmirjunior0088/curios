@@ -81,7 +81,7 @@ fn trailing_comma_accepted_in_every_comma_list() {
         // Signature-sugar parameter lists inside a tuple-type field.
         ("{run(input : Nat,) -> Nat}", "{run(input : Nat) -> Nat}"),
         // Definition-sugar parameter lists inside a tuple-literal field.
-        ("(base = 3, bump(x,) = x)", "(base = 3, bump(x) = x)"),
+        ("(base = 3, bump(x,) => x)", "(base = 3, bump(x) => x)"),
         // Struct-literal head arguments.
         (
             "Pair(Nat, Bool,) { fst = 1 }",
@@ -94,8 +94,8 @@ fn trailing_comma_accepted_in_every_comma_list() {
         ),
         // Local function-definition sugar.
         (
-            "let f(x : Nat,) -> Nat = x; f(1)",
-            "let f(x : Nat) -> Nat = x; f(1)",
+            "let f(x : Nat,) -> Nat => x; f(1)",
+            "let f(x : Nat) -> Nat => x; f(1)",
         ),
     ] {
         assert_eq!(
@@ -137,13 +137,13 @@ fn trailing_comma_accepted_in_top_level_comma_lists() {
         ),
         // Witness telescope and concept-application arguments.
         (
-            "satisfy (@A : Type,) => S(A,) { show(a,) = a }",
-            "satisfy (@A : Type) => S(A) { show(a) = a }",
+            "satisfy (@A : Type,) -> S(A,) { show(a,) => a }",
+            "satisfy (@A : Type) -> S(A) { show(a) => a }",
         ),
         // Top-level function-definition sugar.
         (
-            "pub let f(x : Nat,) -> Nat = x;",
-            "pub let f(x : Nat) -> Nat = x;",
+            "pub let f(x : Nat,) -> Nat => x;",
+            "pub let f(x : Nat) -> Nat => x;",
         ),
     ] {
         assert_eq!(
@@ -272,7 +272,7 @@ fn a_shorter_reading_still_wins_where_the_prefix_is_absent() {
         // A match writes no result.
         "match b | true => 1 | false => 0 end",
         // Definition sugar and spreads in a literal.
-        "(bump(x) = x, base = 3)",
+        "(bump(x) => x, base = 3)",
         "P { ..p, y = false }",
         // A lambda whose body is a whole term.
         "(x) => let y = 1; y",

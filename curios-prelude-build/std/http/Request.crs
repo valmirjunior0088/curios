@@ -21,11 +21,11 @@ satisfy Spell(Request) {
 }
 
 --- A `GET` of `url`.
-pub let get(url: Url) -> Request =
+pub let get(url: Url) -> Request =>
     Request { method = Method/get(), url = url, headers = [], body = 0x[] };
 
 --- A `POST` of `body` to `url`.
-pub let post(url: Url, body: Bytes) -> Request =
+pub let post(url: Url, body: Bytes) -> Request =>
     Request { method = Method/post(), url = url, headers = [], body = body };
 
 --- `r` with the field `name: value` appended to its headers. A field the renderer owns — `host`, `content-length`, `transfer-encoding`, `connection` — is kept and not sent.
@@ -35,37 +35,37 @@ pub let with_header(
     value: Str,
     @_: Holds(Field/Name/is_name(name)),
     @_: Holds(Bytes/all(Str/to_bytes(value), Field/Value/admits)),
-) -> Request =
+) -> Request =>
     Request { ..r, headers = [..r.headers, Field/of(name, value)] };
 
 --- The value of the first header named `name`, compared without case, or `none`.
-pub let header(r: Request, name: Str) -> Option(Field/Value) =
+pub let header(r: Request, name: Str) -> Option(Field/Value) =>
     Field/find(r.headers, name);
 
-let host_header(u: Url) -> Str =
+let host_header(u: Url) -> Str =>
     match u.port == Url/Scheme/default_port(u.scheme)
     | true => u.host
     | false => Fmt/render("%:%")(u.host)(u.port)
     end;
 
 --- The request target: the path, and the query after it when there is one.
-pub let target(u: Url) -> Str =
+pub let target(u: Url) -> Str =>
     match u.query
     | some(q) => Fmt/render("%?%")(u.path)(q)
     | none() => u.path
     end;
 
 --- Whether a request's renderer writes the field named `name` itself: `host`, the framing fields and `connection`. A caller's own field of one of these names is not sent.
-pub let owned(name: Field/Name) -> Bool =
+pub let owned(name: Field/Name) -> Bool =>
     name == Field/Name/host || name == Field/Name/content_length
         || name == Field/Name/transfer_encoding
         || name == Field/Name/connection;
 
 --- Whether a request of method `m` states its length even where it has no content: the methods that define a meaning for content sent with them (RFC 9110 §8.6).
-let states_length(m: Method) -> Bool =
+let states_length(m: Method) -> Bool =>
     match m | post() | put() | patch() => true | _ => false end;
 
-let length_line(r: Request) -> Bytes =
+let length_line(r: Request) -> Bytes =>
     match Bytes/length(r.body) != 0 || states_length(r.method)
     | true =>
         Field/line_of(Field/Name/content_length, Str/to_bytes(Nat/to_str(Bytes/length(r.body))))
@@ -73,7 +73,7 @@ let length_line(r: Request) -> Bytes =
     end;
 
 --- The request as the bytes sent on the wire: the request line as HTTP/1.1, `host`, `connection: close` since a client keeps no connection, the length where there is a body or the method always states one, the headers the renderer does not own, then the body. The target and the host are percent-encoded wherever the wire cannot carry an octet of them, so every request can be sent and nothing is refused.
-pub let render(r: Request) -> Bytes =
+pub let render(r: Request) -> Bytes =>
     0x[
         ..Str/to_bytes(Method/to_str(r.method)),
         ' ',
@@ -105,7 +105,7 @@ satisfy Spell(Head) {
 }
 
 -- The method `b` spells: malformed where it is no token, and not implemented where it is one this library does not name.
-let method_of(b: Bytes) -> Result(Refusal, Method) =
+let method_of(b: Bytes) -> Result(Refusal, Method) =>
     match Str/of_bytes(b)
     | success(spelled), Field/Name/is_token(spelled) =>
         match Method/of_str(spelled)
@@ -116,7 +116,7 @@ let method_of(b: Bytes) -> Result(Refusal, Method) =
     end;
 
 --- The head `bytes` spell, the bytes of a request line and its field lines: a request line of a method, a target and a version between single spaces, and field lines none of which begins with whitespace (RFC 9112 §3, §5). A method this library does not name is not implemented, a major version other than 1 not supported, and anything else that is no head malformed.
-pub let head_of(bytes: Bytes) -> Result(Refusal, Head) =
+pub let head_of(bytes: Bytes) -> Result(Refusal, Head) =>
     match syntax/lines(bytes)
     | [] => Result/failure(Refusal/malformed("a request begins with its request line"))
     | [first, ..rest] =>
@@ -133,7 +133,7 @@ pub let head_of(bytes: Bytes) -> Result(Refusal, Head) =
     end;
 
 -- Whether `host` is what a `Host` field holds: a host and, after a colon, a port, with none of what would begin a path, a query, a fragment or user information.
-let is_authority(host: Str) -> Bool =
+let is_authority(host: Str) -> Bool =>
     Bool/not(Str/is_empty(host))
         && Bytes/all(
             Str/to_bytes(host),
@@ -142,8 +142,8 @@ let is_authority(host: Str) -> Bool =
                 Nat/in_range(n, 33, 126) && n != '/' && n != '?' && n != '#' && n != '@');
 
 -- The authority a request's `Host` fields state: the one field's value, where there is one field and its value is an authority.
-let host_of(headers: List(Field)) -> Result(Refusal, Option(Str)) =
-    let stated(one: Field) -> Result(Refusal, Option(Str)) =
+let host_of(headers: List(Field)) -> Result(Refusal, Option(Str)) =>
+    let stated(one: Field) -> Result(Refusal, Option(Str)) =>
         match Field/Value/to_str(one.value)
         | some(host), is_authority(host) => Result/success(Option/some(host))
         | _ => Result/failure(Refusal/malformed("Host is a host and, after a colon, a port"))
@@ -154,14 +154,14 @@ let host_of(headers: List(Field)) -> Result(Refusal, Option(Str)) =
     | _ => Result/failure(Refusal/malformed("a request states one Host"))
     end;
 
-let read_url(text: Str) -> Result(Refusal, Url) =
+let read_url(text: Str) -> Result(Refusal, Url) =>
     match Url/of_str(text)
     | success(url) => Result/success(url)
     | failure(why) => Result/failure(Refusal/malformed(why.message))
     end;
 
 -- Where a request whose target is a path or a whole URL is addressed, `host` being the authority its `Host` field states.
-let resource_of(scheme: Url/Scheme, head: Head, host: Option(Str)) -> Result(Refusal, Url) =
+let resource_of(scheme: Url/Scheme, head: Head, host: Option(Str)) -> Result(Refusal, Url) =>
     match (Str/contains(head.target, '#'), Str/starts_with(head.target, "/"))
     | (true, _) => Result/failure(Refusal/malformed("a request target has no fragment"))
     | (false, true) =>
@@ -197,7 +197,7 @@ satisfy Spell(Address) {
 }
 
 --- What the request `head` is addressed to, over a connection of `scheme` (RFC 9112 §3.2, §3.3). A target in origin-form, a path and its query, is joined to the authority its one `Host` field states; one in absolute-form, a whole URL, is the address, with `Host` ignored though HTTP/1.1 still owes one; and `*` is the server itself, which only `OPTIONS` is asked of, an HTTP/1.1 request still owing its `Host`. A request for a resource with no authority, one with two `Host` fields or one that is no authority, and one with a target of none of those forms, is malformed.
-pub let address_of(scheme: Url/Scheme, head: Head) -> Result(Refusal, Address) =
+pub let address_of(scheme: Url/Scheme, head: Head) -> Result(Refusal, Address) =>
     let host = host_of(head.headers)!;
     match head.target
     | "*" =>
@@ -212,7 +212,7 @@ pub let address_of(scheme: Url/Scheme, head: Head) -> Result(Refusal, Address) =
     end;
 
 --- The URL of the resource the request `head` is addressed to, as `address_of` reads it. A request for the server itself has none and is refused: a `Request` is addressed to a resource.
-pub let url_of(scheme: Url/Scheme, head: Head) -> Result(Refusal, Url) =
+pub let url_of(scheme: Url/Scheme, head: Head) -> Result(Refusal, Url) =>
     let address = address_of(scheme, head)!;
     match address
     | resource(url) => Result/success(url)
@@ -220,17 +220,17 @@ pub let url_of(scheme: Url/Scheme, head: Head) -> Result(Refusal, Url) =
     end;
 
 --- How the body of the request `head` is delimited.
-pub let framing(head: Head) -> Result(Refusal, Framing) =
+pub let framing(head: Head) -> Result(Refusal, Framing) =>
     Framing/of_request(head.version, head.headers);
 
 --- The request `head` and `body` make, over a connection of `scheme`.
-pub let from_head(scheme: Url/Scheme, head: Head, body: Bytes) -> Result(Refusal, Request) =
+pub let from_head(scheme: Url/Scheme, head: Head, body: Bytes) -> Result(Refusal, Request) =>
     let url = url_of(scheme, head)!;
     Result/success(
         Request { method = head.method, url = url, headers = head.headers, body = body });
 
 --- A whole request read from `bytes`, as a server over a connection of `scheme` reads it within `limits`: the head, the framing its fields state, the body that framing delimits, and the URL its target and its `Host` address. What follows the request is not read. A request that has not all arrived is `incomplete`.
-pub let of_bytes(limits: Limits, scheme: Url/Scheme, bytes: Bytes) -> Result(Refusal, Request) =
+pub let of_bytes(limits: Limits, scheme: Url/Scheme, bytes: Bytes) -> Result(Refusal, Request) =>
     match read/head(limits, true, read/unsearched, bytes)
     | more(_, _) => Result/failure(Refusal/incomplete())
     | refused(why) => Result/failure(why)

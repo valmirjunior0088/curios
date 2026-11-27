@@ -21,31 +21,31 @@ end
 let cells: Nat = 10000;
 let ballast_cells: Nat = BALLAST_CELLS;
 
-let build(n: Nat, x: Nat, acc: Chain) -> Chain =
+let build(n: Nat, x: Nat, acc: Chain) -> Chain =>
     match n
     | 0 => acc
     | m + 1 => build(m, 75 * x % 65537, Chain/cons(x, acc))
     end;
 
-let step(rest: Chain, acc: Chain) -> Chain =
+let step(rest: Chain, acc: Chain) -> Chain =>
     match rest
     | nil() => acc
     | cons(v, tail) => step(tail, Chain/cons((75 * v + 13) % 65537, acc))
     end;
 
-let rounds(k: Nat, c: Chain) -> Chain =
+let rounds(k: Nat, c: Chain) -> Chain =>
     match k
     | 0 => c
     | m + 1 => rounds(m, step(c, Chain/nil()))
     end;
 
-let total(c: Chain, acc: Nat) -> Nat =
+let total(c: Chain, acc: Nat) -> Nat =>
     match c
     | nil() => acc
     | cons(v, tail) => total(tail, (acc + v) % 1000003)
     end;
 
-let entry() -> /std/Io({}) =
+let entry() -> /std/Io({}) =>
     let arguments = /std/Proc/args()!;
     let input = /std/List/try_get(arguments, 1);
     match input
@@ -123,19 +123,19 @@ end
 
 let ballast_cells: Nat = BALLAST_CELLS;
 
-let build(n: Nat, x: Nat, acc: Chain) -> Chain =
+let build(n: Nat, x: Nat, acc: Chain) -> Chain =>
     match n
     | 0 => acc
     | m + 1 => build(m, 75 * x % 65537, Chain/cons(x, acc))
     end;
 
-let drain(c: Chain, acc: Nat) -> Nat =
+let drain(c: Chain, acc: Nat) -> Nat =>
     match c
     | nil() => acc
     | cons(v, tail) => drain(tail, (acc + v) % 1000003)
     end;
 
-let walk(n: Nat, i: Nat, x: Nat, m: Map(Bytes, Nat)) -> Map(Bytes, Nat) =
+let walk(n: Nat, i: Nat, x: Nat, m: Map(Bytes, Nat)) -> Map(Bytes, Nat) =>
     match n
     | 0 => m
     | k + 1 =>
@@ -143,7 +143,7 @@ let walk(n: Nat, i: Nat, x: Nat, m: Map(Bytes, Nat)) -> Map(Bytes, Nat) =
         walk(k, i + 1, y, Map/insert(m, Bytes/of_nat(y), i % 1000003))
     end;
 
-let entry() -> /std/Io({}) =
+let entry() -> /std/Io({}) =>
     let arguments = /std/Proc/args()!;
     let input = /std/List/try_get(arguments, 1);
     match input
@@ -196,7 +196,7 @@ pub fn spines_collection_decomposition() {
 /// `spines` over a map of byte keys, `KEY` its key of `y`: the stock program's walk with the key widened, read the same way.
 const SPINES_KEYED: &str = r#"use /std/{Str, Nat, Map, Io, Bytes};
 
-let walk(n: Nat, i: Nat, x: Nat, m: Map(Bytes, Nat)) -> Map(Bytes, Nat) =
+let walk(n: Nat, i: Nat, x: Nat, m: Map(Bytes, Nat)) -> Map(Bytes, Nat) =>
     match n
     | 0 => m
     | k + 1 =>
@@ -204,7 +204,7 @@ let walk(n: Nat, i: Nat, x: Nat, m: Map(Bytes, Nat)) -> Map(Bytes, Nat) =
         walk(k, i + 1, y, Map/insert(m, KEY, i % 1000003))
     end;
 
-let entry() -> /std/Io({}) =
+let entry() -> /std/Io({}) =>
     let arguments = /std/Proc/args()!;
     let input = /std/List/try_get(arguments, 1);
     match input

@@ -2,10 +2,10 @@
 use /std/{Nat, proved};
 use /std/Bool/{True, Holds};
 
-let step(k: Nat, a: Holds(k + 1 == 2), b: Holds(k == 0)) -> Holds(k + 1 == 0) =
+let step(k: Nat, a: Holds(k + 1 == 2), b: Holds(k == 0)) -> Holds(k + 1 == 0) =>
     proved();
 
-let f(n: Nat, h: Holds(n == 2)) -> Holds(n == 0) =
+let f(n: Nat, h: Holds(n == 2)) -> Holds(n == 0) =>
     match n: (m) => Holds(m == 0)
     | 0 => True/qed()
     | k + 1; ih => step(k, h, ih)

@@ -2,14 +2,14 @@
 use /std/{Nat};
 use /std/Bool/{False};
 
-let def(n: Nat, f: (Nat) -> False) -> {Nat, (Nat) -> False} =
+let def(n: Nat, f: (Nat) -> False) -> {Nat, (Nat) -> False} =>
     (
         match n
         | 0 => 0
         | k + 1 => match f(k) end
         end,
         (m) => app(n, f))
-and app(n: Nat, f: (Nat) -> False) -> False =
+and app(n: Nat, f: (Nat) -> False) -> False =>
     match n
     | 0 => f(n)
     | k + 1 =>
@@ -17,10 +17,10 @@ and app(n: Nat, f: (Nat) -> False) -> False =
         f(n)
     end;
 
-let h(r: {Nat, (Nat) -> False}, y: Nat) -> False =
+let h(r: {Nat, (Nat) -> False}, y: Nat) -> False =>
     r.1(y);
 
-let spin(n: Nat) -> False =
+let spin(n: Nat) -> False =>
     h(def(n, spin), n);
 
 spin(0)

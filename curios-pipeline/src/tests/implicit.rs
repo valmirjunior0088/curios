@@ -11,7 +11,7 @@ fn arguments_can_all_be_supplied_explicitly() {
         | some(A)
         | none()
         end
-        let id(@T : Type, x : T) -> T = x;
+        let id(@T : Type, x : T) -> T => x;
         let subject : /std/Nat = match Opt/some(@Nat, id(@Nat, 1))
         | some(value) => value
         | none() => 0
@@ -46,7 +46,7 @@ fn interleaved_implicit_with_partial_override() {
     // `T` is overridden positionally with `@`, `U` (interleaved after an explicit binder) is inferred from `y`.
     let source = r#"
         use /std/{Nat, Bytes};
-        let second(@T : Type, x : T, @U : Type, y : U) -> U = y;
+        let second(@T : Type, x : T, @U : Type, y : U) -> U => y;
         let subject : /std/Nat = std/Bytes/length(second(@Nat, 1, /std/Str/to_bytes("abc")));
         /std/Io/pure(())
     "#;
@@ -59,13 +59,13 @@ fn a_hidden_argument_is_written_before_the_plain_one_it_precedes() {
     // One walk matches written arguments to slots: an `@`-argument is written in its run, before the plain argument that run precedes, so one written after the plain arguments has no slot left to fill.
     let at_first = r#"
         use /std/{Nat, Bytes};
-        let second(@T : Type, x : T, @U : Type, y : U) -> U = y;
+        let second(@T : Type, x : T, @U : Type, y : U) -> U => y;
         let subject : /std/Nat = std/Bytes/length(second(@Nat, 1, /std/Str/to_bytes("abc")));
         /std/Io/pure(())
     "#;
     let at_last = r#"
         use /std/{Nat, Bytes};
-        let second(@T : Type, x : T, @U : Type, y : U) -> U = y;
+        let second(@T : Type, x : T, @U : Type, y : U) -> U => y;
         let subject : /std/Nat = std/Bytes/length(second(1, /std/Str/to_bytes("abc"), @Nat));
         /std/Io/pure(())
     "#;
@@ -89,7 +89,7 @@ fn trailing_implicit_is_pinned_by_the_expected_type() {
         | some(A)
         | none()
         end
-        let nothing(n : Nat, @T : Type) -> Opt(T) = Opt/none(@T);
+        let nothing(n : Nat, @T : Type) -> Opt(T) => Opt/none(@T);
         let r : Opt(Nat) = nothing(0);
         let subject : /std/Nat = match r
         | some(value) => value
@@ -115,8 +115,8 @@ fn an_all_implicit_parameter_list_takes_a_call_of_its_own() {
                 | wrap(x) => f(x)
                 end;
         satisfy Monad(Id) {
-            pure(@A, x) = Id/wrap(x),
-            bind(@A, @B, m, f) = bind(@A, @B)(m, f)
+            pure(@A, x) => Id/wrap(x),
+            bind(@A, @B, m, f) => bind(@A, @B)(m, f)
         }
         let subject : /std/Nat = let direct = bind()(Id/wrap(1), (x) => Id/wrap(Nat/succ(x)));
         -- The lambda body is its own region root: the `!` sequences inside
@@ -164,7 +164,7 @@ fn uninferred_implicit_names_the_binder_and_function() {
     // Nothing mentions `T` outside the binder itself, so unification can never pin it; the report must name the hole, not a bare metavar id.
     let source = r#"
         use /std/{Nat};
-        let cast(x : Nat, @T : Type) -> Nat = x;
+        let cast(x : Nat, @T : Type) -> Nat => x;
         let subject : /std/Nat = cast(5);
         /std/Io/pure(())
     "#;
@@ -186,7 +186,7 @@ fn uninferred_implicit_names_the_binder_and_function() {
 fn surplus_implicit_arguments_are_rejected() {
     let source = r#"
         use /std/{Nat};
-        let id(@T : Type, x : T) -> T = x;
+        let id(@T : Type, x : T) -> T => x;
         id(@Nat, @Nat, 1)
     "#;
 
@@ -204,8 +204,8 @@ fn bare_polymorphic_function_inserts_implicits_in_value_position() {
     let source = r#"
         use /std/{List};
         use /std/{Nat};
-        let cat(@T : Type, a : List(T), b : List(T)) -> List(T) = [..a, ..b];
-        let pairwise(f : (List(Nat), List(Nat)) -> List(Nat), a : List(Nat)) -> List(Nat) =
+        let cat(@T : Type, a : List(T), b : List(T)) -> List(T) => [..a, ..b];
+        let pairwise(f : (List(Nat), List(Nat)) -> List(Nat), a : List(Nat)) -> List(Nat) =>
             f(a, a);
         let result : List(Nat) = pairwise(cat, [1]);
         /std/print(/std/Nat/to_str(List/length(result)))
@@ -220,7 +220,7 @@ fn polymorphic_value_assignment_keeps_its_implicit() {
     let source = r#"
         use /std/{List};
         use /std/{Nat};
-        let cat(@T : Type, a : List(T), b : List(T)) -> List(T) = [..a, ..b];
+        let cat(@T : Type, a : List(T), b : List(T)) -> List(T) => [..a, ..b];
         let g : (@T : Type, List(T), List(T)) -> List(T) = cat;
         let result : List(Nat) = g(@Nat, [1], [2]);
         /std/print(/std/Nat/to_str(List/length(result)))

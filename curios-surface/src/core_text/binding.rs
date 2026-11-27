@@ -220,7 +220,9 @@ fn member_parts<'t>(
             body,
         } => Ok((LabelRead::binder(binder)?, type_, body)),
         LetSignature::Name { type_: None, .. } => Err(refused("a `let` that states no type")),
-        LetSignature::Func { .. } => Err(refused("a `let`'s definition sugar")),
+        LetSignature::Func { .. } | LetSignature::Lambda { .. } => {
+            Err(refused("a `let`'s definition sugar"))
+        }
     }
 }
 

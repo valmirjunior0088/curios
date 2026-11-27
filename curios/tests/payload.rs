@@ -43,7 +43,7 @@ fn project(name: &str) -> Temporary {
     write(
         &root,
         "app.crs",
-        "let main() -> /std/Io({}) = let _ = /std/print(/app/word)!;\n/std/Proc/exit(7);\nmain()\n",
+        "let main() -> /std/Io({}) => let _ = /std/print(/app/word)!;\n/std/Proc/exit(7);\nmain()\n",
     );
 
     root
@@ -248,12 +248,12 @@ fn code(index: &str) -> String {
 /// `app`'s library: `f` matches on `dep`'s `Code(X)` and adds to `x`, which checks while `big` fixes the index at `/std/Nat` and is refused once it fixes it at `/std/Bool`, which adds to nothing. A test beside it, so a test run has one to run.
 const ON_CODE: &str = "use /dep/{Code};
 
-pub let f(X: Type, c: Code(X), x: X) -> X =
+pub let f(X: Type, c: Code(X), x: X) -> X =>
     match c
     | big() => x + 0
     end;
 
-test f_is_declared = /std/Test/assert(\"it holds\", true);
+test f_is_declared => /std/Test/assert(\"it holds\", true);
 ";
 
 /// Every command that runs, builds, tests, documents, checks or asks about the package: each exits nonzero on a refusal, a check's as much as a build's.
@@ -373,7 +373,7 @@ fn app_manifest(name: &str, dependencies: &[(&str, &Path)]) -> String {
 fn a_test_run_names_only_what_the_executable_declares() {
     let (root, _a, b) = layered(
         "tested-undeclared",
-        "let shown : /std/Str = /a/word;\n\ntest shown_is_named = /std/Test/assert(\"it holds\", true);\n\n/std/print(shown)\n",
+        "let shown : /std/Str = /a/word;\n\ntest shown_is_named => /std/Test/assert(\"it holds\", true);\n\n/std/print(shown)\n",
     );
     write(&root, "curios.toml", &app_manifest("app", &[("b", &b)]));
 
@@ -494,13 +494,13 @@ fn tested(name: &str, executables: &[&str]) -> Temporary {
     write(
         &root,
         "lib.crs",
-        "pub let word : /std/Str = \"kept\";\n\ntest holds = /std/Test/assert(\"it holds\", true);\n",
+        "pub let word : /std/Str = \"kept\";\n\ntest holds => /std/Test/assert(\"it holds\", true);\n",
     );
     for executable in executables {
         write(
             &root,
             &format!("{executable}.crs"),
-            "test holds = /std/Test/assert(\"it holds\", true);\n\n/std/print(/app/word)\n",
+            "test holds => /std/Test/assert(\"it holds\", true);\n\n/std/print(/app/word)\n",
         );
     }
 

@@ -26,7 +26,7 @@ satisfy Spell(IndicConjunctBreak) {
 }
 
 -- The class `/sys/indic_conjunct_break` gives `code`.
-let of_code(code: Nat) -> IndicConjunctBreak =
+let of_code(code: Nat) -> IndicConjunctBreak =>
     match
     | code == /sys/indic_conjunct_break/linker => linker()
     | code == /sys/indic_conjunct_break/consonant => consonant()
@@ -41,5 +41,5 @@ let _every_code_the_database_names_is_a_case: Holds(
     True/qed();
 
 --- `c`'s class.
-pub let of_char(c: Char) -> IndicConjunctBreak =
+pub let of_char(c: Char) -> IndicConjunctBreak =>
     of_code(unicode/class(/sys/unicode/indic_conjunct_break, /sys/indic_conjunct_break/missing, c));

@@ -18,28 +18,28 @@ end
 let cells: Nat =
     10000;
 
-let build(n: Nat, x: Nat, acc: Chain) -> Chain =
+let build(n: Nat, x: Nat, acc: Chain) -> Chain =>
     match n
     | 0 => acc
     | m + 1 => build(m, 75 * x % 65537, Chain/cons(x, acc))
     end;
 
-let step(rest: Chain, acc: Chain) -> Chain =
+let step(rest: Chain, acc: Chain) -> Chain =>
     match rest
     | nil() => acc
     | cons(v, tail) => step(tail, Chain/cons((75 * v + 13) % 65537, acc))
     end;
 
-let rounds(k: Nat, c: Chain) -> Chain =
+let rounds(k: Nat, c: Chain) -> Chain =>
     match k | 0 => c | m + 1 => rounds(m, step(c, Chain/nil())) end;
 
-let total(c: Chain, acc: Nat) -> Nat =
+let total(c: Chain, acc: Nat) -> Nat =>
     match c
     | nil() => acc
     | cons(v, tail) => total(tail, (acc + v) % 1000003)
     end;
 
-let execute() -> Try(Io, Str, {}) =
+let execute() -> Try(Io, Str, {}) =>
     let arguments = Proc/args()!;
     let bytes = Option/to_result(List/try_get(arguments, 1), "no input")!;
     let s = Result/map_failure(Str/of_bytes(bytes), (_) => "invalid utf-8")!;

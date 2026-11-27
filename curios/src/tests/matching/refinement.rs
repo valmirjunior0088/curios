@@ -12,10 +12,10 @@ fn a_boolean_refinement_reaches_an_occurrence_spelled_differently_on_its_right()
     let source = r#"
         use /std/{Eq, Bool, Nat, Str};
 
-        let g(n : Nat) -> Bool = n == 7;
-        let h(n : Nat) -> Bool = n == 7;
+        let g(n : Nat) -> Bool => n == 7;
+        let h(n : Nat) -> Bool => n == 7;
 
-        let refined(x : Bool) -> Str =
+        let refined(x : Bool) -> Str =>
             match x && g(7)
             | true =>
                 let p : Eq()(x && h(7), true) = Eq/refl();
@@ -37,13 +37,13 @@ fn the_false_arm_of_a_comparison_proves_its_dual() {
         use /std/{Nat, Option};
         use /std/Bool/{True, Holds};
 
-        let at_least(n : Nat, m : Nat) -> Option(Holds(m <= n)) =
+        let at_least(n : Nat, m : Nat) -> Option(Holds(m <= n)) =>
             match n < m
             | true => Option/none()
             | false => Option/some(True/qed())
             end;
 
-        let shown(n : Nat, m : Nat) -> Nat =
+        let shown(n : Nat, m : Nat) -> Nat =>
             match at_least(n, m) | some(_) => n | none() => m end;
 
         /std/print(Nat/to_str(shown(7, 3)))
@@ -58,19 +58,19 @@ fn the_false_arm_of_a_comparison_proves_its_dual_across_the_successor_seam() {
         use /std/{Nat, Int, Option};
         use /std/Bool/{True, Holds};
 
-        let above(n : Nat) -> Option(Holds(5 <= n)) =
+        let above(n : Nat) -> Option(Holds(5 <= n)) =>
             match n <= 4
             | true => Option/none()
             | false => Option/some(True/qed())
             end;
 
-        let below(i : Int) -> Option(Holds(i <= +4)) =
+        let below(i : Int) -> Option(Holds(i <= +4)) =>
             match +5 <= i
             | true => Option/none()
             | false => Option/some(True/qed())
             end;
 
-        let shown(n : Nat, i : Int) -> Nat =
+        let shown(n : Nat, i : Int) -> Nat =>
             match above(n)
             | some(_) => match below(i) | some(_) => n | none() => 0 end
             | none() => 0
@@ -88,19 +88,19 @@ fn a_zero_check_and_the_order_it_rules_out_prove_each_other() {
         use /std/{Nat, Option};
         use /std/Bool/{True, Holds};
 
-        let positive(n : Nat) -> Option(Holds(0 < n)) =
+        let positive(n : Nat) -> Option(Holds(0 < n)) =>
             match n == 0
             | true => Option/none()
             | false => Option/some(True/qed())
             end;
 
-        let apart(n : Nat) -> Option(Holds(n != 0)) =
+        let apart(n : Nat) -> Option(Holds(n != 0)) =>
             match 0 < n
             | true => Option/some(True/qed())
             | false => Option/none()
             end;
 
-        let shown(n : Nat) -> Nat =
+        let shown(n : Nat) -> Nat =>
             match positive(n)
             | some(_) => match apart(n) | some(_) => n | none() => 0 end
             | none() => 0
@@ -118,12 +118,12 @@ fn an_implicit_is_solved_through_a_comparison_against_zero() {
         use /std/{Nat};
         use /std/Bool/{True, Holds};
 
-        let same(@a : Nat, h : Holds(a == 0)) -> Nat = a;
-        let apart(@a : Nat, h : Holds(a != 0)) -> Nat = a;
+        let same(@a : Nat, h : Holds(a == 0)) -> Nat => a;
+        let apart(@a : Nat, h : Holds(a != 0)) -> Nat => a;
 
-        let through(n : Nat, zero : Holds(n == 0), least : Holds(n <= 0)) -> Nat =
+        let through(n : Nat, zero : Holds(n == 0), least : Holds(n <= 0)) -> Nat =>
             same(zero) + same(least);
-        let across(n : Nat, positive : Holds(0 < n)) -> Nat =
+        let across(n : Nat, positive : Holds(0 < n)) -> Nat =>
             apart(positive);
 
         /std/print(Nat/to_str(across(7, True/qed()) + through(0, True/qed(), True/qed())))
@@ -138,13 +138,13 @@ fn the_false_arm_of_a_comparison_proves_nothing_one_step_past_its_dual() {
         use /std/{Nat, Option};
         use /std/Bool/{True, Holds};
 
-        let past(n : Nat) -> Option(Holds(6 <= n)) =
+        let past(n : Nat) -> Option(Holds(6 <= n)) =>
             match n <= 4
             | true => Option/none()
             | false => Option/some(True/qed())
             end;
 
-        let shown(n : Nat) -> Nat = match past(n) | some(_) => n | none() => 0 end;
+        let shown(n : Nat) -> Nat => match past(n) | some(_) => n | none() => 0 end;
 
         /std/print(Nat/to_str(shown(7)))
         "#;
@@ -162,7 +162,7 @@ fn the_dead_arm_of_a_dispatched_guard_proves_its_dual() {
         use /std/{Nat};
         use /std/Bool/{True, Holds};
 
-        let nested(cp : Nat) -> Nat =
+        let nested(cp : Nat) -> Nat =>
             match cp % 4096 / 64 <= 63
             | false =>
                 let _e : Holds(63 < cp % 4096 / 64) = True/qed();
@@ -182,9 +182,9 @@ fn a_guard_answers_its_definition_one_unfolding_down() {
         use /std/{Nat, Bool};
         use /std/Bool/{True, Holds};
 
-        let small(n : Nat) -> Bool = n < 10;
+        let small(n : Nat) -> Bool => n < 10;
 
-        let below(k : Nat) -> Nat =
+        let below(k : Nat) -> Nat =>
             match small(k)
             | true => let _p : Holds(k < 10) = True/qed(); k
             | false => 10
@@ -202,14 +202,14 @@ fn a_field_checked_before_its_struct_parameter_is_inferred_meets_the_guard() {
         use /std/{Nat, Bool, Option};
         use /std/Bool/{True, Holds};
 
-        let small(n : Nat) -> Bool = n < 10;
+        let small(n : Nat) -> Bool => n < 10;
 
         struct Below(k : Nat) : pub Type {
             value : Nat,
             proof : Holds(small(k)),
         }
 
-        let below(k : Nat) -> Option(Below(k)) =
+        let below(k : Nat) -> Option(Below(k)) =>
             match small(k)
             | true => Option/some(Below { value = k, proof = True/qed() })
             | false => Option/none()
@@ -227,13 +227,13 @@ fn a_guard_whose_definition_is_a_match_answers_that_match() {
         use /std/{Nat, Bool};
         use /std/Bool/{True, Holds};
 
-        let between(n : Nat) -> Bool =
+        let between(n : Nat) -> Bool =>
             match n >= 3 | true => n <= 9 | false => false end;
 
-        let also_between(n : Nat) -> Bool =
+        let also_between(n : Nat) -> Bool =>
             match n >= 3 | true => n <= 9 | false => false end;
 
-        let inside(k : Nat) -> Nat =
+        let inside(k : Nat) -> Nat =>
             match between(k)
             | true => let _p : Holds(also_between(k)) = True/qed(); k
             | false => 0
@@ -252,7 +252,7 @@ fn a_guard_discharges_a_bound_across_the_successor_seam() {
     let source = r#"
         use /std/{Nat, List};
 
-        let one_at(@T : Type, l : List(T), i : Nat) -> List(T) =
+        let one_at(@T : Type, l : List(T), i : Nat) -> List(T) =>
             match i < List/length(l)
             | false => []
             | true => List/slice(l, i, 1)
@@ -269,13 +269,13 @@ fn a_bound_below_a_length_is_decided_by_the_successor_guard() {
     let source = r#"
         use /std/{Nat, List, Option};
 
-        let get_at(@T : Type, l : List(T), i : Nat) -> Option(T) =
+        let get_at(@T : Type, l : List(T), i : Nat) -> Option(T) =>
             match i + 1 <= List/length(l)
             | false => Option/none()
             | true => Option/some(List/get(l, i))
             end;
 
-        let shown(l : List(Nat), i : Nat) -> Nat =
+        let shown(l : List(Nat), i : Nat) -> Nat =>
             match get_at(l, i) | some(x) => x | none() => 0 end;
 
         /std/print(Nat/to_str(shown([4, 5, 6], 2)))
@@ -289,7 +289,7 @@ fn a_bound_the_guards_do_not_imply_is_still_stuck() {
     let source = r#"
         use /std/{Nat, List};
 
-        let chunk(@T : Type, n : Nat, k : Nat, l : List(T), i : Nat) -> List(T) =
+        let chunk(@T : Type, n : Nat, k : Nat, l : List(T), i : Nat) -> List(T) =>
             match i < n
             | false => []
             | true =>
@@ -317,7 +317,7 @@ fn a_guards_fact_holds_under_a_match_on_a_variable_it_names() {
         use /std/{Nat, List, Str};
         use /std/Bool/{Holds, True};
 
-        let first_or(xs : List(Nat), i : Nat) -> Str =
+        let first_or(xs : List(Nat), i : Nat) -> Str =>
             match i < List/length(xs)
             | true =>
                 match i
@@ -343,8 +343,8 @@ fn an_arms_goal_takes_the_case_where_an_operator_spells_the_scrutinee() {
         r#"
         use /std/{Nat, Bool};
         use /std/Bool/{True, Holds};
-        let g(a: Nat, b: Nat, @ok: Holds(a <= b)) -> Nat = 1;
-        let f(a: Nat, b: Nat, k: Nat) -> Holds((match a <= b | true => g(a, b, @True/qed()) | false => 0 end) <= 1) =
+        let g(a: Nat, b: Nat, @ok: Holds(a <= b)) -> Nat => 1;
+        let f(a: Nat, b: Nat, k: Nat) -> Holds((match a <= b | true => g(a, b, @True/qed()) | false => 0 end) <= 1) =>
             match a <= b
             | true => match k | 0 => True/qed() | _ + 1 => True/qed() end
             | false => match k | 0 => True/qed() | _ + 1 => True/qed() end

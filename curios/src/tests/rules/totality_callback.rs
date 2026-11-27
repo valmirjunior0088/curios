@@ -19,16 +19,16 @@ fn a_callback_applied_by_any_route_at_a_value_not_below_is_not_graded_below() {
         }
 
         satisfy Runs(Nat) {
-            run(_, g, m) = g(m),
+            run(_, g, m) => g(m),
         }
 
-        let h(n : Nat, f : (Nat) -> True) -> True =
+        let h(n : Nat, f : (Nat) -> True) -> True =>
             match n
             | 0 => True/qed()
             | k + 1 => match k | 0 => h(k, f) | j + 1 => f(j) end
             end;
 
-        let spin(n : Nat) -> True = h(n, (c) => spin(c));
+        let spin(n : Nat) -> True => h(n, (c) => spin(c));
 
         /std/print("ok")
         "#,
@@ -38,8 +38,8 @@ fn a_callback_applied_by_any_route_at_a_value_not_below_is_not_graded_below() {
         "| 0 => f(n + 1)",
         "| 0 => let g = f; g(n + 1)",
         "| 0 => let g = (x : Nat) => f(x); g(n + 1)",
-        "| 0 => let g(x : Nat) -> True = f(x); g(n + 1)",
-        "| 0 => let go(x : Nat, d : Nat) -> True = match d | 0 => f(x) | e + 1 => go(x, e) end; go(n + 1, 1)",
+        "| 0 => let g(x : Nat) -> True => f(x); g(n + 1)",
+        "| 0 => let go(x : Nat, d : Nat) -> True => match d | 0 => f(x) | e + 1 => go(x, e) end; go(n + 1, 1)",
         "| 0, (match f(n + 1) | qed() => true end) => True/qed() | 0 => True/qed()",
         "| 0 => (f, n + 1).0((f, n + 1).1)",
         "| 0 => match Box/hold(f) | hold(g) => g(n + 1) end",
@@ -64,15 +64,15 @@ fn a_callback_sequenced_with_a_bang_is_graded_where_the_bind_applies_it() {
         use /std/{Nat, Option, Bool};
         use /std/Bool/{Holds};
 
-        let h(n: Nat, f: (Nat) -> Option(Bool)) -> Option(Bool) =
+        let h(n: Nat, f: (Nat) -> Option(Bool)) -> Option(Bool) =>
             match n
             | 0 => Option/some(true)
             | k + 1 => match k | 0 => h(k, f) | j + 1 => let b = f(j)!; Option/some(b) end
             end;
 
-        let spin(n: Nat) -> Option(Bool) = h(n, (c) => spin(c));
+        let spin(n: Nat) -> Option(Bool) => h(n, (c) => spin(c));
 
-        let Spun(n: Nat) -> /std/Bool/True =
+        let Spun(n: Nat) -> /std/Bool/True =>
             match match spin(n) | some(_) => true | none() => false end | true => /std/Bool/True/qed() | false => /std/Bool/True/qed() end;
 
         /std/print("ok")
@@ -99,16 +99,16 @@ fn a_callback_eta_expanded_into_another_definitions_callback_is_graded_through_b
         use /std/{Nat};
         use /std/Bool/{True};
 
-        let at(m: Nat, g: (Nat) -> True) -> True =
+        let at(m: Nat, g: (Nat) -> True) -> True =>
             match m | 0 => g(m) | i + 1 => match i | 0 => at(i, g) | _ + 1 => g(m) end end;
 
-        let h(n: Nat, f: (Nat) -> True) -> True =
+        let h(n: Nat, f: (Nat) -> True) -> True =>
             match n
             | 0 => True/qed()
             | k + 1 => match k | 0 => h(k, f) | j + 1 => at(j, (x) => f(x)) end
             end;
 
-        let spin(n: Nat) -> True = h(n, (c) => spin(c));
+        let spin(n: Nat) -> True => h(n, (c) => spin(c));
 
         /std/print("ok")
         "#,
@@ -131,15 +131,15 @@ fn an_implicit_callback_handed_to_another_definition_is_graded_as_unrelated() {
         use /std/{Nat};
         use /std/Bool/{True};
 
-        let at(@g: (Nat) -> True, m: Nat) -> True = g(m);
+        let at(@g: (Nat) -> True, m: Nat) -> True => g(m);
 
-        let h(n: Nat, @f: (Nat) -> True) -> True =
+        let h(n: Nat, @f: (Nat) -> True) -> True =>
             match n
             | 0 => True/qed()
             | k + 1 => match k | 0 => h(k, @f) | j + 1 => f(j) end
             end;
 
-        let spin(n: Nat) -> True = h(n, @(c) => spin(c));
+        let spin(n: Nat) -> True => h(n, @(c) => spin(c));
 
         /std/print("ok")
         "#,
@@ -162,13 +162,13 @@ fn a_callback_handed_to_a_member_at_another_place_is_graded_as_unrelated() {
         use /std/{Nat};
         use /std/Bool/{True};
 
-        let h(n: Nat, f: (Nat) -> True, g: (Nat) -> True) -> True =
+        let h(n: Nat, f: (Nat) -> True, g: (Nat) -> True) -> True =>
             match n
             | 0 => g(n + 1)
             | k + 1 => let _ = f(k); h(k, f, g)
             end;
 
-        let spin(n: Nat) -> True = h(n, (c) => spin(c), (c) => True/qed());
+        let spin(n: Nat) -> True => h(n, (c) => spin(c), (c) => True/qed());
 
         /std/print("ok")
         "#,
@@ -191,18 +191,18 @@ fn a_callback_a_member_answers_is_graded_as_unrelated() {
         use /std/{Nat};
         use /std/Bool/{True};
 
-        let h(n: Nat, f: (Nat) -> True) -> True =
+        let h(n: Nat, f: (Nat) -> True) -> True =>
             match n
             | 0 => give(n, f)(n + 1)
             | k + 1 => match k | 0 => h(k, f) | j + 1 => f(j) end
             end
-        and give(m: Nat, g: (Nat) -> True) -> (Nat) -> True =
+        and give(m: Nat, g: (Nat) -> True) -> (Nat) -> True =>
             match m
             | 0 => (_) => True/qed()
             | i + 1 => (_) => h(i, g)
             end;
 
-        let spin(n: Nat) -> True = h(n, (c) => spin(c));
+        let spin(n: Nat) -> True => h(n, (c) => spin(c));
 
         /std/print("ok")
         "#,
@@ -225,13 +225,13 @@ fn a_closure_handed_in_its_callbacks_own_place_is_counted_where_it_is_written() 
         use /std/{Nat};
         use /std/Bool/{True};
 
-        let h(n: Nat, f: (Nat) -> True) -> True =
+        let h(n: Nat, f: (Nat) -> True) -> True =>
             match n
             | 0 => True/qed()
             | k + 1 => let _ = f(k); h(k, f)
             end;
 
-        let spin(n: Nat) -> True = h(n, (c) => spin(c));
+        let spin(n: Nat) -> True => h(n, (c) => spin(c));
 
         /std/print("ok")
         "#,
@@ -255,19 +255,19 @@ fn a_callback_handed_to_a_member_at_a_place_its_leading_lambdas_bind_is_graded_w
         use /std/{Nat};
         use /std/Bool/{True};
 
-        let hide(n: Nat, f: (Nat) -> True) -> True =
+        let hide(n: Nat, f: (Nat) -> True) -> True =>
             match n
             | 0 => wrap(n)(f)
             | k + 1 => f(k)
             end
-        and wrap(m: Nat) -> ((Nat) -> True) -> True =
+        and wrap(m: Nat) -> ((Nat) -> True) -> True =>
             (g) =>
                 match m
                 | 0 => True/qed()
                 | k + 1 => hide(k, g)
                 end;
 
-        let spin(n: Nat) -> True = hide(n, (c) => spin(c));
+        let spin(n: Nat) -> True => hide(n, (c) => spin(c));
 
         /std/print("ok")
         "#,
@@ -290,18 +290,18 @@ fn a_callback_handed_past_a_members_hidden_and_plain_parameters_is_graded_as_unr
         use /std/{Nat};
         use /std/Bool/{True, Holds};
 
-        let hide(@A: Type, n: Nat, @_: Holds(0 == 0), f: (Nat) -> True) -> True =
+        let hide(@A: Type, n: Nat, @_: Holds(0 == 0), f: (Nat) -> True) -> True =>
             match n
             | 0 => wrap(@A, n)((_) => True/qed())
             | k + 1 => f(k)
             end
-        and wrap(@B: Type, m: Nat, @_: Holds(0 == 0)) -> ((Nat) -> True) -> True =
+        and wrap(@B: Type, m: Nat, @_: Holds(0 == 0)) -> ((Nat) -> True) -> True =>
             match m
             | 0 => (g) => g(0)
             | k + 1 => (g) => hide(@B, k, g)
             end;
 
-        let spin(n: Nat) -> True = hide(@Nat, n, (c) => spin(c));
+        let spin(n: Nat) -> True => hide(@Nat, n, (c) => spin(c));
 
         /std/print("ok")
         "#,
@@ -324,20 +324,20 @@ fn a_callback_handed_past_a_members_parameters_through_a_let_is_graded_as_unrela
         use /std/{Nat};
         use /std/Bool/{True};
 
-        let hide(n: Nat, f: (Nat) -> True) -> True =
+        let hide(n: Nat, f: (Nat) -> True) -> True =>
             match n
             | 0 =>
                 let w = wrap(n);
                 w((_) => True/qed())
             | k + 1 => f(k)
             end
-        and wrap(m: Nat) -> ((Nat) -> True) -> True =
+        and wrap(m: Nat) -> ((Nat) -> True) -> True =>
             match m
             | 0 => (g) => g(0)
             | k + 1 => (g) => hide(k, g)
             end;
 
-        let spin(n: Nat) -> True = hide(n, (c) => spin(c));
+        let spin(n: Nat) -> True => hide(n, (c) => spin(c));
 
         /std/print("ok")
         "#,
@@ -360,21 +360,21 @@ fn a_member_applied_in_part_relates_its_unfilled_places_to_nothing() {
         use /std/{Nat};
         use /std/Bool/{True};
 
-        let at(h: (Nat) -> True, x: Nat) -> True = h(x);
+        let at(h: (Nat) -> True, x: Nat) -> True => h(x);
 
-        let hide(n: Nat, f: (Nat) -> True) -> True =
+        let hide(n: Nat, f: (Nat) -> True) -> True =>
             match n
             | 0 => True/qed()
             | k + 1 => wrap(k)(f)(k)
             end
-        and wrap(m: Nat) -> ((Nat) -> True) -> (Nat) -> True =
+        and wrap(m: Nat) -> ((Nat) -> True) -> (Nat) -> True =>
             (g) => (z) =>
                 match m
                 | 0 => g(z)
                 | j + 1 => hide(j, g)
                 end;
 
-        let spin(n: Nat) -> True = hide(n, (c) => spin(c));
+        let spin(n: Nat) -> True => hide(n, (c) => spin(c));
 
         /std/print("ok")
         "#,
@@ -402,21 +402,21 @@ fn a_callback_handed_to_a_witness_method_is_graded_as_unrelated() {
         }
 
         satisfy Relay(Nat) {
-            relay(m, g) = g(m),
+            relay(m, g) => g(m),
         }
 
-        let hide(n: Nat, f: (Nat) -> True) -> True =
+        let hide(n: Nat, f: (Nat) -> True) -> True =>
             match n
             | 0 => wrap(n, f)
             | k + 1 => f(k)
             end
-        and wrap(m: Nat, g: (Nat) -> True) -> True =
+        and wrap(m: Nat, g: (Nat) -> True) -> True =>
             match m
             | 0 => Relay/relay(m, (_) => True/qed())
             | k + 1 => hide(k, g)
             end;
 
-        let spin(n: Nat) -> True = hide(n, (c) => spin(c));
+        let spin(n: Nat) -> True => hide(n, (c) => spin(c));
 
         /std/print("ok")
         "#,
@@ -439,18 +439,18 @@ fn a_callback_is_handed_on_at_the_place_core_counts_hidden_binders_included() {
         use /std/{Nat};
         use /std/Bool/{True};
 
-        let hide(@_: Type, n: Nat, f: (Nat) -> True) -> True =
+        let hide(@_: Type, n: Nat, f: (Nat) -> True) -> True =>
             match n
             | 0 => wrap(@Nat, n, f, 0)
             | k + 1 => f(k)
             end
-        and wrap(@_: Type, m: Nat, g: (Nat) -> True, z: Nat) -> True =
+        and wrap(@_: Type, m: Nat, g: (Nat) -> True, z: Nat) -> True =>
             match m
             | 0 => True/qed()
             | k + 1 => hide(@Nat, k, g)
             end;
 
-        let spin(n: Nat) -> True = hide(@Nat, n, (c) => spin(c));
+        let spin(n: Nat) -> True => hide(@Nat, n, (c) => spin(c));
 
         /std/print("ok")
         "#,
@@ -490,13 +490,13 @@ fn a_callback_handed_to_a_definition_of_no_group_is_graded_where_it_applies_it()
         | node(Option(Tree))
         end
 
-        let apply_some(m: Option(Tree), f: (Tree) -> Nat) -> Nat =
+        let apply_some(m: Option(Tree), f: (Tree) -> Nat) -> Nat =>
             match m | some(a) => f(a) | none() => 0 end;
 
-        let depth(t: Tree) -> Nat =
+        let depth(t: Tree) -> Nat =>
             match t | leaf(n) => n | node(o) => apply_some(o, (c) => depth(c)) end;
 
-        let Shallow(t: Tree) -> /std/Bool/True =
+        let Shallow(t: Tree) -> /std/Bool/True =>
             match depth(t) == 0 | true => /std/Bool/True/qed() | false => /std/Bool/True/qed() end;
 
         /std/print("ok")
@@ -523,10 +523,10 @@ fn a_member_handed_to_a_list_map_is_called_below_the_list() {
         | rose(Nat, List(Rose))
         end
 
-        let total(t: Rose) -> Nat =
+        let total(t: Rose) -> Nat =>
             match t | rose(n, cs) => n + List/length(List/map(cs, total)) end;
 
-        let Small(t: Rose) -> /std/Bool/True =
+        let Small(t: Rose) -> /std/Bool/True =>
             match total(t) == 0 | true => /std/Bool/True/qed() | false => /std/Bool/True/qed() end;
 
         /std/print("ok")
@@ -553,10 +553,10 @@ fn a_lambda_handed_to_a_list_fold_binds_its_element_below_the_list() {
         | rose(Nat, List(Rose))
         end
 
-        let total(t: Rose) -> Nat =
+        let total(t: Rose) -> Nat =>
             match t | rose(n, cs) => List/fold(cs, n, (c, acc) => acc + total(c)) end;
 
-        let Small(t: Rose) -> /std/Bool/True =
+        let Small(t: Rose) -> /std/Bool/True =>
             match total(t) == 0 | true => /std/Bool/True/qed() | false => /std/Bool/True/qed() end;
 
         /std/print("ok")
@@ -579,14 +579,14 @@ fn a_callback_handed_at_two_places_is_applied_wherever_either_is() {
         r#"
         use /std/{Nat, Bool};
 
-        let both(m: Nat, g1: (Nat) -> Bool, g2: (Nat) -> Bool) -> Bool =
+        let both(m: Nat, g1: (Nat) -> Bool, g2: (Nat) -> Bool) -> Bool =>
             match m | 0 => false | k + 1 => g1(k) || g2(m) end;
 
-        let twice(n: Nat, f: (Nat) -> Bool) -> Bool = both(n, f, (z) => false);
+        let twice(n: Nat, f: (Nat) -> Bool) -> Bool => both(n, f, (z) => false);
 
-        let deep(n: Nat) -> Bool = twice(n, (c) => deep(c));
+        let deep(n: Nat) -> Bool => twice(n, (c) => deep(c));
 
-        let Deep(n: Nat) -> /std/Bool/True =
+        let Deep(n: Nat) -> /std/Bool/True =>
             match deep(n) | true => /std/Bool/True/qed() | false => /std/Bool/True/qed() end;
 
         /std/print("ok")
@@ -611,11 +611,11 @@ fn a_callback_typed_by_an_alias_is_summarized_as_a_function_typed_one() {
 
         let Fn: Type = (Nat) -> Bool;
 
-        let at(m: Nat, g: Fn) -> Bool = match m | 0 => false | k + 1 => g(k) end;
+        let at(m: Nat, g: Fn) -> Bool => match m | 0 => false | k + 1 => g(k) end;
 
-        let aliased(n: Nat) -> Bool = at(n, (c) => aliased(c));
+        let aliased(n: Nat) -> Bool => at(n, (c) => aliased(c));
 
-        let Aliased(n: Nat) -> /std/Bool/True =
+        let Aliased(n: Nat) -> /std/Bool/True =>
             match aliased(n) | true => /std/Bool/True/qed() | false => /std/Bool/True/qed() end;
 
         /std/print("ok")
@@ -642,10 +642,10 @@ fn a_lambda_handed_to_a_list_fold_binds_its_accumulator_below_nothing() {
         | rose(Nat, List(Rose))
         end
 
-        let total(t: Rose) -> Rose =
+        let total(t: Rose) -> Rose =>
             match t | rose(n, cs) => List/fold(cs, t, (c, acc) => total(c)) end;
 
-        let Rooted(t: Rose) -> /std/Bool/True =
+        let Rooted(t: Rose) -> /std/Bool/True =>
             match match total(t) | rose(n, _) => n == 0 end | true => /std/Bool/True/qed() | false => /std/Bool/True/qed() end;
 
         /std/print("ok")
@@ -672,26 +672,26 @@ fn a_local_member_recurring_through_a_callback_is_graded_against_its_own_paramet
         | node(label: Nat, children: List(Rose))
         end
 
-        let has_zero(t: Rose) -> Bool =
+        let has_zero(t: Rose) -> Bool =>
             match t
             | node(label, children) =>
-                let go(u: Rose) -> Bool =
+                let go(u: Rose) -> Bool =>
                     match u | node(l, cs) => l == 0 || List/any(cs, (c) => go(c)) end;
                 label == 0 || go(t)
             end;
 
-        let Zeroed(t: Rose) -> /std/Bool/True =
+        let Zeroed(t: Rose) -> /std/Bool/True =>
             match has_zero(t) | true => /std/Bool/True/qed() | false => /std/Bool/True/qed() end;
 
-        let bare(t: Rose) -> Bool =
+        let bare(t: Rose) -> Bool =>
             match t
             | node(label, children) =>
-                let go(u: Rose) -> Bool =
+                let go(u: Rose) -> Bool =>
                     match u | node(l, cs) => l == 0 || List/any(cs, go) end;
                 label == 0 || go(t)
             end;
 
-        let Bare(t: Rose) -> /std/Bool/True =
+        let Bare(t: Rose) -> /std/Bool/True =>
             match bare(t) | true => /std/Bool/True/qed() | false => /std/Bool/True/qed() end;
 
         /std/print("ok")
@@ -726,12 +726,12 @@ fn a_callback_applied_through_an_applied_lambda_or_a_match_publishes_nothing() {
         r#"
         use /std/{Nat, Bool};
 
-        let h(n: Nat, f: (Nat) -> Bool) -> Bool =
+        let h(n: Nat, f: (Nat) -> Bool) -> Bool =>
             match n | 0 => false | k + 1 => f(k) end;
 
-        let spin(n: Nat) -> Bool = h(n, (c) => spin(c));
+        let spin(n: Nat) -> Bool => h(n, (c) => spin(c));
 
-        let Spun(n: Nat) -> /std/Bool/True =
+        let Spun(n: Nat) -> /std/Bool/True =>
             match spin(n) | true => /std/Bool/True/qed() | false => /std/Bool/True/qed() end;
 
         /std/print("ok")

@@ -27,13 +27,13 @@ fn a_relevant_argument_past_a_curried_head_stays_apart() {
         use /std/{Eq, Nat};
 
         let apart(a : Nat, b : Nat, c : (Nat) -> (Nat) -> Nat, x : Eq()(c(0)(a), 0))
-            -> Eq()(c(0)(a), 0) = x;
+            -> Eq()(c(0)(a), 0) => x;
 
         /std/print("ok")
         "#,
         b"ok",
     )
-    .refused(&[("-> Eq()(c(0)(a), 0) = x", "-> Eq()(c(0)(b), 0) = x")])
+    .refused(&[("-> Eq()(c(0)(a), 0) => x", "-> Eq()(c(0)(b), 0) => x")])
     .by_elaborator_in("/apart", |error| {
         matches!(error, Error::TypeMismatch { .. })
     });
@@ -66,18 +66,18 @@ fn two_calls_that_differ_in_a_relevant_argument_stay_apart() {
         r#"
         use /std/{Eq, Nat};
 
-        let shift(m : Nat) -> (Nat) -> Nat = (x : Nat) => x + m;
+        let shift(m : Nat) -> (Nat) -> Nat => (x : Nat) => x + m;
 
         let apart(a : Nat, b : Nat, g : (Nat) -> Nat, x : Eq(@((Nat) -> Nat))(shift(a), g))
-            -> Eq(@((Nat) -> Nat))(shift(a), g) = x;
+            -> Eq(@((Nat) -> Nat))(shift(a), g) => x;
 
         /std/print("ok")
         "#,
         b"ok",
     )
     .refused(&[(
-        "-> Eq(@((Nat) -> Nat))(shift(a), g) = x",
-        "-> Eq(@((Nat) -> Nat))(shift(b), g) = x",
+        "-> Eq(@((Nat) -> Nat))(shift(a), g) => x",
+        "-> Eq(@((Nat) -> Nat))(shift(b), g) => x",
     )])
     .by_elaborator_in("/apart", |error| {
         matches!(error, Error::TypeMismatch { .. })
@@ -102,18 +102,18 @@ fn two_calls_that_differ_in_a_relevant_argument_stay_apart_wherever_they_sit() {
         r#"
         use /std/{Eq, Nat};
 
-        let halved(m : Nat) -> Nat = match m | 0 => 0 | k + 1 => k end;
+        let halved(m : Nat) -> Nat => match m | 0 => 0 | k + 1 => k end;
 
         let apart(a : Nat, b : Nat)
-            -> Eq(@(Nat))((() => let z = halved(a); z)(), (() => let z = halved(a); z)()) = Eq/refl();
+            -> Eq(@(Nat))((() => let z = halved(a); z)(), (() => let z = halved(a); z)()) => Eq/refl();
 
         /std/print("ok")
         "#,
         b"ok",
     )
     .refused(&[(
-        "(() => let z = halved(a); z)()) = Eq/refl()",
-        "(() => let z = halved(b); z)()) = Eq/refl()",
+        "(() => let z = halved(a); z)()) => Eq/refl()",
+        "(() => let z = halved(b); z)()) => Eq/refl()",
     )])
     .by_elaborator_in("/apart", |error| {
         matches!(error, Error::TypeMismatch { .. })

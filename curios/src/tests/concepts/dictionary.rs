@@ -15,11 +15,11 @@ fn use_entry_fills_a_concept_field_explicitly() {
             cmp2(A, A) -> Ordering
         }
         satisfy Eq2(Nat) {
-            eq2(a, b) = a == b
+            eq2(a, b) => a == b
         }
-        let flipped : Eq2(Nat) = Eq2 { eq2(a, b) = false };
-        let o : Ord2(Nat) = Ord2 { use flipped, cmp2(a, b) = Ordering/lt() };
-        pub let observe(use Ord2(Nat)) -> Bool = Eq2/eq2(1, 1);
+        let flipped : Eq2(Nat) = Eq2 { eq2(a, b) => false };
+        let o : Ord2(Nat) = Ord2 { use flipped, cmp2(a, b) => Ordering/lt() };
+        pub let observe(use Ord2(Nat)) -> Bool => Eq2/eq2(1, 1);
         /std/print(Bool/to_str(observe(use o)))
         "#;
 
@@ -36,14 +36,14 @@ fn a_witness_never_writes_its_superclass_slot() {
         satisfy Eql(Mine) { .. }
         let other: Eql(Mine) =
             Eql {
-                eql(x, y) = x == y,
-                eq(x, y, h) = Eql/eq(x, y, h),
-                refl(x) = Eql/refl(x) };
+                eql(x, y) => x == y,
+                eq(x, y, h) => Eql/eq(x, y, h),
+                refl(x) => Eql/refl(x) };
         satisfy Ord(Mine) {
             use other,
-            ord(x, y) = Ordering/eq(),
-            lt(x, y) = false,
-            le(x, y) = true,
+            ord(x, y) => Ordering/eq(),
+            lt(x, y) => false,
+            le(x, y) => true,
         }
         print("no")
         "#;
@@ -64,8 +64,8 @@ fn a_superclass_reads_alike_through_the_table_and_through_a_witness() {
         induct Mine: pub Type | a() | b() end
         satisfy Eql(Mine) { .. }
         satisfy Ord(Mine) { .. }
-        let via_table(x: Mine, y: Mine) -> Bool = x == y;
-        let via_super(@A: Type, use Ord(A), x: A, y: A) -> Bool = x == y;
+        let via_table(x: Mine, y: Mine) -> Bool => x == y;
+        let via_super(@A: Type, use Ord(A), x: A, y: A) -> Bool => x == y;
         print(Str/concat(
             Bool/to_str(via_table(Mine/a(), Mine/b())),
             Bool/to_str(via_super(Mine/a(), Mine/b()))))
@@ -87,9 +87,9 @@ fn labeled_fill_of_a_former_superclass_is_unknown() {
             cmp4(A, A) -> Ordering
         }
         satisfy Eq4(Nat) {
-            eq4(a, b) = a == b
+            eq4(a, b) => a == b
         }
-        let bad : Ord4(Nat) = Ord4 { eq4 = Eq4 { eq4(a, b) = a == b } };
+        let bad : Ord4(Nat) = Ord4 { eq4 = Eq4 { eq4(a, b) => a == b } };
         /std/print("no")
         "#;
 
@@ -119,12 +119,12 @@ fn misplaced_use_entries_are_errors() {
             cmp5(A, A) -> Ordering
         }
         satisfy Eq5(Nat) {
-            eq5(a, b) = a == b
+            eq5(a, b) => a == b
         }
         let twice : Ord5(Nat) = Ord5 {
-            use Eq5 { eq5(a, b) = a == b },
-            use Eq5 { eq5(a, b) = a == b },
-            cmp5(a, b) = Ordering/lt()
+            use Eq5 { eq5(a, b) => a == b },
+            use Eq5 { eq5(a, b) => a == b },
+            cmp5(a, b) => Ordering/lt()
         };
         /std/print("no")
         "#;
@@ -144,18 +144,18 @@ fn omitted_superclass_resolves_from_a_premise() {
             cmp6(A, A) -> Ordering
         }
         satisfy Eq6(Nat) {
-            eq6(a, b) = a == b
+            eq6(a, b) => a == b
         }
-        satisfy (@A : Type, use Eq6(A)) => Eq6(List(A)) {
-            eq6(a, b) = List/length(a) == List/length(b)
+        satisfy (@A : Type, use Eq6(A)) -> Eq6(List(A)) {
+            eq6(a, b) => List/length(a) == List/length(b)
         }
-        satisfy (@A : Type, use Ord6(A)) => Ord6(List(A)) {
-            cmp6(a, b) = Ordering/lt()
+        satisfy (@A : Type, use Ord6(A)) -> Ord6(List(A)) {
+            cmp6(a, b) => Ordering/lt()
         }
         satisfy Ord6(Nat) {
-            cmp6(a, b) = Ordering/lt()
+            cmp6(a, b) => Ordering/lt()
         }
-        pub let same(@A : Type, use Ord6(A), x : A, y : A) -> Bool = Eq6/eq6(x, y);
+        pub let same(@A : Type, use Ord6(A), x : A, y : A) -> Bool => Eq6/eq6(x, y);
         let l : List(Nat) = [1, 2];
         /std/print(Bool/to_str(same(l, l)))
         "#;
@@ -176,12 +176,12 @@ fn concept_literal_spread_copies_superclass() {
             cmp2(A, A) -> Ordering
         }
         satisfy Eq2(Nat) {
-            eq2(a, b) = a == b
+            eq2(a, b) => a == b
         }
-        let flipped : Eq2(Nat) = Eq2 { eq2(a, b) = false };
-        let o : Ord2(Nat) = Ord2 { use flipped, cmp2(a, b) = Ordering/lt() };
-        let o2 : Ord2(Nat) = Ord2 { ..o, cmp2(a, b) = Ordering/gt() };
-        pub let observe(use Ord2(Nat)) -> Bool = Eq2/eq2(1, 1);
+        let flipped : Eq2(Nat) = Eq2 { eq2(a, b) => false };
+        let o : Ord2(Nat) = Ord2 { use flipped, cmp2(a, b) => Ordering/lt() };
+        let o2 : Ord2(Nat) = Ord2 { ..o, cmp2(a, b) => Ordering/gt() };
+        pub let observe(use Ord2(Nat)) -> Bool => Eq2/eq2(1, 1);
         /std/print(Bool/to_str(observe(use o2)))
         "#;
 
@@ -200,11 +200,11 @@ fn concept_literal_spread_use_override() {
             use Eq2(A),
             cmp2(A, A) -> Ordering
         }
-        let flipped : Eq2(Nat) = Eq2 { eq2(a, b) = false };
-        let straight : Eq2(Nat) = Eq2 { eq2(a, b) = true };
-        let o : Ord2(Nat) = Ord2 { use flipped, cmp2(a, b) = Ordering/lt() };
+        let flipped : Eq2(Nat) = Eq2 { eq2(a, b) => false };
+        let straight : Eq2(Nat) = Eq2 { eq2(a, b) => true };
+        let o : Ord2(Nat) = Ord2 { use flipped, cmp2(a, b) => Ordering/lt() };
         let o2 : Ord2(Nat) = Ord2 { ..o, use straight };
-        pub let observe(use Ord2(Nat)) -> Bool = Eq2/eq2(1, 1);
+        pub let observe(use Ord2(Nat)) -> Bool => Eq2/eq2(1, 1);
         /std/print(Bool/to_str(observe(use o2)))
         "#;
 
@@ -232,7 +232,7 @@ fn a_concept_group_may_name_one_anothers_dictionaries() {
         use /std/{Nat};
         concept A(T : Type) : pub Type { fa(T) -> B(T) }
         and B(T : Type) : pub Type { fb(T) -> Nat, back(T) -> A(T) }
-        let a : A(Nat) = A { fa(x) = B { fb(y) = x + y, back(y) = a } };
+        let a : A(Nat) = A { fa(x) => B { fb(y) => x + y, back(y) => a } };
         let b : B(Nat) = A/fa(@_, use a, 1);
         let again : B(Nat) = A/fa(@_, use B/back(@_, use b, 0), 10);
         /std/print(Nat/to_str(B/fb(@_, use b, 2) + B/fb(@_, use again, 5)))
@@ -248,15 +248,15 @@ fn a_concept_value_is_read_past_its_edges() {
         use /std/{Nat, Str, print};
         concept Base(A : Type) : pub Type { base(A) -> Str }
         concept Over(A : Type) : pub Type { use Base(A), over(A) -> Str }
-        satisfy Base(Nat) { base(n) = "base" }
-        let by_position(dict : Over(Nat), n : Nat) -> Str = dict.0(n);
-        let by_pattern(dict : Over(Nat), n : Nat) -> Str =
+        satisfy Base(Nat) { base(n) => "base" }
+        let by_position(dict : Over(Nat), n : Nat) -> Str => dict.0(n);
+        let by_pattern(dict : Over(Nat), n : Nat) -> Str =>
             let Over { over } = dict;
             over(n);
-        let by_match(dict : Over(Nat), n : Nat) -> Str = match dict | Over { over } => over(n) end;
+        let by_match(dict : Over(Nat), n : Nat) -> Str => match dict | Over { over } => over(n) end;
         let by_lambda : (Over(Nat), Nat) -> Str = (Over { over }, n) => over(n);
-        let by_label(dict : Over(Nat), n : Nat) -> Str = dict.over(n);
-        let dict : Over(Nat) = Over { over(n) = "over" };
+        let by_label(dict : Over(Nat), n : Nat) -> Str => dict.over(n);
+        let dict : Over(Nat) = Over { over(n) => "over" };
         print(Str/concat(
             Str/concat(by_position(dict, 1), by_pattern(dict, 1)),
             Str/concat(by_match(dict, 1), Str/concat(by_lambda(dict, 1), by_label(dict, 1)))))
@@ -272,8 +272,8 @@ fn a_position_past_a_concept_values_methods_is_out_of_bounds() {
         use /std/{Nat, Str, print};
         concept Base(A : Type) : pub Type { base(A) -> Str }
         concept Over(A : Type) : pub Type { use Base(A), over(A) -> Str }
-        satisfy Base(Nat) { base(n) = "base" }
-        let second(dict : Over(Nat), n : Nat) -> Str = dict.1(n);
+        satisfy Base(Nat) { base(n) => "base" }
+        let second(dict : Over(Nat), n : Nat) -> Str => dict.1(n);
         print("unreachable")
         "#;
 
@@ -288,11 +288,11 @@ fn a_concept_value_with_an_edge_is_a_metavariables_solution() {
         use /std/{Nat, Str, print};
         concept Base(A : Type) : pub Type { base(A) -> Str }
         concept Over(A : Type) : pub Type { use Base(A), over(A) -> Str }
-        satisfy Base(Nat) { base(n) = "base" }
+        satisfy Base(Nat) { base(n) => "base" }
         induct Tagged : (d : Over(Nat)) -> pub Type
-        | tag() : (Over { over(n) = "over" })
+        | tag() : (Over { over(n) => "over" })
         end
-        let read(@d : Over(Nat), t : Tagged(d)) -> Str = d.over(1);
+        let read(@d : Over(Nat), t : Tagged(d)) -> Str => d.over(1);
         print(read(Tagged/tag()))
         "#;
 
@@ -307,10 +307,10 @@ fn a_concept_of_edges_alone_is_witnessed_by_an_empty_body() {
         concept Left(A : Type) : pub Type { left(A) -> Str }
         concept Right(A : Type) : pub Type { right(A) -> Str }
         concept Both(A : Type) : pub Type { use Left(A), use Right(A) }
-        satisfy Left(Nat) { left(n) = "left" }
-        satisfy Right(Nat) { right(n) = "right" }
+        satisfy Left(Nat) { left(n) => "left" }
+        satisfy Right(Nat) { right(n) => "right" }
         satisfy Both(Nat) {}
-        let through(use Both(Nat), n : Nat) -> Str = Str/concat(Left/left(n), Right/right(n));
+        let through(use Both(Nat), n : Nat) -> Str => Str/concat(Left/left(n), Right/right(n));
         print(through(1))
         "#;
 
@@ -323,11 +323,11 @@ fn an_alias_of_a_concept_application_is_a_superclass_edge() {
     let source = r#"
         use /std/{Nat, Str};
         concept Base(A : Type) : pub Type { base(A) -> Str }
-        satisfy Base(Nat) { base(n) = "base" }
+        satisfy Base(Nat) { base(n) => "base" }
         let BaseNat : Type = Base(Nat);
         concept Over(A : Type) : pub Type { use BaseNat, over(A) -> Str }
-        satisfy Over(Nat) { over(n) = "over" }
-        let through(use Over(Nat), n : Nat) -> Str = Base/base(n);
+        satisfy Over(Nat) { over(n) => "over" }
+        let through(use Over(Nat), n : Nat) -> Str => Base/base(n);
         /std/print(through(1))
         "#;
 

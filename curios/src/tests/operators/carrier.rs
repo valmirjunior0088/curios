@@ -7,7 +7,7 @@ fn bool_logic_and_of_str() {
     assert_eq!(
         run(r#"
         use /std/{Bool, Str, Option, Io};
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let computed = Bool/and(Bool/or(false, true), Bool/not(false));
             let parsed = match Bool/of_str("false")
                 | some(b) => b
@@ -26,7 +26,7 @@ fn bool_xor_executes() {
     assert_eq!(
         run(r#"
         use /std/{Bool, Str, Io};
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let a = Bool/xor(true, false);
             let b = Bool/xor(true, true);
             let _ = /std/print(Str/concat(Bool/to_str(a), Bool/to_str(b)))!;
@@ -42,7 +42,7 @@ fn bool_eql_executes() {
     assert_eq!(
         run(r#"
         use /std/{Bool, Str, Io};
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let a = Bool/eql(true, true);
             let b = Bool/eql(true, false);
             let _ = /std/print(Str/concat(Bool/to_str(a), Bool/to_str(b)))!;
@@ -60,7 +60,7 @@ fn nat_bitwise_ops_execute() {
     run_text(
         r#"
         use /std/{Byte, Bytes, Nat, Str, Option, Io, Try, Proc};
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let bytes = match Try/run(Io/read(Proc/stdin, 16))!
                 | success(bytes(b, @_)) => b
                 | success(ended()) => 0x[]
@@ -92,7 +92,7 @@ fn int_bitwise_ops_execute() {
     run_text(
         r#"
         use /std/{Byte, Bytes, Nat, Int, Str, Option, Io, Try, Proc};
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let bytes = match Try/run(Io/read(Proc/stdin, 16))!
                 | success(bytes(b, @_)) => b
                 | success(ended()) => 0x[]
@@ -125,7 +125,7 @@ fn infix_nat_arithmetic_respects_precedence_and_associativity() {
     assert_eq!(
         run(r#"
             use /std/{Str, Nat, Io};
-            let entry() -> /std/Io({}) =
+            let entry() -> /std/Io({}) =>
                 let _ = /std/print(Nat/to_str(2 + 3 * 4))!;
                 /std/Io/pure(());
             entry()
@@ -135,7 +135,7 @@ fn infix_nat_arithmetic_respects_precedence_and_associativity() {
     assert_eq!(
         run(r#"
             use /std/{Str, Nat, Io};
-            let entry() -> /std/Io({}) =
+            let entry() -> /std/Io({}) =>
                 let _ = /std/print(Nat/to_str((2 + 3) * 4))!;
                 /std/Io/pure(());
             entry()
@@ -145,7 +145,7 @@ fn infix_nat_arithmetic_respects_precedence_and_associativity() {
     assert_eq!(
         run(r#"
             use /std/{Str, Nat, Io};
-            let entry() -> /std/Io({}) =
+            let entry() -> /std/Io({}) =>
                 let _ = /std/print(Nat/to_str(10 - 3 - 2))!;
                 /std/Io/pure(());
             entry()
@@ -155,7 +155,7 @@ fn infix_nat_arithmetic_respects_precedence_and_associativity() {
     assert_eq!(
         run(r#"
             use /std/{Str, Nat, Io};
-            let entry() -> /std/Io({}) =
+            let entry() -> /std/Io({}) =>
                 let _ = /std/print(Nat/to_str(17 % 5))!;
                 /std/Io/pure(());
             entry()
@@ -170,7 +170,7 @@ fn infix_comparison_yields_a_bool_scrutinee() {
     assert_eq!(
         run(r#"
             use /std/{Str, Io};
-            let entry() -> /std/Io({}) =
+            let entry() -> /std/Io({}) =>
                 let _ = (match 2 + 2 == 4
                 | true => /std/print("yes")
                 | false => /std/print("no")
@@ -183,7 +183,7 @@ fn infix_comparison_yields_a_bool_scrutinee() {
     assert_eq!(
         run(r#"
             use /std/{Str, Io};
-            let entry() -> /std/Io({}) =
+            let entry() -> /std/Io({}) =>
                 let _ = (match 3 < 1
                 | true => /std/print("yes")
                 | false => /std/print("no")
@@ -201,7 +201,7 @@ fn infix_equality_is_overloaded_for_bool() {
     assert_eq!(
         run(r#"
             use /std/{Str, Io};
-            let entry() -> /std/Io({}) =
+            let entry() -> /std/Io({}) =>
                 let _ = (match (1 < 2) == (3 < 4)
                 | true => /std/print("yes")
                 | false => /std/print("no")
@@ -219,7 +219,7 @@ fn infix_rem_on_flt_computes_fmod() {
     assert_eq!(
         run(r#"
             use /std/{Str, Io, Flt};
-            let entry() -> /std/Io({}) =
+            let entry() -> /std/Io({}) =>
                 let _ = (match Flt/eql(5.5 % 2.0, 1.5)
                 | true => /std/print("yes")
                 | false => /std/print("no")
@@ -237,7 +237,7 @@ fn infix_not_equal_on_bool_is_the_negation_of_its_equality() {
     assert_eq!(
         run(r#"
             use /std/{Str, Io};
-            let entry() -> /std/Io({}) =
+            let entry() -> /std/Io({}) =>
                 let _ = (match true != false
                 | true => /std/print("yes")
                 | false => /std/print("no")
@@ -255,7 +255,7 @@ fn infix_equality_works_on_str() {
     assert_eq!(
         run(r#"
             use /std/{Bool, Str, Io};
-            let entry() -> /std/Io({}) =
+            let entry() -> /std/Io({}) =>
                 let _ = /std/print(Bool/to_str("abc" == "abc"))!;
                 /std/Io/pure(());
             entry()
@@ -274,11 +274,11 @@ fn type_level_operator_indices_stay_convertible() {
             | z(@n : Nat): (0, n)
             | s(@a : Nat, @b : Nat, prev : Le(a, b)): (a + 1, b + 1)
             end
-            pub let step(@a : Nat, @b : Nat, p : Le(a, b)) -> Le(a + 1, b + 1) =
+            pub let step(@a : Nat, @b : Nat, p : Le(a, b)) -> Le(a + 1, b + 1) =>
                 Le/s(p);
             let base : Le(0, 1) = Le/z();
             let bumped : Le(1, 2) = step(base);
-            let entry() -> /std/Io({}) =
+            let entry() -> /std/Io({}) =>
                 let _ = /std/print("ok")!;
                 /std/Io/pure(());
             entry()
@@ -295,7 +295,7 @@ fn infix_equality_works_on_bytes() {
             use /std/{Bool, Bytes, Str, Io};
             let a : Bytes = Str/to_bytes("xy");
             let b : Bytes = Str/to_bytes("xz");
-            let entry() -> /std/Io({}) =
+            let entry() -> /std/Io({}) =>
                 let _ = /std/print(Bool/to_str(a != b))!;
                 /std/Io/pure(());
             entry()

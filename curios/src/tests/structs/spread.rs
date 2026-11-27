@@ -56,7 +56,7 @@ fn struct_spread_dependent_override_runs() {
         pub struct Sized : pub Type { n : Nat, v : Vec(Nat)(n) }
         let s : Sized = Sized { n = 2, v = Vec/cons(30, Vec/cons(12, Vec/nil())) };
         let t : Sized = Sized { ..s, n = 1, v = Vec/cons(42, Vec/nil()) };
-        let total(@k : Nat, v : Vec(Nat)(k), acc : Nat) -> Nat =
+        let total(@k : Nat, v : Vec(Nat)(k), acc : Nat) -> Nat =>
             match v
             | nil() => acc
             | cons(@m, x, xs) => total(xs, Nat/add(acc, x))
@@ -115,8 +115,8 @@ fn struct_spread_function_field_override() {
     let source = r#"
         use /std/{Nat};
         pub struct Api : pub Type { base : Nat, bump : (Nat) -> Nat }
-        let api : Api = Api { base = 40, bump(x) = x };
-        let api2 : Api = Api { ..api, bump(x) = Nat/add(x, 2) };
+        let api : Api = Api { base = 40, bump(x) => x };
+        let api2 : Api = Api { ..api, bump(x) => Nat/add(x, 2) };
         /std/print(Nat/to_str(api2.bump(api2.base)))
         "#;
 
@@ -251,7 +251,7 @@ fn struct_spread_private_outside_module_rejected() {
         mod Celsius
             use /std/{Nat};
             pub struct Celsius : Type { Nat }
-            pub let of_nat(n : Nat) -> Celsius = Celsius { n };
+            pub let of_nat(n : Nat) -> Celsius => Celsius { n };
         end
         let c : Celsius/Celsius = Celsius/of_nat(42);
         let bad = Celsius/Celsius { ..c };

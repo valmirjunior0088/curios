@@ -8,7 +8,7 @@ fn a_parameter_the_result_mentions_is_used_when_an_earlier_parameter_has_a_funct
     assert_eq!(
         lints(
             r#"
-        let cong(f : (Type) -> Type, x : Type, y : Type) -> f(x) = Type;
+        let cong(f : (Type) -> Type, x : Type, y : Type) -> f(x) => Type;
         cong
     "#
         ),
@@ -22,7 +22,7 @@ fn a_parameter_only_the_result_type_mentions_is_used_when_the_result_type_holds_
     assert_eq!(
         lints(
             r#"
-        let f(n : Type) -> ((m) => m)(n) = Type;
+        let f(n : Type) -> ((m) => m)(n) => Type;
         f
     "#
         ),
@@ -37,7 +37,7 @@ fn a_local_parameter_only_the_result_type_mentions_is_used_beside_a_function_typ
         lints(
             r#"
         let g : Type =
-            let f(h : (Type) -> Type, x : Type) -> h(x) = Type;
+            let f(h : (Type) -> Type, x : Type) -> h(x) => Type;
             f;
         g
     "#
@@ -53,7 +53,7 @@ fn a_local_parameter_nothing_mentions_is_reported_when_a_later_type_binds_its_na
         lints(
             r#"
         let g : Type =
-            let f(x : Type, _ : (x : Type) -> x) -> Type = Type;
+            let f(x : Type, _ : (x : Type) -> x) -> Type => Type;
             f;
         g
     "#
@@ -68,7 +68,7 @@ fn a_parameter_a_later_one_of_its_name_shadows_is_reported_though_the_result_nam
     assert_eq!(
         lints(
             r#"
-        let f(x : Type, x : Type) -> x = Type;
+        let f(x : Type, x : Type) -> x => Type;
         f
     "#
         ),
@@ -82,7 +82,7 @@ fn a_local_parameter_a_later_one_of_its_name_shadows_is_reported_though_the_resu
         lints(
             r#"
         let g : Type =
-            let f(x : Type, x : Type) -> x = Type;
+            let f(x : Type, x : Type) -> x => Type;
             f;
         g
     "#
@@ -96,7 +96,7 @@ fn every_parameter_but_the_last_of_a_name_the_result_mentions_is_reported() {
     assert_eq!(
         lints(
             r#"
-        let f(x : Type, x : Type, x : Type) -> x = Type;
+        let f(x : Type, x : Type, x : Type) -> x => Type;
         f
     "#
         ),
@@ -113,7 +113,7 @@ fn a_pattern_leaf_is_reported_though_the_result_names_a_later_parameter_of_its_n
     assert_eq!(
         lints(
             r#"
-        let f((x, y) : {Type, Type}, x : Type) -> x = y;
+        let f((x, y) : {Type, Type}, x : Type) -> x => y;
         f
     "#
         ),
@@ -127,7 +127,7 @@ fn a_pattern_leaf_shadowing_a_parameter_the_result_mentions_is_reported_when_the
     assert_eq!(
         lints(
             r#"
-        let f(x : Type, (x, y) : {Type, Type}) -> x = y;
+        let f(x : Type, (x, y) : {Type, Type}) -> x => y;
         f
     "#
         ),
@@ -140,7 +140,7 @@ fn a_parameter_the_result_mentions_is_used_though_a_pattern_leaf_of_its_name_tak
     assert_eq!(
         lints(
             r#"
-        let f(x : Type, (x, y) : {Type, Type}) -> x = (x, y);
+        let f(x : Type, (x, y) : {Type, Type}) -> x => (x, y);
         f
     "#
         ),
@@ -154,7 +154,7 @@ fn a_witness_parameter_a_later_one_of_its_name_shadows_is_reported() {
         lints(
             r#"
         pub concept Show(A : Type) : pub Type { show : A }
-        satisfy (@A : Type, @A : Type) => Show(A) { show = Type }
+        satisfy (@A : Type, @A : Type) -> Show(A) { show = Type }
         Type
     "#
         ),

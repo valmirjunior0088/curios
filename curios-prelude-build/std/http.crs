@@ -79,5 +79,5 @@ pub induct Error: pub Type
 end
 
 --- One exchange under the default client.
-pub let perform(request: Request) -> Try(Io, Error, Response) =
+pub let perform(request: Request) -> Try(Io, Error, Response) =>
     Client/perform(Client/default, request);

@@ -2,26 +2,26 @@
 use /std/{Nat, Bool, Io, Try, Test, Program, Channel};
 
 -- A description that yields nothing and leaves `n` where a take finds it.
-let leave(c: Channel(Nat), n: Nat) -> Io({}) =
+let leave(c: Channel(Nat), n: Nat) -> Io({}) =>
     let _ = Channel/try_push(c, n)!;
     Io/pure(());
 
 -- The same description, as one that may fail and does not.
-let leave_or_fail(c: Channel(Nat), n: Nat) -> Try(Io, Io/Error, {}) =
+let leave_or_fail(c: Channel(Nat), n: Nat) -> Try(Io, Io/Error, {}) =>
     leave(c, n);
 
 -- Whether the next take is `n`.
-let left(c: Channel(Nat), n: Nat) -> Io(Bool) =
+let left(c: Channel(Nat), n: Nat) -> Io(Bool) =>
     let taken = Channel/try_take(c)!;
     Io/pure(match taken | item(m) => m == n | _ => false end);
 
-test a_description_that_yields_nothing_is_executed_as_itself =
+test a_description_that_yields_nothing_is_executed_as_itself =>
     let c = Channel/new(@Nat, 1)!;
     let () = Program/execute(leave(c, 7))!;
     let held = left(c, 7)!;
     Test/assert("the description left its value", held);
 
-test a_description_that_may_fail_and_does_not_runs_to_its_end =
+test a_description_that_may_fail_and_does_not_runs_to_its_end =>
     let c = Channel/new(@Nat, 1)!;
     let () = Program/execute(leave_or_fail(c, 7))!;
     let held = left(c, 7)!;

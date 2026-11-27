@@ -23,15 +23,15 @@ satisfy Spell(Response) {
 }
 
 --- Whether a reply's renderer writes the field named `name` itself: the framing fields and `connection`. A caller's own field of one of these names is not sent.
-pub let owned(name: Field/Name) -> Bool =
+pub let owned(name: Field/Name) -> Bool =>
     name == Field/Name/content_length || name == Field/Name/transfer_encoding
         || name == Field/Name/connection;
 
-let length_line(n: Nat) -> Bytes =
+let length_line(n: Nat) -> Bytes =>
     Field/line_of(Field/Name/content_length, Str/to_bytes(Nat/to_str(n)));
 
 --- The reply's head as the bytes sent on the wire, stating the length of `body`: the status line as HTTP/1.1, `connection: close`, since a server keeps no connection, `content-length` unless the status is 1xx, 204 or 304, then the headers the renderer does not own, and the blank line.
-pub let render_head(r: Response, body: Bytes) -> Bytes =
+pub let render_head(r: Response, body: Bytes) -> Bytes =>
     0x[
         ..Str/to_bytes(Fmt/render("HTTP/1.1 % ")(r.status.code)),
         ..r.status.reason.bytes,
@@ -45,11 +45,11 @@ pub let render_head(r: Response, body: Bytes) -> Bytes =
         '\r', '\n'];
 
 --- The reply as the bytes sent on the wire: its head, then its body. Every reply is one a wire can carry, so there is nothing to refuse.
-pub let render(r: Response) -> Bytes =
+pub let render(r: Response) -> Bytes =>
     0x[..render_head(r, r.body), ..r.body];
 
 --- The value of the first header named `name`, compared without case, or `none`.
-pub let header(r: Response, name: Str) -> Option(Field/Value) =
+pub let header(r: Response, name: Str) -> Option(Field/Value) =>
     Field/find(r.headers, name);
 
 --- `r` with the field `name: value` appended to its headers. A field the renderer owns — `content-length`, `transfer-encoding`, `connection` — is kept and not sent.
@@ -59,19 +59,19 @@ pub let with_header(
     value: Str,
     @_: Holds(Field/Name/is_name(name)),
     @_: Holds(Bytes/all(Str/to_bytes(value), Field/Value/admits)),
-) -> Response =
+) -> Response =>
     Response { ..r, headers = [..r.headers, Field/of(name, value)], @bodied = r.bodied };
 
 --- Whether the status is a success, 200 through 299.
-pub let ok(r: Response) -> Bool =
+pub let ok(r: Response) -> Bool =>
     Nat/in_range(r.status.code, 200, 299);
 
 --- The body as text, or where it stops being UTF-8, as `Str/of_bytes` answers.
-pub let text(r: Response) -> Result(Nat, Str) =
+pub let text(r: Response) -> Result(Nat, Str) =>
     Str/of_bytes(r.body);
 
 --- The body decoded as JSON, or the decoder's refusal. A body that is not UTF-8 is refused where it stops being text.
-pub let json(r: Response) -> Result(Parse/Error, Json) =
+pub let json(r: Response) -> Result(Parse/Error, Json) =>
     match Str/of_bytes(r.body)
     | success(text) => Json/decode(text)
     | failure(at) => Result/failure(Parse/Error/declined("a JSON body is text", at))
@@ -85,11 +85,11 @@ pub let of(
     @_: Holds(100 <= code && code <= 999),
     @_: Holds(Bytes/all(Str/to_bytes(kind), Field/Value/admits)),
     @_: Holds(Status/carries_content(code) || Bytes/length(body) == 0),
-) -> Response =
+) -> Response =>
     Response { status = Status/of(code), headers = [Field/of("content-type", kind)], body = body };
 
 --- A reply with `code`, its usual reason, and neither headers nor content: what a 204 or a 304 is.
-pub let empty(code: Nat, @_: Holds(100 <= code && code <= 999)) -> Response =
+pub let empty(code: Nat, @_: Holds(100 <= code && code <= 999)) -> Response =>
     Response { status = Status/of(code), headers = [], body = 0x[] };
 
 --- Plain text, under a status that carries content.
@@ -98,7 +98,7 @@ pub let of_text(
     s: Str,
     @_: Holds(100 <= code && code <= 999),
     @content: Holds(Status/carries_content(code)),
-) -> Response =
+) -> Response =>
     match Status/carries_content(code)
     | true => of(code, "text/plain; charset=utf-8", Str/to_bytes(s))
     | false => match content end
@@ -110,7 +110,7 @@ pub let of_json(
     j: Json,
     @_: Holds(100 <= code && code <= 999),
     @content: Holds(Status/carries_content(code)),
-) -> Response =
+) -> Response =>
     match Status/carries_content(code)
     | true => of(code, "application/json", Str/to_bytes(Json/encode(j)))
     | false => match content end
@@ -122,14 +122,14 @@ pub let of_html(
     h: Html,
     @_: Holds(100 <= code && code <= 999),
     @content: Holds(Status/carries_content(code)),
-) -> Response =
+) -> Response =>
     match Status/carries_content(code)
     | true => of(code, "text/html; charset=utf-8", Str/to_bytes(Html/encode(h)))
     | false => match content end
     end;
 
 --- The reply a server owes a request refused for `why`, which says why in plain text: 400 for a request that is malformed or cut short, 414 for a request line too long (RFC 9112 §3), 431 for a head too large (RFC 6585 §5), 413 for content too large, 501 for what is not implemented, 505 for a version not served, and 408 for a request that did not arrive in time.
-pub let of_refusal(why: Refusal) -> Response =
+pub let of_refusal(why: Refusal) -> Response =>
     let said = Refusal/to_str(why);
     match why
     | malformed(_) | incomplete() => of_text(400, said)
@@ -142,7 +142,7 @@ pub let of_refusal(why: Refusal) -> Response =
     end;
 
 --- A `303 See Other` to `url`, its `Location` the URL as the wire carries it.
-pub let redirect(url: Url) -> Response =
+pub let redirect(url: Url) -> Response =>
     Response {
         status = Status/of(303),
         headers = [Field { name = Field/Name { text = "location" }, value = Url/to_value(url) }],
@@ -168,7 +168,7 @@ satisfy Spell(Head) {
 }
 
 --- The head `bytes` spell, the bytes of a status line and its field lines: a status line of a version, a three-digit code and a reason phrase (RFC 9112 §4), and field lines, a fold among them read as a space and what follows it (§5.2). Anything else is malformed.
-pub let head_of(bytes: Bytes) -> Result(Refusal, Head) =
+pub let head_of(bytes: Bytes) -> Result(Refusal, Head) =>
     match syntax/lines(bytes)
     | [] => Result/failure(Refusal/malformed("a reply begins with its status line"))
     | [first, ..rest] =>
@@ -178,18 +178,18 @@ pub let head_of(bytes: Bytes) -> Result(Refusal, Head) =
     end;
 
 --- How the body of the reply `head` is delimited, given the method of the request it answers.
-pub let framing(method: Method, head: Head) -> Result(Refusal, Framing) =
+pub let framing(method: Method, head: Head) -> Result(Refusal, Framing) =>
     Framing/of_reply(method, head.status.code, head.version, head.headers);
 
 --- The reply `head` and `body` make. A 205 reply that carries content is malformed, since its server sends none (RFC 9110 §15.3.6), and a 1xx, 204 or 304 reply has no body to be given.
-pub let from_head(head: Head, body: Bytes) -> Result(Refusal, Response) =
+pub let from_head(head: Head, body: Bytes) -> Result(Refusal, Response) =>
     match Status/carries_content(head.status.code) || Bytes/length(body) == 0
     | true => Result/success(Response { status = head.status, headers = head.headers, body = body })
     | false => Result/failure(Refusal/malformed("a reply of this status carries no content"))
     end;
 
 --- A whole reply read from `bytes`, as a client that sent a request of `method` reads it within `limits`: every 1xx reply ahead of the final one passed over (RFC 9110 §15.2), then the head, the framing its fields state, and the body that framing delimits — none in reply to `HEAD` or under a 1xx, 204 or 304 status, the chunks where it is chunked, `Content-Length` octets where the field is there, and everything the peer sent otherwise. A reply that has not all arrived is `incomplete`.
-pub let of_bytes(limits: Limits, method: Method, bytes: Bytes) -> Result(Refusal, Response) =
+pub let of_bytes(limits: Limits, method: Method, bytes: Bytes) -> Result(Refusal, Response) =>
     match read/head(limits, false, read/unsearched, bytes)
     | more(_, _) => Result/failure(Refusal/incomplete())
     | refused(why) => Result/failure(why)

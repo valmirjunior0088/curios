@@ -10,7 +10,7 @@ fn a_non_monad_action_is_called_out() {
         pub struct Box(A: Type): pub Type {
             A,
         }
-        pub let main() -> Io({}) =
+        pub let main() -> Io({}) =>
             let b: Box(Nat) = Box { 1 };
             let _ = b!;
             print("unreachable");
@@ -29,7 +29,7 @@ fn a_non_monad_action_is_called_out() {
 fn a_flex_action_still_sequences_without_lifting() {
     let source = r#"
         use /std/{Monad, Io, Nat, print};
-        pub let main() -> Io({}) =
+        pub let main() -> Io({}) =>
             let n = Monad/pure(65)!;
             print(Nat/to_str(n));
         main()
@@ -59,7 +59,7 @@ fn a_bang_in_an_inference_position_region_is_refused() {
 fn a_region_whose_type_never_comes_is_refused_at_its_bang() {
     let source = r#"
         use /std/{Io, print};
-        let ignore(@T: Type, program: () -> T) -> Io({}) = print("x");
+        let ignore(@T: Type, program: () -> T) -> Io({}) => print("x");
         ignore(() =>
             let _ = print("a")!;
             print("b"))
@@ -81,7 +81,7 @@ fn a_region_whose_type_never_comes_is_refused_at_its_bang() {
 fn a_region_waits_for_the_arm_beside_it_to_state_its_type() {
     let source = r#"
         use /std/{Nat, Io, print};
-        let ignore(@T: Type, program: () -> T) -> Io({}) = print("x");
+        let ignore(@T: Type, program: () -> T) -> Io({}) => print("x");
         let n: Nat = 3;
         ignore(() =>
             match n
@@ -104,7 +104,7 @@ fn a_bang_in_a_region_that_is_no_monad_names_the_region_type() {
         (
             r#"
         use /std/{Str, Bool, print};
-        let probe(tag : Str, r : Bool) -> Bool =
+        let probe(tag : Str, r : Bool) -> Bool =>
             let _ = print(tag)!;
             r;
         /std/Io/pure(())
@@ -114,7 +114,7 @@ fn a_bang_in_a_region_that_is_no_monad_names_the_region_type() {
         (
             r#"
         use /std/{Nat, List, print};
-        let f(xs : List(Nat)) -> Nat = List/fold(xs, 0, (x, acc) => print("x")!);
+        let f(xs : List(Nat)) -> Nat => List/fold(xs, 0, (x, acc) => print("x")!);
         /std/Io/pure(())
         "#,
             "Nat",
@@ -124,7 +124,7 @@ fn a_bang_in_a_region_that_is_no_monad_names_the_region_type() {
             r#"
         use /std/{Io};
         use /std/Bool/{True, Holds};
-        let sequenced() -> Holds(true) = let _ = Io/pure(1)!; True/qed();
+        let sequenced() -> Holds(true) => let _ = Io/pure(1)!; True/qed();
         /std/Io/pure(())
         "#,
             "True",
@@ -147,7 +147,7 @@ fn a_function_names_its_invalid_sequencing_type_and_a_value_the_rule_it_breaks()
             "wanted: `/std/Monad/Lift(Io, List)`",
         ),
     ] {
-        let function = binding.replacen(':', "() ->", 1);
+        let function = binding.replacen(':', "() ->", 1).replacen(" = ", " => ", 1);
         for (declaration, refusal) in [(binding, "`!` outside a function"), (&function, refusal)] {
             let source = fill!(
                 "use /std/{Nat, List, Io};\nuse /std/Io/{Latch};\n${declaration}\n()\n",
@@ -167,7 +167,7 @@ fn a_function_names_its_invalid_sequencing_type_and_a_value_the_rule_it_breaks()
 #[test]
 fn a_bang_after_a_value_names_no_call_of_bind() {
     let error = typecheck(
-        "use /std/{Nat, Io};\nlet both() -> Io({}) =\n    let x = 1!;\n    Io/pure(());\nboth()\n",
+        "use /std/{Nat, Io};\nlet both() -> Io({}) =>\n    let x = 1!;\n    Io/pure(());\nboth()\n",
     )
     .expect_err("a numeral is no action");
 
@@ -183,7 +183,7 @@ fn a_bang_after_a_value_names_no_call_of_bind() {
 fn a_bang_sequences_in_a_region_whose_monad_is_a_parameter() {
     let source = r#"
         use /std/{Nat, Monad};
-        let f(@M : (Type) -> Type, use Monad(M), a : M(Nat)) -> M(Nat) =
+        let f(@M : (Type) -> Type, use Monad(M), a : M(Nat)) -> M(Nat) =>
             let x = a!;
             Monad/pure(x + 1);
         /std/Io/pure(())
@@ -195,7 +195,7 @@ fn a_bang_sequences_in_a_region_whose_monad_is_a_parameter() {
 #[test]
 fn a_long_sequencing_chain_compiles_and_runs() {
     // `inline_known_calls` prunes each inlined callee's dead body between sweeps; left standing, its call sites would keep counting, callees would turn multi-site, and a `!` chain's continuations would duplicate exponentially — 16 sequenced actions would not finish compiling.
-    let mut source = String::from("use /std/{Str, Io, print};\nlet main() -> Io({}) =\n");
+    let mut source = String::from("use /std/{Str, Io, print};\nlet main() -> Io({}) =>\n");
     for _ in 0..24 {
         source.push_str("let _ = print(\"x\")!;\n");
     }
@@ -210,9 +210,9 @@ fn a_long_sequencing_chain_compiles_and_runs() {
 fn a_bang_reads_its_monad_where_only_the_value_slot_is_open() {
     let source = r#"
         use /std/{Try, Io, Nat, Str};
-        let take(@A: Type, body: (Nat) -> Try(Io, Io/Error, A)) -> Try(Io, Io/Error, A) =
+        let take(@A: Type, body: (Nat) -> Try(Io, Io/Error, A)) -> Try(Io, Io/Error, A) =>
             body(1);
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let outcome = Try/run(take((n) =>
                 let a = Try/pure(@Io, @Io/Error, n)!;
                 Try/pure(a + 1)))!;
@@ -231,7 +231,7 @@ fn a_region_that_names_no_monad_is_still_refused() {
     let rigid = error(
         r#"
         use /std/{Bool, Str, print};
-        let probe(tag: Str, r: Bool) -> Bool =
+        let probe(tag: Str, r: Bool) -> Bool =>
             let _ = print(tag)!;
             r;
         /std/print("x")
@@ -242,7 +242,7 @@ fn a_region_that_names_no_monad_is_still_refused() {
     let undetermined = error(
         r#"
         use /std/{Try, Io, Nat};
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let go = Try/run((() => let a = Try/pure(@Io, @Io/Error, 1)!; Try/pure(a + 1))())!;
             /std/print("ok");
         entry()
@@ -260,7 +260,7 @@ fn a_stranded_sequencing_leaves_its_result_a_goal() {
     let stranded = error(
         r#"
         use /std/{Nat, Monad, Str};
-        let g(@M: (Type) -> Type, use Monad(M), a: M(Str)) -> Nat =
+        let g(@M: (Type) -> Type, use Monad(M), a: M(Str)) -> Nat =>
             Monad/bind(a, (_) => Monad/pure(1));
         /std/print("x")
         "#,

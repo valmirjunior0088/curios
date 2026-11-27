@@ -13,12 +13,12 @@ fn concept_rejects_foreign_satisfy() {
                 tag(A) -> Str
             }
             satisfy Tag(Nat) {
-                tag(n) = Nat/to_str(n)
+                tag(n) => Nat/to_str(n)
             }
         end
         use Guard/{Tag};
         satisfy Tag(Str) {
-            tag(s) = s
+            tag(s) => s
         }
         /std/print("no")
         "#;
@@ -37,11 +37,11 @@ fn concept_rejects_foreign_dictionary_literal() {
                 tag(A) -> Str
             }
             satisfy Tag(Nat) {
-                tag(n) = Nat/to_str(n)
+                tag(n) => Nat/to_str(n)
             }
         end
         use Guard/{Tag};
-        let forged : Tag(Nat) = Tag { tag(n) = "forged" };
+        let forged : Tag(Nat) = Tag { tag(n) => "forged" };
         /std/print("no")
         "#;
 
@@ -59,11 +59,11 @@ fn concept_resolves_and_projects_cross_module() {
                 tag(A) -> Str
             }
             satisfy Tag(Nat) {
-                tag(n) = Nat/to_str(n)
+                tag(n) => Nat/to_str(n)
             }
         end
         use Guard/{Tag};
-        let describe(@A : Type, use Tag(A), x : A) -> Str = Tag/tag(x);
+        let describe(@A : Type, use Tag(A), x : A) -> Str => Tag/tag(x);
         /std/print(describe(42))
         "#;
 
@@ -85,14 +85,14 @@ fn concept_superclass_resolves_cross_module() {
                 le(A, A) -> Bool
             }
             satisfy Eq2(Nat) {
-                eq2(a, b) = Nat/eql(a, b)
+                eq2(a, b) => Nat/eql(a, b)
             }
             satisfy Ord2(Nat) {
-                le(a, b) = true
+                le(a, b) => true
             }
         end
         use Guard/{Eq2, Ord2};
-        let same(@A : Type, use Ord2(A), x : A) -> Bool = Eq2/eq2(x, x);
+        let same(@A : Type, use Ord2(A), x : A) -> Bool => Eq2/eq2(x, x);
         /std/print(Bool/to_str(same(7)))
         "#;
 
@@ -110,11 +110,11 @@ fn prop_concept_certifies() {
                 proof(x : A) -> Eq()(x, x)
             }
             satisfy Certified(Nat) {
-                proof(x) = Eq/refl()
+                proof(x) => Eq/refl()
             }
         end
         use Guard/{Certified};
-        let ignore(p : Eq()(2, 2), n : Nat) -> Nat = n;
+        let ignore(p : Eq()(2, 2), n : Nat) -> Nat => n;
         /std/print(Nat/to_str(ignore(Certified/proof(2), 3)))
         "#;
 

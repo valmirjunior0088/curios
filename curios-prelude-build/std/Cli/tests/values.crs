@@ -46,14 +46,14 @@ let tool: Cli =
                 rest = Option/some(Cli/positional("extra", Cli/str, "Anything after")) }),
         Option/none());
 
-let format(f: Format) -> Str =
+let format(f: Format) -> Str =>
     match f | json() => "json" | text() => "text" end;
 
-let listed(items: List(Str)) -> Str =
+let listed(items: List(Str)) -> Str =>
     match items | [] => "-" | _ => Str/join(",", items) end;
 
 -- Every slot of a parse, one word each.
-let read(argv: List(Str), env: Map(Str, Str)) -> Str =
+let read(argv: List(Str), env: Map(Str, Str)) -> Str =>
     match Cli/parse(tool, List/map(argv, Str/to_bytes), Map/map(env, Str/to_bytes))
     | parsed(p) =>
         Str/join(" ", [
@@ -80,11 +80,11 @@ let read(argv: List(Str), env: Map(Str, Str)) -> Str =
     end;
 
 -- Nothing given: a flag is false, a count zero, a toggle its fallback, a default its value, an optional absent, a repeated option empty, and a choice its default.
-test an_argument_the_line_leaves_out_reads_as_its_kind_says =
+test an_argument_the_line_leaves_out_reads_as_its_kind_says =>
     Test/equal(read(["/srv"], Map/empty()), "false 0 true 8080 - - text /srv - -");
 
 -- Each kind given: a cluster sets the flag and counts the count, the last switch stands, the last value of an option stands, a repeated option keeps every value in order, a choice its alternative, and the positionals fill in their order.
-test each_kind_reads_what_the_line_gives_it =
+test each_kind_reads_what_the_line_gives_it =>
     Test/equal(
         read(
             ["-vqq", "--no-color", "--color", "--no-color", "--port", "1", "--port=2", "--tag", "x",
@@ -93,7 +93,7 @@ test each_kind_reads_what_the_line_gives_it =
         "true 2 false 2 x a,b json /srv -3 c,-d");
 
 -- A declared variable stands for an option the line leaves out, and the line wins where it gives one.
-test a_variable_stands_for_an_option_the_line_leaves_out =
+test a_variable_stands_for_an_option_the_line_leaves_out =>
     Test/all([
         Test/equal(
             read(["/srv"], Map/of_list([("PORT", "7070")])),
@@ -103,7 +103,7 @@ test a_variable_stands_for_an_option_the_line_leaves_out =
             "false 0 true 1 - - text /srv - -")]);
 
 -- A variable is read by the reader the line's text for its option takes: a flag's and a toggle's by the twelve boolean words in any case, a choice's by its alternatives' names, an option's by its value; and an empty variable is unset.
-test a_variable_is_read_as_the_line_reads_its_option =
+test a_variable_is_read_as_the_line_reads_its_option =>
     Test/all([
         Test/equal(
             read(["/srv"], Map/of_list([("VERBOSE", "no"), ("COLOR", "OFF")])),
@@ -116,7 +116,7 @@ test a_variable_is_read_as_the_line_reads_its_option =
             "false 0 true 8080 - - text /srv - -")]);
 
 -- A variable its option's reader refuses is refused by its name, where the line's text would be refused by the option's.
-test a_variable_its_reader_refuses_is_refused_by_its_name =
+test a_variable_its_reader_refuses_is_refused_by_its_name =>
     Test/all([
         Test/equal(read(["/srv"], Map/of_list([("VERBOSE", "maybe")])), "bad $VERBOSE"),
         Test/equal(read(["/srv"], Map/of_list([("COLOR", "false!")])), "bad $COLOR"),
@@ -124,11 +124,11 @@ test a_variable_its_reader_refuses_is_refused_by_its_name =
         Test/equal(read(["/srv"], Map/of_list([("PORT", "x")])), "bad $PORT")]);
 
 -- Two alternatives of one choice are refused together, by their names.
-test alternatives_of_one_choice_are_refused_together =
+test alternatives_of_one_choice_are_refused_together =>
     Test/equal(read(["--json", "--text", "/srv"], Map/empty()), "conflict --json --text");
 
 -- A closed set reads a value by its name and refuses any other with the names there are.
-test a_closed_set_reads_by_name_and_refuses_the_rest =
+test a_closed_set_reads_by_name_and_refuses_the_rest =>
     let level: Cli/Value = Cli/one_of("L", [("low", 1), ("high", 9)]);
     Test/all([
         Test/equal(
@@ -156,7 +156,7 @@ let copy: Cli =
         Option/none());
 
 -- A name the system holds need not be text: a path takes the bytes it is given as they are, and a value read as text refuses them, by the name of what reads it.
-test a_path_takes_bytes_that_are_no_text_where_text_refuses_them =
+test a_path_takes_bytes_that_are_no_text_where_text_refuses_them =>
     let name = 0x[0x66, 0xFF];
     let taken =
         match Cli/parse(copy, [name], Map/empty())

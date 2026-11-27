@@ -40,7 +40,7 @@ const stopped = async (source, hooks, pattern) => {
 const BYTE = `
 use /std/{Byte, Nat, print};
 foreign byte(Byte) -> Byte;
-let main() -> /std/Io({}) =
+let main() -> /std/Io({}) =>
     let b = byte(7)!;
     print(Nat/to_str(Byte/to_nat(b)));
 main()
@@ -49,7 +49,7 @@ main()
 const FLAG = `
 use /std/{print};
 foreign flag() -> Bool;
-let main() -> /std/Io({}) =
+let main() -> /std/Io({}) =>
     let b = flag()!;
     print(match b | true => "yes" | false => "no" end);
 main()
@@ -58,7 +58,7 @@ main()
 const PAIR = `
 use /std/{Nat, Str, print};
 foreign pair(Nat, Bytes) -> {code: Nat, ok: Bool};
-let main() -> /std/Io({}) =
+let main() -> /std/Io({}) =>
     let r = pair(1, 0x[])!;
     print(Str/flatten([Nat/to_str(r.code), " ", match r.ok | true => "ok" | false => "not ok" end]));
 main()
@@ -67,7 +67,7 @@ main()
 const SPLIT = `
 use /std/{Bytes, List, Nat, Str, print};
 foreign split(Bytes) -> {head: Bytes, count: Nat, rest: List(Bytes)};
-let main() -> /std/Io({}) =
+let main() -> /std/Io({}) =>
     let r = split(0x[1, 2, 3])!;
     print(Str/flatten([Nat/to_str(Bytes/to_nat(r.head)), " ", Nat/to_str(r.count), " ", Str/join(",", List/map(r.rest, (b) => Nat/to_str(Bytes/to_nat(b))))]));
 main()
@@ -82,7 +82,7 @@ foreign take(Nat, Int, Bool, Byte, Flt, Bytes, List(Nat), List(Int), List(Bool),
 const LISTS = `
 use /std/{Nat, Str, List, print};
 foreign lists() -> List(Nat);
-let main() -> /std/Io({}) =
+let main() -> /std/Io({}) =>
     let l = lists()!;
     print(Str/join(",", List/map(l, Nat/to_str)));
 main()
@@ -91,7 +91,7 @@ main()
 const OPTIONS = `
 use /std/{Nat, Str, Option, print};
 foreign maybe(Option(Nat), Option(Bytes)) -> Option(Nat);
-let main() -> /std/Io({}) =
+let main() -> /std/Io({}) =>
     let a = maybe(Option/some(5), Option/none())!;
     let b = maybe(Option/none(), Option/some(0x[1, 2]))!;
     print(Str/flatten([Nat/to_str(Option/unwrap_or(a, 0)), " ", match b | some(_) => "some" | none() => "none" end]));
@@ -102,7 +102,7 @@ const KEEP = `
 use /std/{Io, Proc};
 foreign keep(Bytes) -> Bytes;
 foreign poke() -> {};
-let main() -> /std/Try(Io, Io/Error, {}) =
+let main() -> /std/Try(Io, Io/Error, {}) =>
     let b = 0x[0x61, 0x62, 0x63];
     let r = keep(b)!;
     let _ = poke()!;
@@ -119,7 +119,7 @@ abort(3)
 const WRITE = `
 use /std/{Io, Show, Try, print};
 foreign token() -> Handle;
-let main() -> /std/Io({}) =
+let main() -> /std/Io({}) =>
     let h = token()!;
     let r = Try/run(Io/write(h, 0x[0x68, 0x69]))!;
     match r
@@ -134,8 +134,8 @@ use /std/{Io, Show, Str, Try, Result, print};
 foreign input() -> Handle;
 foreign output() -> Handle;
 foreign token() -> Handle;
-let main() -> /std/Io({}) =
-    let said(r: Result(Io/Error, Io/Chunk)) -> Str =
+let main() -> /std/Io({}) =>
+    let said(r: Result(Io/Error, Io/Chunk)) -> Str =>
         match r | success(bytes(_, @_)) => "chunk" | success(ended()) => "eof" | failure(e) => Show/show(e) end;
     let stdin = input()!;
     let stdout = output()!;
@@ -151,7 +151,7 @@ main()
 const HOOKS = `
 foreign used() -> Nat;
 foreign _unused() -> Nat;
-let main() -> /std/Io({}) =
+let main() -> /std/Io({}) =>
     let _ = used()!;
     /std/print("ran");
 main()
@@ -479,7 +479,7 @@ test("a stream used against its direction fails with EBADF, and a handle this ho
 test("listing a directory is denied rather than refused", async () => {
   const { stdout } = await execute(`
 use /std/{Try, Show, Path, print};
-let main() -> /std/Io({}) =
+let main() -> /std/Io({}) =>
     let r = Try/run(/std/fs/list(Path/of_str(".")))!;
     match r | success(_) => print("listed") | failure(e) => print(Show/show(e)) end;
 main()
@@ -492,7 +492,7 @@ test("a program that reads its arguments is refused by the row, which has none t
   await stopped(
     `
 use /std/{List, Nat, print};
-let main() -> /std/Io({}) =
+let main() -> /std/Io({}) =>
     let args = /std/Proc/args()!;
     print(Nat/to_str(List/length(args)));
 main()
@@ -505,7 +505,7 @@ main()
 test("random bytes are exactly as many as were asked for, past one Web Crypto call", async () => {
   const { stdout } = await execute(`
 use /std/{Bytes, Nat, print};
-let main() -> /std/Io({}) =
+let main() -> /std/Io({}) =>
     let b = /std/rand/bytes(70000)!;
     print(Nat/to_str(Bytes/length(b)));
 main()
@@ -518,13 +518,13 @@ test("a recursion a million calls deep finishes on V8's stack, its frames past t
   // The depth is read off the host, so no stage folds the recursion away; a page's stack holds a few thousand of these frames.
   const { stdout, exitCode, trap } = await execute(`
 use /std/{Bytes, Nat, Str, Json, print};
-let step(n: Nat) -> Nat =
+let step(n: Nat) -> Nat =>
     match n | 0 => 0 | m + 1 => (step(m) * 3 + 1) % 1000003 end;
-let ping(n: Nat) -> Nat =
+let ping(n: Nat) -> Nat =>
     match n | 0 => 0 | m + 1 => (pong(m) * 3 + 1) % 1000003 end
-and pong(n: Nat) -> Nat =
+and pong(n: Nat) -> Nat =>
     match n | 0 => 1 | m + 1 => (ping(m) * 5 + 2) % 1000003 end;
-let main() -> /std/Io({}) =
+let main() -> /std/Io({}) =>
     let n = Bytes/length(/std/rand/bytes(1)!) * 1000000;
     let nested = Str/concat(Str/repeat("[", n / 10), Str/repeat("]", n / 10));
     let encoded = match Json/decode(nested) | success(json) => Str/length(Json/encode(json)) | failure(_) => 0 end;
@@ -550,7 +550,7 @@ test("the monotonic clock answers the nanoseconds within a second, a reading jus
   const { stdout } = await execute(`
 use /std/{Int, print};
 use /std/time/{Instant, Duration};
-let main() -> /std/Io({}) =
+let main() -> /std/Io({}) =>
     let a = Instant/now()!;
     let b = Instant/now()!;
     print(Int/to_str(Duration/to_nanos(Instant/diff(b, a))));
@@ -563,7 +563,7 @@ main()
 test("an exit ends the run with its code and no return, whatever the code", async () => {
   for (const code of [0, 3, 255]) {
     const outcome = await execute(`
-let main() -> /std/Io({}) =
+let main() -> /std/Io({}) =>
     let _ = /std/print("bye")!;
     /std/Proc/exit(@{}, ${code});
 main()
@@ -579,7 +579,7 @@ main()
 test("a program that finishes its standard output writes nothing more there, and a print after it ends the program saying why", async () => {
   const { stdout, stderr, exitCode } = await execute(`
 use /std/{Try, Io, Proc, print};
-let main() -> /std/Io({}) =
+let main() -> /std/Io({}) =>
     let _ = print("before")!;
     let _ = Try/run(Io/finish(Proc/stdout))!;
     print("after");
@@ -607,7 +607,7 @@ test("a program suspended on a timer wakes into its rest, and the event loop run
     `
 use /std/{Io, Nat, Str, print};
 use /std/time/{Instant, Duration};
-let main() -> /std/Io({}) =
+let main() -> /std/Io({}) =>
     let _ = print("slept ")!;
     let start = Instant/now()!;
     let woke = Io/bind(Io/sleep(Duration/of_millis(20)), (_) => Io/pure(7))!;
@@ -624,7 +624,7 @@ main()
 test("a program suspended on no handle runs its cancel, reports the deadlock and ends with code 1", async () => {
   const { exitCode, stdout, stderr } = await execute(`
 use /std/{Io, print};
-let main() -> /std/Io({}) =
+let main() -> /std/Io({}) =>
     let _ = Io/scope((scope) => Io/bind(Io/Scope/defer(scope, (_) => print("abandoned")), (_) => Io/bind(Io/select(@{}, []), (_) => print("resumed"))))!;
     print("after");
 main()
@@ -640,7 +640,7 @@ test("a hook's promise answers its row later, and the rest of the program runs w
 foreign fetch(Nat) -> Nat;
 use /std/{Io, Nat, print};
 use /std/time/{Duration};
-let main() -> /std/Io({}) =
+let main() -> /std/Io({}) =>
     let tick = Io/bind(Io/sleep(Duration/of_millis(5)), (_) => print("tick "));
     let (n, _) = Io/both(fetch(3), tick)!;
     print(Nat/to_str(n));
@@ -667,7 +667,7 @@ test("a call cancelled while its hook's promise is pending aborts the hook's sig
 foreign hang(Nat) -> Nat;
 use /std/{Io, print};
 use /std/time/{Duration};
-let main() -> /std/Io({}) =
+let main() -> /std/Io({}) =>
     let came = Io/timeout(Duration/of_millis(10), hang(1))!;
     print(match came | some(_) => "came" | none() => "timed out" end);
 main()
@@ -689,7 +689,7 @@ main()
 
 const INTERLEAVED = `
 use /std/{print, print_err};
-let main() -> /std/Io({}) =
+let main() -> /std/Io({}) =>
     let _ = print("one ")!;
     let _ = print_err("two ")!;
     print("three");
@@ -758,11 +758,11 @@ test("a deadlock cancellation that suspends finishes its cleanup before reportin
     `
 use /std/{Io, print};
 use /std/time/{Duration};
-let release(_: Io/Scope/Ended) -> Io({}) =
+let release(_: Io/Scope/Ended) -> Io({}) =>
     let _ = print("closing ")!;
     let _ = Io/sleep(Duration/of_millis(10))!;
     print("closed");
-let main() -> Io({}) =
+let main() -> Io({}) =>
     let _ = Io/scope((scope) => Io/bind(Io/Scope/defer(scope, release), (_) => Io/bind(Io/select(@{}, []), (_) => print("resumed"))))!;
     print("after");
 main()

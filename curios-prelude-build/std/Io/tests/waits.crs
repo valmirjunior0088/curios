@@ -4,12 +4,12 @@ use /std/Io/{Future, Latch};
 use /std/time/{Duration};
 
 -- A finalizer that leaves how its body ended where a take finds it.
-let told(c: Channel(Io/Scope/Ended), ended: Io/Scope/Ended) -> Io({}) =
+let told(c: Channel(Io/Scope/Ended), ended: Io/Scope/Ended) -> Io({}) =>
     let _ = Channel/try_push(c, ended)!;
     Io/pure(());
 
 -- Whether the next take is `finished`, where `finished` says so, or `cancelled` otherwise.
-let heard(c: Channel(Io/Scope/Ended), finished: Bool) -> Io(Bool) =
+let heard(c: Channel(Io/Scope/Ended), finished: Bool) -> Io(Bool) =>
     let taken = Channel/try_take(c)!;
     Io/pure(
         match taken
@@ -21,20 +21,20 @@ let heard(c: Channel(Io/Scope/Ended), finished: Bool) -> Io(Bool) =
         | _ => false
         end);
 
-test a_yield_at_the_top_of_a_program_goes_on =
+test a_yield_at_the_top_of_a_program_goes_on =>
     let () = Io/yield()!;
     Test/assert("the program goes on past the yield", true);
 
-test a_sleep_holds_only_its_own_branch =
+test a_sleep_holds_only_its_own_branch =>
     let n = Io/select([Io/bind(Io/sleep(Duration/of_secs(3600)), (()) => Io/pure(1)), Io/pure(2)])!;
     Test/assert("the branch that does not sleep wins", n == 2);
 
-test a_wait_on_a_future_goes_on_once_the_branch_beside_it_fills_it =
+test a_wait_on_a_future_goes_on_once_the_branch_beside_it_fills_it =>
     let f = Future/new(@{})!;
     let (waited, ()) = Io/both(Io/bind(Future/wait(f), (()) => Io/pure(true)), Future/fill(f, ()))!;
     Test/assert("the wait goes on once the future is filled", waited);
 
-test a_scope_tells_its_release_a_body_ran_to_its_end =
+test a_scope_tells_its_release_a_body_ran_to_its_end =>
     let endings = Channel/new(@Io/Scope/Ended, 1)!;
     let n =
         Io/scope((scope) =>
@@ -42,7 +42,7 @@ test a_scope_tells_its_release_a_body_ran_to_its_end =
     let finished = heard(endings, true)!;
     Test/assert("the body ran to its end and its release was told so", n == 3 && finished);
 
-test a_scope_tells_its_release_a_body_was_dropped_while_it_waited =
+test a_scope_tells_its_release_a_body_was_dropped_while_it_waited =>
     let endings = Channel/new(@Io/Scope/Ended, 1)!;
     let never = Future/new(@{})!;
     let body =
@@ -55,7 +55,7 @@ test a_scope_tells_its_release_a_body_was_dropped_while_it_waited =
     Test/assert("the release was told the body was dropped", cancelled);
 
 -- Two branches of a body each wait for the scope's children: the child's end wakes both, where a wake one of them took would leave the other waiting for good.
-test every_join_of_a_scope_answers_once_its_children_have_ended =
+test every_join_of_a_scope_answers_once_its_children_have_ended =>
     let joined =
         Io/scope((scope) =>
             let _ = Io/Scope/spawn(scope, Io/yield())!;
@@ -64,16 +64,16 @@ test every_join_of_a_scope_answers_once_its_children_have_ended =
     Test/assert("both joins answered", joined);
 
 -- The value a take found, where it found one.
-let found(@A: Type, taken: Channel/Take(A)) -> Option(A) =
+let found(@A: Type, taken: Channel/Take(A)) -> Option(A) =>
     match taken | item(a) => Option/some(a) | _ => Option/none() end;
 
 -- One fulfilment answers a selection once, however many of its actions wait on the same future.
-test a_fulfilment_answers_a_selection_once_across_actions_waiting_on_it =
+test a_fulfilment_answers_a_selection_once_across_actions_waiting_on_it =>
     let wakes = Channel/new(@Nat, 2)!;
     let n =
         Io/scope((s) =>
             let f = Future/new(@Nat)!;
-            let waiter() -> Io(Nat) =
+            let waiter() -> Io(Nat) =>
                 let n = Io/select([Future/wait(f), Future/wait(f)])!;
                 let _ = Channel/try_push(wakes, 1)!;
                 Io/pure(n);
@@ -88,12 +88,12 @@ test a_fulfilment_answers_a_selection_once_across_actions_waiting_on_it =
         Test/equal([found(first), found(second)], [Option/some(1), Option/none()])]);
 
 -- A push wakes every taker waiting on the channel, and the one that does not get the value waits again: the second push reaches it.
-test two_woken_takers_retry_after_only_one_can_take =
+test two_woken_takers_retry_after_only_one_can_take =>
     let (x, y) =
         Io/scope((s) =>
             let c = Channel/new(@Nat, 1)!;
             let first = Future/new(@{})!;
-            let taker() -> Io(Nat) =
+            let taker() -> Io(Nat) =>
                 let got = Channel/take(c)!;
                 let () = Future/fill(first, ())!;
                 Io/pure(Option/unwrap_or(got, 0));
@@ -109,12 +109,12 @@ test two_woken_takers_retry_after_only_one_can_take =
     Test/equal([x, y], [1, 2]);
 
 -- A take that loses a selection has taken nothing and waits on nothing after it: a message pushed once the selection has answered stays in its channel, unacknowledged, for the next take.
-test a_losing_take_neither_takes_a_later_message_nor_acknowledges_it =
+test a_losing_take_neither_takes_a_later_message_nor_acknowledges_it =>
     let (acknowledged, n) =
         Io/scope((s) =>
             let messages = Channel/new(@{Nat, Latch}, 1)!;
             let other = Channel/new(@Nat, 1)!;
-            let select_one() -> Io({}) =
+            let select_one() -> Io({}) =>
                 Io/select([
                     Io/bind(Channel/take(messages), (_) => Io/pure(())),
                     Io/bind(Channel/take(other), (_) => Io/pure(()))]);
@@ -133,7 +133,7 @@ test a_losing_take_neither_takes_a_later_message_nor_acknowledges_it =
         Test/equal(n, Option/some(7))]);
 
 -- Notifications a capacity-one channel has not been read for coalesce into one, and a future keeps the first answer it was filled with.
-test notifications_coalesce_and_futures_preserve_their_first_answer =
+test notifications_coalesce_and_futures_preserve_their_first_answer =>
     let s = Channel/new(@{}, 1)!;
     let _ = Channel/try_push(s, ())!;
     let _ = Channel/try_push(s, ())!;
@@ -149,10 +149,10 @@ test notifications_coalesce_and_futures_preserve_their_first_answer =
         Test/equal(answer, 7)]);
 
 -- A branch waiting on a future is cancelled where it waits once another branch wins, and its bracket is released then, once: the future filled afterwards wakes nothing.
-test a_waiter_cancelled_on_a_future_is_released_once =
+test a_waiter_cancelled_on_a_future_is_released_once =>
     let releases = Channel/new(@Nat, 2)!;
     let c = Future/new(@{})!;
-    let release(_: Io/Scope/Ended) -> Io({}) =
+    let release(_: Io/Scope/Ended) -> Io({}) =>
         let _ = Channel/try_push(releases, 1)!;
         Io/pure(());
     let waiting =

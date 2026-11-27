@@ -11,24 +11,24 @@ fn a_call_read_on_a_retry_is_read_under_both_guards_of_its_arm() {
         use /std/{Bool, Nat, print};
         use /std/Bool/{Holds};
 
-        let p(x: Nat) -> Bool = x % 2 == 0;
-        let q(c: Bool, y: Nat) -> Nat = match c | true => y | false => 0 end;
-        let need(y: Nat, z: Nat, @ok: Holds(y <= z)) -> Nat = y;
-        let late(@A: Type, @B: Type, f: (A) -> B, a: A) -> B = f(a);
+        let p(x: Nat) -> Bool => x % 2 == 0;
+        let q(c: Bool, y: Nat) -> Nat => match c | true => y | false => 0 end;
+        let need(y: Nat, z: Nat, @ok: Holds(y <= z)) -> Nat => y;
+        let late(@A: Type, @B: Type, f: (A) -> B, a: A) -> B => f(a);
 
-        let in_place(x: Nat, y: Nat, z: Nat) -> Nat =
+        let in_place(x: Nat, y: Nat, z: Nat) -> Nat =>
             match p(x)
             | true => match q(p(x), y) <= z | true => need(y, z) | false => 0 end
             | false => 0
             end;
 
-        let on_a_retry(x: Nat, y: Nat, z: Nat) -> Nat =
+        let on_a_retry(x: Nat, y: Nat, z: Nat) -> Nat =>
             match p(x)
             | true => match q(p(x), y) <= z | true => late((v) => need(y, z), 0) | false => 0 end
             | false => 0
             end;
 
-        let in_another_arm(x: Nat, y: Nat, z: Nat, b: Bool) -> Nat =
+        let in_another_arm(x: Nat, y: Nat, z: Nat, b: Bool) -> Nat =>
             match p(x)
             | true =>
                 match q(p(x), y) <= z
@@ -38,7 +38,7 @@ fn a_call_read_on_a_retry_is_read_under_both_guards_of_its_arm() {
             | false => 0
             end;
 
-        let under_one_guard(y: Nat, z: Nat) -> Nat =
+        let under_one_guard(y: Nat, z: Nat) -> Nat =>
             match y <= z | true => late((v) => need(y, z), 0) | false => 0 end;
 
         print(Nat/to_str(

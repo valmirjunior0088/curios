@@ -6,13 +6,13 @@ use {
 };
 
 /// A recursive predicate over a list of any element type, its list type the one the hole `list` names, beside a predicate it is called with: a call's implicit written makes the list type a declaration states meet the one the callee states as two calls of one global, which joins the declaration's instance to the callee's, held where conversion compares it.
-const EVERY_OVER: &str = "pub let Wrap(T: Type) -> Type = List(T);
-let every(@T: Type, l: ${list}(T), pred: (T) -> Bool) -> Bool =
+const EVERY_OVER: &str = "pub let Wrap(T: Type) -> Type => List(T);
+let every(@T: Type, l: ${list}(T), pred: (T) -> Bool) -> Bool =>
     match l
     | [] => true
     | [h, ..t] => match pred(h) | true => every(t, pred) | false => false end
     end;
-let small(n: Nat) -> Bool = n < 10;";
+let small(n: Nat) -> Bool => n < 10;";
 
 // **A type's spelling carries a universe its value need not.** `Pick(true)` is `Nat`, in `Type 0`, but a call to `Pick` is typed by `Pick`'s codomain, `Type 1`, which the other arm's quantifier over `Type` needs. `three`'s type is that call, so `same`'s `@A` meets it as written; solved by that spelling, `A` would sit in `Type 1`, where `Nat`'s `Eql` witness, at `Type 0`, then asks it to be strictly below itself. The solver commits the reduct instead, which names the type at its own universe.
 #[test]
@@ -21,12 +21,12 @@ fn a_type_named_through_a_higher_universe_solves_at_its_own() {
         use /std/{Bool, Nat};
         use /std/ops/{Eql};
 
-        let Pick(b: Bool) -> Type =
+        let Pick(b: Bool) -> Type =>
             match b
             | true => Nat
             | false => (A: Type) -> A
             end;
-        let same(@A: Type, use Eql(A), x: A, y: A) -> Bool = x == y;
+        let same(@A: Type, use Eql(A), x: A, y: A) -> Bool => x == y;
         let three: Pick(true) = 3;
 
         /std/print(Bool/to_str(same(three, 3)))
@@ -54,9 +54,9 @@ fn a_result_at_a_compared_position_keeps_its_level() {
             r#"
             use /std/{Bool, Nat, Str, List, Result};
             ${declarations}
-            pub let small() -> ${type_} = ${small};
-            pub let big() -> ${type_} = ${big};
-            pub let takes(p: ${type_}) -> Nat = 0;
+            pub let small() -> ${type_} => ${small};
+            pub let big() -> ${type_} => ${big};
+            pub let takes(p: ${type_}) -> Nat => 0;
             ${pick}
             /std/print("settled")
             "#,
@@ -79,7 +79,7 @@ fn a_result_at_a_compared_position_keeps_its_level() {
         }
 
         let pick = format!(
-            "pub let pick(b: Bool) -> {type_} = match b | true => small() | false => big() end;"
+            "pub let pick(b: Bool) -> {type_} => match b | true => small() | false => big() end;"
         );
         assert_eq!(
             typecheck(&program(declarations, type_, small, big, &pick)),
@@ -94,16 +94,16 @@ fn a_result_at_a_compared_position_keeps_its_level() {
 fn a_type_former_is_sized_by_its_parts_as_they_are_written() {
     let source = r#"
         use /std/{Nat, Bool, Str, List};
-        let over_match(A: Type, B: Type) -> Type =
+        let over_match(A: Type, B: Type) -> Type =>
             (match true | true => A | false => B end) -> Nat;
-        let pair_match(A: Type, B: Type) -> Type =
+        let pair_match(A: Type, B: Type) -> Type =>
             {held: match true | true => A | false => B end, n: Nat};
-        let Pick(b: Bool) -> Type = match b | true => Nat | false => (A: Type) -> A end;
-        let over_call() -> Type = (Pick(true)) -> Nat;
+        let Pick(b: Bool) -> Type => match b | true => Nat | false => (A: Type) -> A end;
+        let over_call() -> Type => (Pick(true)) -> Nat;
         pub concept Sized(T: Type): pub Type { Carrier: Type }
         satisfy Sized(Nat) { Carrier = Str }
         pub let Over: Type = (x: Sized/Carrier(@Nat)) -> Nat;
-        pub let listed(xs: List({a: Sized/Carrier(@Nat), n: Nat})) -> Nat = 0;
+        pub let listed(xs: List({a: Sized/Carrier(@Nat), n: Nat})) -> Nat => 0;
         /std/print("sized")
         "#;
 
@@ -115,10 +115,10 @@ fn a_type_former_is_sized_by_its_parts_as_they_are_written() {
 fn a_sort_left_to_an_implicit_closes_as_the_type_written_there() {
     let source = r#"
         use /std/{Eq, Nat, Bool};
-        let lemma_inferred(A: Type, B: Type, p: Eq()(A, B)) -> Nat = 0;
-        let lemma_written(A: Type, B: Type, p: Eq(@Type)(A, B)) -> Nat = 0;
-        let stated_inferred(p: Eq()(Nat, Bool)) -> Nat = 0;
-        let stated_written(p: Eq(@Type)(Nat, Bool)) -> Nat = 0;
+        let lemma_inferred(A: Type, B: Type, p: Eq()(A, B)) -> Nat => 0;
+        let lemma_written(A: Type, B: Type, p: Eq(@Type)(A, B)) -> Nat => 0;
+        let stated_inferred(p: Eq()(Nat, Bool)) -> Nat => 0;
+        let stated_written(p: Eq(@Type)(Nat, Bool)) -> Nat => 0;
         let answered_inferred: Prop = Eq()(Nat, Bool);
         let answered_written: Prop = Eq(@Type)(Nat, Bool);
         /std/print("twins")
@@ -152,12 +152,12 @@ fn a_sort_left_to_an_implicit_closes_as_the_type_written_there() {
 fn a_type_over_an_open_element_is_sized_by_the_level_the_element_is_born_at() {
     let source = r#"
         use /std/{Nat, List, Str};
-        let id(@A: Type, a: A) -> A = a;
-        let first(@A: Type, x: A, pin: A) -> A = x;
-        let second(@A: Type, pin: A, x: A) -> A = x;
-        let before(@T: Type, x: T) -> List(T) = first(id([]), [x]);
-        let after(@T: Type, x: T) -> List(T) = second([x], id([]));
-        let bound(@T: Type, x: T) -> List(T) =
+        let id(@A: Type, a: A) -> A => a;
+        let first(@A: Type, x: A, pin: A) -> A => x;
+        let second(@A: Type, pin: A, x: A) -> A => x;
+        let before(@T: Type, x: T) -> List(T) => first(id([]), [x]);
+        let after(@T: Type, x: T) -> List(T) => second([x], id([]));
+        let bound(@T: Type, x: T) -> List(T) =>
             let empty = id([]);
             first(empty, [x]);
         /std/print(Nat/to_str(List/length(before(1)) + List/length(after("a")) + List/length(bound(Type))))
@@ -227,8 +227,8 @@ end
 fn a_bodys_cycle_of_levels_closes_at_its_least_solution() {
     let source = r#"
         use /std/{Try, Io, Str, Bool, Nat};
-        let probe() -> Try(Io, Str, Bool) = Try/pure(true);
-        pub let read() -> Try(Io, Str, {}) =
+        let probe() -> Try(Io, Str, Bool) => Try/pure(true);
+        pub let read() -> Try(Io, Str, {}) =>
             let _ = probe()!;
             let _ = Try/pure(Nat)!;
             Try/pure(());
@@ -244,10 +244,10 @@ fn a_bodys_cycle_of_levels_closes_at_its_least_solution() {
 fn a_stuck_match_holds_the_levels_its_arms_reduce_to() {
     let source = r#"
         use /std/{Nat, List, Option, Bool};
-        pub let Good(@V: Type, r: Option(List(V))) -> Prop =
+        pub let Good(@V: Type, r: Option(List(V))) -> Prop =>
             match r | none() => Bool/True | some(l) => Bool/Holds(List/length(l) < 9) end;
         pub struct M(V: Type): pub Type { root: Option(List(V)), @ok: Good(root) }
-        pub let Sized(@V: Type, r: Option(List(V))) -> Type =
+        pub let Sized(@V: Type, r: Option(List(V))) -> Type =>
             match r | none() => {} | some(_) => Type end;
         /std/print("held")
         "#;
@@ -282,16 +282,16 @@ fn a_recursive_group_holds_the_levels_its_unfolding_holds() {
         | leaf(v: V)
         | node(kids: List(Rose(V)))
         end
-        pub let Ok(@V: Type, t: Rose(V)) -> Prop =
+        pub let Ok(@V: Type, t: Rose(V)) -> Prop =>
             match t | leaf(_) => Bool/True | node(kids) => All(kids) end
-        and All(@V: Type, l: List(Rose(V))) -> Prop =
+        and All(@V: Type, l: List(Rose(V))) -> Prop =>
             match l | [] => Bool/True | [x, ..rest] => {Ok(x), All(rest)} end;
         pub struct Held(V: Type): pub Type { t: Rose(V), @ok: Ok(t) }
         pub induct Tree(V: Type): pub Type
         | tip(v: V)
         | fork(l: Tree(V), r: Tree(V))
         end
-        pub let Balanced(@V: Type, t: Tree(V)) -> Prop =
+        pub let Balanced(@V: Type, t: Tree(V)) -> Prop =>
             match t | tip(_) => Bool/True | fork(l, r) => {Balanced(l), Balanced(r)} end;
         pub struct B(V: Type): pub Type { t: Tree(V), @ok: Balanced(t) }
         /std/print("held")
@@ -324,7 +324,7 @@ fn a_recursive_group_holds_the_levels_its_unfolding_holds() {
 fn a_recursive_member_answering_no_type_holds_no_level_of_its_group() {
     let source = r#"
         use /std/{Bool, List};
-        pub let every(@T: Type, l: List(T), pred: (T) -> Bool) -> Bool =
+        pub let every(@T: Type, l: List(T), pred: (T) -> Bool) -> Bool =>
             match l
             | [] => true
             | [h, ..t] => match pred(h) | true => every(t, pred) | false => false end
@@ -336,7 +336,7 @@ fn a_recursive_member_answering_no_type_holds_no_level_of_its_group() {
             t: List(T),
             first: Bool/Holds(pred(h)),
             rest: Bool/Holds(every(t, pred)),
-        ) -> Bool/Holds(every([h, ..t], pred)) =
+        ) -> Bool/Holds(every([h, ..t], pred)) =>
             match pred(h) | true => rest | false => match first end end;
         /std/print("every")
         "#;

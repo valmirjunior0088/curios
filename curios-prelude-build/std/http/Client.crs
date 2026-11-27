@@ -21,7 +21,7 @@ pub let default: Client =
     Client { timeout = Duration/of_secs(30), redirects = 3, limits = Limits/client };
 
 -- The reply to a request of `method`, read through `r` as its framing delimits it: every 1xx reply ahead of the final one is passed over (RFC 9110 §15.2), and the reading stops where the final reply's framing ends.
-let reply(limits: Limits, method: Method, r: Reader(Socket)) -> Io(Result(Error, Response)) =
+let reply(limits: Limits, method: Method, r: Reader(Socket)) -> Io(Result(Error, Response)) =>
     let first =
         Reader/take(
             r,
@@ -67,7 +67,7 @@ let reply(limits: Limits, method: Method, r: Reader(Socket)) -> Io(Result(Error,
     end;
 
 -- One exchange over a connection of its own. The reply is read whether or not the request was written whole: a peer that answers before it has read its request and then stops reading fails the write, and the reply it sent is still there (RFC 9112 §9.6). The failed write is the exchange's failure only where no reply is.
-let exchange(c: Client, request: Request) -> Try(Io, Error, Response) =
+let exchange(c: Client, request: Request) -> Try(Io, Error, Response) =>
     let u = request.url;
     let read =
         Try/map_failure(
@@ -91,11 +91,11 @@ let exchange(c: Client, request: Request) -> Try(Io, Error, Response) =
             (e) => Error/net(e))!;
     Try/attempt(Io/pure(read));
 
-let is_redirect(code: Nat) -> Bool =
+let is_redirect(code: Nat) -> Bool =>
     code == 301 || code == 302 || code == 303 || code == 307 || code == 308;
 
 -- Where a redirect points: its `Location`, resolved against the URL the request went to.
-let redirect_of(request: Request, response: Response) -> Option(Url) =
+let redirect_of(request: Request, response: Response) -> Option(Url) =>
     match is_redirect(response.status.code)
     | false => Option/none()
     | true =>
@@ -105,24 +105,24 @@ let redirect_of(request: Request, response: Response) -> Option(Url) =
     end;
 
 -- Whether `a` and `b` are one origin: RFC 6454's scheme, host and port.
-let same_origin(a: Url, b: Url) -> Bool =
+let same_origin(a: Url, b: Url) -> Bool =>
     a.scheme == b.scheme && Str/eql_ignoring_ascii_case(a.host, b.host) && a.port == b.port;
 
 -- Whether `f` speaks for the user to the origin it was written for, which another origin is not to be handed.
-let credential(f: Field) -> Bool =
+let credential(f: Field) -> Bool =>
     List/any(
         ["Authorization", "Proxy-Authorization", "Cookie"],
         (name) => Field/Name/is(f.name, name));
 
 -- Whether `f` describes the request's content, as RFC 9110 §15.4 lists the fields that go with it.
-let describes_content(f: Field) -> Bool =
+let describes_content(f: Field) -> Bool =>
     List/any(
         ["Content-Encoding", "Content-Language", "Content-Location", "Content-Type",
             "Content-Length", "Digest", "Last-Modified"],
         (name) => Field/Name/is(f.name, name));
 
 --- The request a redirect with status `code` to `target` asks for, as RFC 9110 §15.4 has a user agent rebuild it: a `303` is a `GET` without content, a `HEAD` staying a `HEAD`, as is a `301` or a `302` answering a `POST`; a `307` and a `308` keep the method and the content. The fields that describe content go where it goes, and where `target` is another origin than the request's, a change of scheme included, the request's credentials (`Authorization`, `Proxy-Authorization`, `Cookie`) are not handed on.
-let redirected(request: Request, code: Nat, target: Url) -> Request =
+let redirected(request: Request, code: Nat, target: Url) -> Request =>
     let to_get =
         code == 303 && request.method != Method/head()
             || (code == 301 || code == 302) && request.method == Method/post();
@@ -135,7 +135,7 @@ let redirected(request: Request, code: Nat, target: Url) -> Request =
     | false => Request { ..request, url = target, headers = kept }
     end;
 
-let follow(c: Client, request: Request, left: Nat) -> Try(Io, Error, Response) =
+let follow(c: Client, request: Request, left: Nat) -> Try(Io, Error, Response) =>
     let response = exchange(c, request)!;
     match redirect_of(request, response)
     | none() => Try/pure(response)
@@ -147,7 +147,7 @@ let follow(c: Client, request: Request, left: Nat) -> Try(Io, Error, Response) =
     end;
 
 --- One exchange: connect by the scheme, send the request whole, read the reply as its framing delimits it and no further, and follow a redirect while the limit allows — all under the timeout, whose passing is reported as `timeout`. A reply the peer closes on before it is whole is `incomplete` with what arrived of it, and one that is malformed or past `c.limits` is `refused`. A reply a peer sent before it had read the request is the answer even where the request could not then be sent whole.
-pub let perform(c: Client, request: Request) -> Try(Io, Error, Response) =
+pub let perform(c: Client, request: Request) -> Try(Io, Error, Response) =>
     let outcome = Io/timeout(c.timeout, Try/run(follow(c, request, c.redirects)))!;
     match outcome
     | none() => Try/raise(Error/timeout())

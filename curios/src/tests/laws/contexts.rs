@@ -463,7 +463,7 @@ const MARKERS: &[(&str, &str)] = &[
 ];
 
 const MARKED: &str = "let marker_number: Nat = 0;
-let marker_function(x: Nat) -> Nat = x;
+let marker_function(x: Nat) -> Nat => x;
 let marker_record: {Nat, Nat} = (0, 0);
 let Marker: Type = Nat;";
 
@@ -508,7 +508,7 @@ fn every_context_places_its_hole_under_the_former_it_names() {
             let (type_, marker) = marked(context);
             let fill = |template: &str| Context::fill(template, type_, marker, marker);
             format!(
-                "let probe{index}({}) -> {} = {};",
+                "let probe{index}({}) -> {} => {};",
                 fill(context.binders),
                 fill(context.type_),
                 fill(context.around)

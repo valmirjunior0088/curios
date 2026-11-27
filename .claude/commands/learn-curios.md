@@ -23,7 +23,7 @@ Write this to `.learn/first.crs`, show it, and hand them the run, which is the w
 ```crs
 use /std/{Nat, List, Fmt};
 
-let pick(xs: List(Nat), i: Nat) -> Nat =
+let pick(xs: List(Nat), i: Nat) -> Nat =>
     match i <= List/length(xs) | true => List/get(xs, i) | false => 0 end;
 
 Fmt/print("%\n")(pick([10, 20, 30], 3))

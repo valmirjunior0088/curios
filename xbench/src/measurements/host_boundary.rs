@@ -12,7 +12,7 @@ const STREAM_COPY: &str = r#"
     use /std/{Io, Try, Proc};
     use /std/Io/{Chunk};
 
-    let copy() -> Io({}) =
+    let copy() -> Io({}) =>
         let c = Try/run(Io/read(Proc/stdin, 4096))!;
         match c
         | success(bytes(bytes, @_)) =>

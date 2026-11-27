@@ -97,7 +97,7 @@ fn a_file_no_edit_reached_keeps_what_its_declarations_read_without_asking_them()
 /// A unit `/dep` and a unit `/lib` after it: `twice` and `bound` read a signature of `/dep`, `two` unfolds `double`, and `unrelated` reads nothing of it.
 const DEPENDENCY: &str = "use /std/{Nat};
 
-pub let double(n: Nat) -> Nat = n + n;
+pub let double(n: Nat) -> Nat => n + n;
 
 pub let limit: Nat = 4;
 ";
@@ -152,8 +152,8 @@ fn a_dependency_respelled_under_its_signature_redoes_what_unfolded_it_and_no_oth
 #[test]
 fn a_dependency_whose_signature_moved_redoes_what_read_it() {
     let (baseline, incremental, whole) = after_an_edited_dependency(&DEPENDENCY.replace(
-        "double(n: Nat) -> Nat = n + n",
-        "double(m: Nat) -> Nat = m + m",
+        "double(n: Nat) -> Nat => n + n",
+        "double(m: Nat) -> Nat => m + m",
     ));
 
     assert!(
@@ -206,7 +206,7 @@ fn what_a_unit_records_of_another_follows_what_its_declarations_read_now() {
 /// What [`UNTAKEN`] holds of another unit: `f` names `/dep`'s `spin` in the arm no reduction takes, and `spin` is made total in `/dep`.
 #[test]
 fn a_definition_partial_only_through_another_units_name_in_an_untaken_arm_turns_total_with_it() {
-    let dependency = "use /std/{Nat};\n\npub let spin(n: Nat) -> Nat = spin(n);\n";
+    let dependency = "use /std/{Nat};\n\npub let spin(n: Nat) -> Nat => spin(n);\n";
     let dependent = "use /std/{Nat};
 use /dep/{spin};
 
@@ -218,7 +218,7 @@ pub let f: Nat =
 ";
     let before = unit_after("dep", dependency, &[]);
     let baseline = unit_after("lib", dependent, &[&before]);
-    let moved = unit_after("dep", &dependency.replace("= spin(n);", "= n;"), &[]);
+    let moved = unit_after("dep", &dependency.replace("=> spin(n);", "=> n;"), &[]);
 
     let incremental = recompile_after("lib", dependent, &baseline, &[&moved], &[true]);
 
@@ -283,7 +283,7 @@ fn a_family_turned_negative_through_one_it_holds_is_composed_through_as_a_whole_
 /// Mutation-checked: with every erased form of a unit that moved taken to be the one an evaluation ran, `twice` is stored as the `4` it computed over the `/dep` that is gone.
 #[test]
 fn a_dependency_given_another_body_reaches_the_value_computed_over_it() {
-    let dependency = "use /std/{Nat};\n\npub let double(n: Nat) -> Nat = n + n;\n";
+    let dependency = "use /std/{Nat};\n\npub let double(n: Nat) -> Nat => n + n;\n";
     let dependent = "use /std/{Nat};\nuse /dep/{double};\n\npub let twice: Nat = double(2);\n";
     let before = unit_after("dep", dependency, &[]);
     let baseline = unit_after("lib", dependent, &[&before]);

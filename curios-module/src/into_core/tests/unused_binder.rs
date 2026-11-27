@@ -7,7 +7,7 @@ fn a_parameter_the_body_never_reads_is_reported_at_its_word() {
     assert_eq!(
         lints(
             r#"
-        let f(n : Type) -> Type = Type;
+        let f(n : Type) -> Type => Type;
         f
     "#
         ),
@@ -21,7 +21,7 @@ fn a_parameter_only_the_result_type_mentions_is_used() {
     assert_eq!(
         lints(
             r#"
-        let f(n : Type) -> n = Type;
+        let f(n : Type) -> n => Type;
         f
     "#
         ),
@@ -34,7 +34,7 @@ fn a_parameter_only_a_later_parameters_type_mentions_is_used() {
     assert_eq!(
         lints(
             r#"
-        let f(A : Type, x : A) -> Type = Type;
+        let f(A : Type, x : A) -> Type => Type;
         f
     "#
         ),
@@ -48,7 +48,7 @@ fn only_the_sugars_own_parameters_are_exempted_by_the_result_type() {
     assert_eq!(
         lints(
             r#"
-        let f(n : Type) -> n = (m) => (n) => m;
+        let f(n : Type) -> n => (m) => (n) => m;
         f
     "#
         ),
@@ -90,7 +90,7 @@ fn a_match_arm_binder_nothing_reads_is_reported() {
         | some(A)
         | none()
         end
-        let f(o : Option(Type)) -> Type =
+        let f(o : Option(Type)) -> Type =>
             match o
             | some(x) => Type
             | none() => Type
@@ -107,7 +107,7 @@ fn a_predecessor_and_a_cons_tail_nothing_reads_are_reported() {
     assert_eq!(
         lints(
             r#"
-        let f(n : Type, l : Type) -> Type =
+        let f(n : Type, l : Type) -> Type =>
             let a =
                 match n
                 | 0 => Type
@@ -133,7 +133,7 @@ fn a_wildcard_binder_is_never_reported() {
     assert_eq!(
         lints(
             r#"
-        let f(_ : Type, @_ : Type) -> Type = Type;
+        let f(_ : Type, @_ : Type) -> Type => Type;
         let (a, _) = f;
         a
     "#
@@ -148,7 +148,7 @@ fn an_underscore_prefixed_binder_is_reported_where_nothing_reads_it() {
     assert_eq!(
         lints(
             r#"
-        let f(_n : Type, _m : Type) -> Type = _m;
+        let f(_n : Type, _m : Type) -> Type => _m;
         f
     "#
         ),
@@ -163,7 +163,7 @@ fn a_declaration_holding_a_goal_reports_no_binder() {
     assert_eq!(
         lints(
             r#"
-        let f(n : Type) -> Type = ?;
+        let f(n : Type) -> Type => ?;
         f
     "#
         ),
@@ -178,7 +178,7 @@ fn a_local_function_that_calls_itself_is_used() {
         lints(
             r#"
         (x : Type) =>
-            let go(n : Type) -> Type = go(n);
+            let go(n : Type) -> Type => go(n);
             x
     "#
         ),
@@ -191,7 +191,7 @@ fn a_sugar_field_parameter_nothing_reads_is_reported() {
     assert_eq!(
         lints(
             r#"
-        (f(x) = Type,)
+        (f(x) => Type,)
     "#
         ),
         ["unused-binder: unused binder\n  `x` is never used\n  write `_` in its name's place"]
@@ -217,7 +217,7 @@ fn each_alternative_reports_the_binder_it_writes() {
     assert_eq!(
         lints(
             r#"
-        let f(o : Type) -> Bool =
+        let f(o : Type) -> Bool =>
             match o
             | a(x) | b(_, x) => true
             | _ => false

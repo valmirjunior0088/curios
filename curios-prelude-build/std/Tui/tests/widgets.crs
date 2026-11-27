@@ -2,18 +2,18 @@
 use /std/{Nat, Bool, Str, Char, Option, Test};
 use /std/Tui/{Style, Frame, View, Pane, Key, Listing, Field, Focus};
 
-let shown(@w: Nat, @h: Nat, v: View/Sized(w, h)) -> Str =
+let shown(@w: Nat, @h: Nat, v: View/Sized(w, h)) -> Str =>
     Str/join("/", Frame/to_lines(Frame/of_view(v)));
 
-let named(name: Str) -> Pane =
+let named(name: Str) -> Pane =>
     (w, h) => View/fit(View/text(Style/plain, name), w, h);
 
 -- A border is a column and a row of box on every side of what it holds, the title in its top edge.
-test a_border_holds_its_pane_inside_a_box =
+test a_border_holds_its_pane_inside_a_box =>
     Test/equal(shown(Pane/border(Style/plain, "t", named("ab"))(4, 3)), "┌t─┐/│ab│/└──┘");
 
 -- A paragraph wraps at spaces, breaks at its line breaks, and fits its pane.
-test a_paragraph_wraps_breaks_and_fits =
+test a_paragraph_wraps_breaks_and_fits =>
     Test/equal(
         Str/join(" ", [
             shown(Pane/paragraph(Style/plain, "aa bb cc")(5, 3)),
@@ -21,15 +21,15 @@ test a_paragraph_wraps_breaks_and_fits =
         "aa bb/cc   /      aa /bb ");
 
 -- `k` pressed with no modifier.
-let press(code: Key/Code) -> Key =
+let press(code: Key/Code) -> Key =>
     Key/plain(code);
 
 -- The text of a listing's items is the item.
-let itself(s: Str) -> Str =
+let itself(s: Str) -> Str =>
     s;
 
 -- The selection moves down and stops at the end; the rows scroll so it stays in view.
-test a_listing_moves_within_its_bounds_and_scrolls_to_its_selection =
+test a_listing_moves_within_its_bounds_and_scrolls_to_its_selection =>
     let l = Listing/new(["one", "two", "three"]);
     let down = (m: Listing(Str)) => Listing/handle(m, press(Key/Code/down()), 2);
     let moved = down(down(down(l)));
@@ -43,7 +43,7 @@ test a_listing_moves_within_its_bounds_and_scrolls_to_its_selection =
         Test/equal(Listing/index(Listing/new(@Str, [])), Option/none())]);
 
 -- A selection that moves within the rows shown leaves them where they are: up from the last of three rows shown keeps the same three, where a listing scrolling to its selection from the top would show the selection last.
-test a_selection_moving_within_the_rows_shown_leaves_them =
+test a_selection_moving_within_the_rows_shown_leaves_them =>
     let l = Listing/new(["0", "1", "2", "3", "4", "5"]);
     let step = (m: Listing(Str), code: Key/Code) => Listing/handle(m, press(code), 3);
     let at_four =
@@ -56,7 +56,7 @@ test a_selection_moving_within_the_rows_shown_leaves_them =
         Test/equal(shown(Listing/view(back, itself, Style/plain, Style/plain)(1, 3)), "2/3/4")]);
 
 -- A page is the height the listing is shown at, a page past either end stops at that end, and a key with a modifier is the program's.
-test a_listing_pages_and_leaves_a_modified_key =
+test a_listing_pages_and_leaves_a_modified_key =>
     let l = Listing/new(["0", "1", "2", "3", "4"]);
     let paged = Listing/handle(l, press(Key/Code/page_down()), 3);
     Test/all([
@@ -72,16 +72,16 @@ test a_listing_pages_and_leaves_a_modified_key =
             Option/some(0))]);
 
 -- A listing holds items of the program's own type, and shows each as the function it is handed writes it.
-test a_listing_shows_its_items_through_a_function =
+test a_listing_shows_its_items_through_a_function =>
     let l = Listing/handle(Listing/new([10, 20]), press(Key/Code/down()), 2);
     Test/all([
         Test/equal(Listing/selected(l), Option/some(20)),
         Test/equal(shown(Listing/view(l, Nat/to_str, Style/plain, Style/plain)(2, 2)), "10/20")]);
 
 -- A listing with items and nothing selected highlights no row, where its first row is highlighted once it is the selection.
-test a_listing_with_nothing_selected_highlights_no_row =
+test a_listing_with_nothing_selected_highlights_no_row =>
     let marked = Style { ..Style/plain, reverse = true };
-    let first_row_marked(l: Listing(Str)) -> Bool =
+    let first_row_marked(l: Listing(Str)) -> Bool =>
         match Frame/get(Frame/of_view(Listing/view(l, itself, Style/plain, marked)(5, 2)), 0, 0)
         | glyph(_, style) => style.reverse
         | continuation() => false
@@ -93,7 +93,7 @@ test a_listing_with_nothing_selected_highlights_no_row =
         Test/equal(first_row_marked(Listing/new(["one", "two"])), true)]);
 
 -- A field edits at its cursor, which never passes its text, and its view asks for the terminal's cursor where the field's stands.
-test a_field_edits_at_its_cursor_and_places_the_terminal_s =
+test a_field_edits_at_its_cursor_and_places_the_terminal_s =>
     let f =
         Field/handle(
             Field/handle(Field/of_str("ab"), press(Key/Code/left())),
@@ -109,7 +109,7 @@ test a_field_edits_at_its_cursor_and_places_the_terminal_s =
         Test/equal(Field/handle(past, press(Key/Code/backspace())).text, "aX")]);
 
 -- A field moves and cuts a cluster at a time: a letter with its combining mark is one step and one cut, and a character put in lands before the cluster, never inside it.
-test a_field_moves_and_cuts_by_cluster =
+test a_field_moves_and_cuts_by_cluster =>
     let f = Field/of_str("aé");
     let left = Field/handle(f, press(Key/Code/left()));
     Test/all([
@@ -118,7 +118,7 @@ test a_field_moves_and_cuts_by_cluster =
         Test/equal(Field/handle(left, press(Key/Code/delete())).text, "a")]);
 
 -- The keys readline gives Ctrl and Alt: A and E to either end, K and U the text cut to either end, W the word before the cursor cut, and Alt with B and F a word back and on.
-test a_field_answers_the_readline_keys =
+test a_field_answers_the_readline_keys =>
     let f = Field/of_str("one two three");
     let ctrl = (i: Field, c: Char) => Field/handle(i, Key/with_ctrl(Key/Code/char(c)));
     let alt = (i: Field, c: Char) => Field/handle(i, Key/with_alt(Key/Code/char(c)));
@@ -134,12 +134,12 @@ test a_field_answers_the_readline_keys =
         Test/equal(ctrl(alt(f, 'b'), 'u').text, "three")]);
 
 -- A paste is put in at the cursor whole, the cursor after it.
-test a_paste_is_put_in_whole =
+test a_paste_is_put_in_whole =>
     let f = Field/insert(Field/handle(Field/of_str("ad"), press(Key/Code/left())), "bc");
     Test/all([Test/equal(f.text, "abcd"), Test/equal(Str/At/to_offset(f.cursor), 3)]);
 
 -- Tab moves the keys on round the ring and Shift with Tab back, from either end to the other.
-test the_focus_rings_round_its_labels =
+test the_focus_rings_round_its_labels =>
     let f = Focus/new(1, [2, 3]);
     let tab = (g: Focus(Nat)) => Focus/handle(g, press(Key/Code/tab()));
     let back = (g: Focus(Nat)) => Focus/handle(g, Key { ..press(Key/Code/tab()), shift = true });
@@ -152,7 +152,7 @@ test the_focus_rings_round_its_labels =
             Focus/holds(back(tab(f)), 1))]);
 
 -- A window is a part of a larger view, blank past its edge.
-test a_window_shows_part_of_a_larger_view =
+test a_window_shows_part_of_a_larger_view =>
     let big =
         View/above(
             View/above(View/shown(named("abcd")(4, 1)), View/shown(named("efgh")(4, 1))),
@@ -162,7 +162,7 @@ test a_window_shows_part_of_a_larger_view =
         "fg/jk l /  ");
 
 -- A wave is one reading a column joined by strokes: a reading past the scale stands at its edge, one that is no number leaves its column blank, and the readings shown are the last that fit, from the left.
-test a_wave_joins_its_readings_and_leaves_a_gap_blank =
+test a_wave_joins_its_readings_and_leaves_a_gap_blank =>
     Test/all([
         Test/equal(
             shown(

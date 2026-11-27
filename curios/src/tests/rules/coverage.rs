@@ -9,7 +9,7 @@ fn an_elimination_must_enumerate_its_constructors() {
         r#"
         use /std/{Nat, Option};
 
-        let f(o : Option(Nat)) -> Nat =
+        let f(o : Option(Nat)) -> Nat =>
             match o
             | some(x) => x
             | none() => 0
@@ -33,7 +33,7 @@ fn a_truncated_difference_against_zero_is_no_clash() {
         use /std/{Nat, Eq};
         use /std/Bool/{False};
 
-        let absurd(x: Nat, y: Nat, p: Eq()(x + 1, 0)) -> False = match p end;
+        let absurd(x: Nat, y: Nat, p: Eq()(x + 1, 0)) -> False => match p end;
 
         /std/print(Nat/to_str(0))
         "#,
@@ -53,7 +53,7 @@ fn a_concatenation_of_chunks_against_the_empty_list_is_no_clash() {
         use /std/{Nat, Eq, List};
         use /std/Bool/{False};
 
-        let absurd(xs: List(Nat), p: Eq()([..xs, 1], [])) -> False = match p end;
+        let absurd(xs: List(Nat), p: Eq()([..xs, 1], [])) -> False => match p end;
 
         /std/print(Nat/to_str(0))
         "#,
@@ -77,9 +77,9 @@ fn an_arm_absent_where_a_sum_may_meet_its_target_is_refused() {
         | succ(k: Nat): (k + 1)
         end
 
-        pub let only_zero(j: Nat, v: Ix(j + j)) -> Nat = match v | zero() => 0 | succ(k) => 1 end;
-        pub let only_succ(j: Nat, v: Ix(j + j)) -> Nat = match v | zero() => 2 | succ(k) => k end;
-        pub let excused(j: Nat, v: Ix(j + 1)) -> Nat = match v | succ(k) => k end;
+        pub let only_zero(j: Nat, v: Ix(j + j)) -> Nat => match v | zero() => 0 | succ(k) => 1 end;
+        pub let only_succ(j: Nat, v: Ix(j + j)) -> Nat => match v | zero() => 2 | succ(k) => k end;
+        pub let excused(j: Nat, v: Ix(j + 1)) -> Nat => match v | succ(k) => k end;
 
         /std/print(Nat/to_str(only_succ(1, Ix/succ(1))))
         "#,
@@ -115,20 +115,20 @@ fn an_arm_absent_where_a_carriers_index_may_meet_its_target_is_refused() {
         | e(): (0x[])
         end
 
-        pub let sum(a: Nat, b: Nat, v: Ix(0)) -> False = match v end;
-        pub let product(a: Nat, b: Nat, v: Ix(a * 0)) -> False = match v end;
-        pub let difference(a: Nat, b: Nat, v: Ix(0 - b)) -> False = match v end;
-        pub let power(a: Nat, b: Nat, v: Iz(pow(a, b + 1) + 1)) -> False = match v end;
+        pub let sum(a: Nat, b: Nat, v: Ix(0)) -> False => match v end;
+        pub let product(a: Nat, b: Nat, v: Ix(a * 0)) -> False => match v end;
+        pub let difference(a: Nat, b: Nat, v: Ix(0 - b)) -> False => match v end;
+        pub let power(a: Nat, b: Nat, v: Iz(pow(a, b + 1) + 1)) -> False => match v end;
         pub let window(
             xs: Bytes,
             s: Nat,
             l: Nat,
             @p: Holds(s + l <= Bytes/length(xs)),
             v: By(0x[..Bytes/slice(xs, s, l), 1]),
-        ) -> False =
+        ) -> False =>
             match v end;
-        pub let chunks(xs: Bytes, ys: Bytes, v: By(0x[..xs, 1])) -> False = match v end;
-        pub let fill(n: Nat, c: Byte, v: By(Bytes/replicate(n + 1, c))) -> False = match v end;
+        pub let chunks(xs: Bytes, ys: Bytes, v: By(0x[..xs, 1])) -> False => match v end;
+        pub let fill(n: Nat, c: Byte, v: By(Bytes/replicate(n + 1, c))) -> False => match v end;
 
         let forged = sum;
 
@@ -181,10 +181,10 @@ fn an_arm_absent_where_a_carriers_index_clashes_with_its_target_is_excused() {
             | e(): (0x[])
             end
 
-            pub let successor(a: Nat, v: Iz(a + 1)) -> False = match v end;
-            pub let trailing(xs: Bytes, v: By(0x[..xs, 1])) -> False = match v end;
-            pub let single(xs: Bytes, c: Byte, v: By(0x[..xs, c])) -> False = match v end;
-            pub let filled(n: Nat, c: Byte, v: By(Bytes/replicate(n + 1, c))) -> False = match v end;
+            pub let successor(a: Nat, v: Iz(a + 1)) -> False => match v end;
+            pub let trailing(xs: Bytes, v: By(0x[..xs, 1])) -> False => match v end;
+            pub let single(xs: Bytes, c: Byte, v: By(0x[..xs, c])) -> False => match v end;
+            pub let filled(n: Nat, c: Byte, v: By(Bytes/replicate(n + 1, c))) -> False => match v end;
 
             /std/print("ok")
             "#),
@@ -209,8 +209,8 @@ fn two_lists_of_proofs_that_irrelevance_holds_one_do_not_clash() {
         | mk(): ([Pr/a()])
         end
 
-        pub let absurd(v: Ix([Pr/b()])) -> False = match v end;
-        pub let apart(v: Ix([])) -> False = match v end;
+        pub let absurd(v: Ix([Pr/b()])) -> False => match v end;
+        pub let apart(v: Ix([])) -> False => match v end;
 
         let forged = absurd;
 
@@ -238,9 +238,9 @@ fn two_list_literals_apart_in_an_element_or_in_length_clash() {
             use /std/{Nat, Eq};
             use /std/Bool/{False};
 
-            pub let element(e: Eq()([0], [1])) -> False = match e end;
-            pub let length(e: Eq()([0], [1, 2])) -> False = match e end;
-            pub let beside(x: Nat, e: Eq()([0, x], [1, x])) -> False = match e end;
+            pub let element(e: Eq()([0], [1])) -> False => match e end;
+            pub let length(e: Eq()([0], [1, 2])) -> False => match e end;
+            pub let beside(x: Nat, e: Eq()([0, x], [1, x])) -> False => match e end;
 
             /std/print("ok")
             "#),
@@ -281,15 +281,15 @@ fn two_lists_that_meet_their_case_at_some_value_are_no_clash() {
         | dup(l: Bytes): (l, l)
         end
 
-        pub let swapped(v: Ix([Pr/b(), Pr/a()])) -> False = match v end;
-        pub let mixed(v: Mx([(Pr/b(), 0)])) -> False = match v end;
-        pub let open(x: Nat, v: Ln([x])) -> False = match v end;
-        pub let spread(x: Nat, xs: List(Nat), v: Ln([x, ..xs])) -> False = match v end;
-        pub let appended(x: Nat, xs: List(Nat), v: Ln([..xs, x])) -> False = match v end;
-        pub let window(xs: List(Nat), s: Nat, @p: Holds(s + 1 <= List/length(xs)), v: Ln([..List/slice(xs, s, 1), 0])) -> False =
+        pub let swapped(v: Ix([Pr/b(), Pr/a()])) -> False => match v end;
+        pub let mixed(v: Mx([(Pr/b(), 0)])) -> False => match v end;
+        pub let open(x: Nat, v: Ln([x])) -> False => match v end;
+        pub let spread(x: Nat, xs: List(Nat), v: Ln([x, ..xs])) -> False => match v end;
+        pub let appended(x: Nat, xs: List(Nat), v: Ln([..xs, x])) -> False => match v end;
+        pub let window(xs: List(Nat), s: Nat, @p: Holds(s + 1 <= List/length(xs)), v: Ln([..List/slice(xs, s, 1), 0])) -> False =>
             match v end;
-        pub let twice(v: D([Pr/a()], [Pr/b()])) -> False = match v end;
-        pub let bytes(c: Byte, v: E(0x[c, c], 0x[1])) -> False = match v end;
+        pub let twice(v: D([Pr/a()], [Pr/b()])) -> False => match v end;
+        pub let bytes(c: Byte, v: E(0x[c, c], 0x[1])) -> False => match v end;
 
         let forged = swapped;
 
@@ -328,7 +328,7 @@ fn a_successor_no_arm_writes_is_refused() {
         r#"
         use /std/{Nat};
 
-        let f(n: Nat) -> Nat =
+        let f(n: Nat) -> Nat =>
             match n
             | 0 => 0
             | m + 1 => m
@@ -352,7 +352,7 @@ fn a_string_dispatch_is_covered_only_by_a_final_arm() {
         r#"
         use /std/{Nat, Str};
 
-        let f(s: Str) -> Nat =
+        let f(s: Str) -> Nat =>
             match s
             | "" => 0
             | _ => 1
@@ -375,7 +375,7 @@ fn a_character_and_its_code_point_are_one_case() {
         r#"
         use /std/{List, Nat, Str};
 
-        let f(n: Nat) -> Nat =
+        let f(n: Nat) -> Nat =>
             match n
             | 'a' => 1
             | 98 => 2
@@ -399,31 +399,31 @@ fn a_default_named_as_a_constructor_is_refused() {
         r#"
         use /std/{List, Nat, Option, Str};
 
-        let f(o: Option(Nat)) -> Nat =
+        let f(o: Option(Nat)) -> Nat =>
             match o
             | some(x) => x
             | none() => 0
             end;
 
-        let g(o: Option(Nat)) -> Nat =
+        let g(o: Option(Nat)) -> Nat =>
             match o
             | some(x) => x + 1
             | other => 7
             end;
 
-        let h(n: Nat) -> Nat =
+        let h(n: Nat) -> Nat =>
             match n + 1
             | 1 => 0
             | m => m * 2
             end;
 
-        let k(n: Nat) -> Nat =
+        let k(n: Nat) -> Nat =>
             match n
             | 0 => 5
             | none => none + 1
             end;
 
-        let both(o: Option(Nat), n: Nat) -> Nat =
+        let both(o: Option(Nat), n: Nat) -> Nat =>
             match (o, n)
             | (some(x), _) => x
             | none => none.1
@@ -450,7 +450,7 @@ fn a_run_the_facts_refute_is_left_unwritten() {
         r#"
         use /std/{Nat, Vec};
 
-        let sum(r: Vec(Nat, 3)) -> Nat =
+        let sum(r: Vec(Nat, 3)) -> Nat =>
             match r.list | [a, b, c] => a + b + c end;
 
         /std/print(Nat/to_str(sum(Vec/of_list([1, 2, 3]))))
@@ -472,7 +472,7 @@ fn a_dispatch_whose_other_values_the_facts_refute_needs_no_binder() {
         use /std/{Nat};
         use /std/Bool/{Holds};
 
-        let pick(n: Nat, @q: Holds(n < 3)) -> Nat =
+        let pick(n: Nat, @q: Holds(n < 3)) -> Nat =>
             match n
             | 0 => 10
             | 1 => 11
@@ -498,7 +498,7 @@ fn a_constructor_the_facts_refute_is_left_unwritten() {
         use /std/{Nat, Option};
         use /std/Bool/{Holds};
 
-        let unwrap(o: Option(Nat), @q: Holds(Option/is_some(o))) -> Nat =
+        let unwrap(o: Option(Nat), @q: Holds(Option/is_some(o))) -> Nat =>
             match o | some(x) => x end;
 
         /std/print(Nat/to_str(unwrap(Option/some(7))))
@@ -521,13 +521,13 @@ fn a_case_its_scrutinees_own_type_refutes_is_left_unwritten() {
 
         struct Point: Type { x: Nat }
 
-        let never(g: (Nat) -> Nat, n: Nat, h: Eq()(g(n), g(n) + 1)) -> False =
+        let never(g: (Nat) -> Nat, n: Nat, h: Eq()(g(n), g(n) + 1)) -> False =>
             match h end;
 
-        let apart(g: (Nat) -> Nat, n: Nat, h: Eq()(g(n) + 2, g(n))) -> False =
+        let apart(g: (Nat) -> Nat, n: Nat, h: Eq()(g(n) + 2, g(n))) -> False =>
             match h end;
 
-        let read(p: Point, h: Eq()(p.x, p.x + 1)) -> False =
+        let read(p: Point, h: Eq()(p.x, p.x + 1)) -> False =>
             match h end;
 
         /std/print("ok")
@@ -548,7 +548,7 @@ fn a_truth_value_the_facts_refute_is_left_unwritten() {
         use /std/{Nat};
         use /std/Bool/{Holds};
 
-        let clamp(n: Nat, @q: Holds(n <= 10)) -> Nat =
+        let clamp(n: Nat, @q: Holds(n <= 10)) -> Nat =>
             match n > 20
             | false => n
             end;
@@ -572,7 +572,7 @@ fn a_successor_the_facts_refute_is_left_unwritten() {
         use /std/{Nat};
         use /std/Bool/{Holds};
 
-        let only(n: Nat, @q: Holds(n == 0)) -> Nat =
+        let only(n: Nat, @q: Holds(n == 0)) -> Nat =>
             match n
             | 0 => 7
             end;
@@ -596,7 +596,7 @@ fn a_guard_the_facts_decide_needs_no_arm_after_it() {
         use /std/{Nat};
         use /std/Bool/{Holds};
 
-        let small(n: Nat, @q: Holds(n < 3)) -> Nat =
+        let small(n: Nat, @q: Holds(n < 3)) -> Nat =>
             match n
             | k, k < 5 => k
             end;
@@ -619,7 +619,7 @@ fn a_missing_case_reports_the_facts_it_read_and_none_where_it_read_none() {
         use /std/{Nat};
         use /std/Bool/{Holds};
 
-        let clamp(n: Nat, @q: Holds(n <= 30)) -> Nat =
+        let clamp(n: Nat, @q: Holds(n <= 30)) -> Nat =>
             match n > 20
             | false => n
             end;
@@ -638,7 +638,7 @@ fn a_missing_case_reports_the_facts_it_read_and_none_where_it_read_none() {
         r#"
         use /std/{Nat, Option};
 
-        let f(o: Option(Nat)) -> Nat =
+        let f(o: Option(Nat)) -> Nat =>
             match o
             | some(x) => x
             end;

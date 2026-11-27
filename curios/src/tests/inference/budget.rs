@@ -29,11 +29,11 @@ fn nonproductive_inner_rec_in_type_position_exhausts_its_budget() {
 fn a_literal_depth_packed_recursion_refuses_within_a_small_budget() {
     let source = r#"
         use /std/{Nat, List, Byte, Bytes, Str, Proc};
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let taint = List/length(Proc/args()!);
             let t: Byte = match taint == 0 | true => 1 | false => 0 end;
             let grown = 0x[t, 1];
-            let widen(n: Nat, acc: Bytes) -> Bytes =
+            let widen(n: Nat, acc: Bytes) -> Bytes =>
                 match n | 0 => acc | _ => widen(n - 1, 0x[..acc, t]) end;
             let wide = widen(30, grown);
             match Bytes/length(wide) == 32
@@ -50,11 +50,11 @@ fn a_literal_depth_packed_recursion_refuses_within_a_small_budget() {
 fn a_literal_depth_packed_recursion_compiles_within_the_default_budget() {
     let source = r#"
         use /std/{Nat, List, Byte, Bytes, Str, Proc};
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let taint = List/length(Proc/args()!);
             let t: Byte = match taint == 0 | true => 1 | false => 0 end;
             let grown = 0x[t, 1];
-            let widen(n: Nat, acc: Bytes) -> Bytes =
+            let widen(n: Nat, acc: Bytes) -> Bytes =>
                 match n | 0 => acc | _ => widen(n - 1, 0x[..acc, t]) end;
             let wide = widen(30, grown);
             match Bytes/length(wide) == 32
@@ -81,11 +81,11 @@ fn acceptance_is_upward_closed_in_the_budget() {
             "a literal-depth packed recursion",
             r#"
             use /std/{Nat, List, Byte, Bytes, Str, Proc};
-            let entry() -> /std/Io({}) =
+            let entry() -> /std/Io({}) =>
                 let taint = List/length(Proc/args()!);
                 let t: Byte = match taint == 0 | true => 1 | false => 0 end;
                 let grown = 0x[t, 1];
-                let widen(n: Nat, acc: Bytes) -> Bytes =
+                let widen(n: Nat, acc: Bytes) -> Bytes =>
                     match n | 0 => acc | _ => widen(n - 1, 0x[..acc, t]) end;
                 let wide = widen(30, grown);
                 match Bytes/length(wide) == 32
@@ -99,12 +99,12 @@ fn acceptance_is_upward_closed_in_the_budget() {
             "guards discharging window bounds",
             r#"
             use /std/{Str, Bytes, Nat};
-            let head(b : Bytes) -> Bytes =
+            let head(b : Bytes) -> Bytes =>
                 match 10 <= Bytes/length(b) | true => Bytes/slice(b, 0, 10) | false => 0x[] end;
-            let interior(b : Bytes, k : Nat) -> Bytes =
+            let interior(b : Bytes, k : Nat) -> Bytes =>
                 match 1 + k <= Bytes/length(b) | true => Bytes/slice(b, 1, k) | false => 0x[] end;
             let named = 0x[0x61, 0x62, 0x63];
-            let over_a_definition(k : Nat) -> Bytes =
+            let over_a_definition(k : Nat) -> Bytes =>
                 match 1 + k <= Bytes/length(named)
                 | true => Bytes/slice(named, 1, k)
                 | false => 0x[]
@@ -116,7 +116,7 @@ fn acceptance_is_upward_closed_in_the_budget() {
             "a type-level recursion descending by division",
             r#"
             use /std/{Nat};
-            let Good(n : Nat) -> Type =
+            let Good(n : Nat) -> Type =>
                 match n
                 | 0 => {}
                 | _ => Good(n / 2)
@@ -129,7 +129,7 @@ fn acceptance_is_upward_closed_in_the_budget() {
             "a proof closed by evaluating its subject",
             r#"
             use /std/{Nat, Eq};
-            let sum(n : Nat) -> Nat =
+            let sum(n : Nat) -> Nat =>
                 match n
                 | 0 => 0
                 | p + 1 => sum(p) + p

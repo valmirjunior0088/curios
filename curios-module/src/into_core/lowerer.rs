@@ -172,6 +172,8 @@ pub struct Lowerer<'a, 'b> {
     used: RefCell<HashSet<curios_core::Free>>,
     /// Whether a written `?` was lowered: a declaration holding one is exempt, its binders being the goal's scope.
     saw_goal: Cell<bool>,
+    /// Whether the term in hand is a guard's, where a `!` is refused ([`Error::GuardHoldsAction`]); a lambda inside it lowers its body as a region of its own and clears it.
+    guarding: Cell<bool>,
 }
 
 /// One written binder: its spelling, its identities, its span, and whether an unread site may be recorded of it.
@@ -195,7 +197,7 @@ struct LetCandidate {
     places: Vec<usize>,
 }
 
-/// A `let`-like signature as the lowering holds it: what was written, and the binders of its parameters when it is the function-definition sugar `f(params) -> output = body`.
+/// A `let`-like signature as the lowering holds it: what was written, and the binders of its parameters when it is the function-definition sugar `f(params) -> output => body`.
 ///
 /// The sugar's telescope becomes both a Π-type's binders and the body lambda's, and the leaves are minted once, here, so a parameter is one identity in both. A mention in the result type is then a use of the binder the body binds, with nothing to pair afterwards, and the Π's binder carries the written place the lambda's does, so a proof the elaborator writes in the type credits the same binder.
 pub struct Signature<'s> {
@@ -214,6 +216,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             lets: RefCell::new(Vec::new()),
             used: RefCell::new(HashSet::new()),
             saw_goal: Cell::new(false),
+            guarding: Cell::new(false),
         }
     }
 
@@ -224,7 +227,8 @@ impl<'a, 'b> Lowerer<'a, 'b> {
                 param_labels(&func_sugar_params(params)),
                 curios_core::Binds::Parameter,
             ),
-            LetSignature::Name { .. } => Vec::new(),
+            // A local function read as a lambda binds its parameters where its lambda is lowered, as any lambda does.
+            LetSignature::Name { .. } | LetSignature::Lambda { .. } => Vec::new(),
         };
         Signature { written, leaves }
     }
@@ -276,6 +280,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
                 self.abstract_value(&func_sugar_params(params), &signature.leaves, body)
             }
             LetSignature::Name { body, .. } => lower_value(body),
+            LetSignature::Lambda { .. } => lower_value(&signature.written.body()),
         }
     }
 
@@ -661,9 +666,19 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         binders: &[Binder],
         body: &Term,
     ) -> Result<curios_core::Term, Error> {
-        let body = self.bound(binders, || self.region(body))?;
-        let (params, body) = self.lower_func_params(params, binders, body)?;
+        let guarding = self.guarding.replace(false);
+        let body = self.bound(binders, || self.region(body));
+        self.guarding.set(guarding);
+        let (params, body) = self.lower_func_params(params, binders, body?)?;
         Ok(curios_core::Term::func_marked(params, body))
+    }
+
+    /// What `lower` answers of a guard's term, where a `!` is refused: the flag set while it lowers and put back after it, whatever it answers.
+    pub fn guard<T>(&self, lower: impl FnOnce() -> Result<T, Error>) -> Result<T, Error> {
+        let guarding = self.guarding.replace(true);
+        let lowered = lower();
+        self.guarding.set(guarding);
+        lowered
     }
 
     /// What a surface name resolves to where this lowerer stands — the same rule the `Subterm::Name` term-reference arm uses: what a door of its scope answers of it ([`Found`]), or a binder, one of the declaration's own or the one a name that resolved to nothing lowers to.
@@ -831,7 +846,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
                 }
                 curios_core::Term::tuple_type(fields)
             }
-            // The definition sugar `f(params) = value` is undone here.
+            // The definition sugar `f(params) => value` is undone here.
             Subterm::Tuple(tuple) => curios_core::Term::tuple_named(
                 tuple
                     .fields
@@ -1086,7 +1101,11 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             let Pattern::Binder(label) = &member.binder else {
                 return Err(located(Error::RecursivePatternBinding, member));
             };
-            if matches!(member.signature, LetSignature::Name { type_: None, .. }) {
+            // A local function read as a lambda states its type only in part, so a mention of itself leaves its type nothing to come from, as a value's does.
+            if matches!(
+                member.signature,
+                LetSignature::Name { type_: None, .. } | LetSignature::Lambda { .. }
+            ) {
                 return Err(located(
                     Error::RecursiveBindingNeedsType {
                         label: label.to_string(),
@@ -1143,6 +1162,12 @@ impl<'a, 'b> Lowerer<'a, 'b> {
     ) -> Result<curios_core::Term, Error> {
         Ok(match term.as_subterm() {
             Subterm::Bang(action) => {
+                if self.guarding.get() {
+                    return Err(match term.span() {
+                        Some(span) => Error::GuardHoldsAction.at(span.clone()),
+                        None => Error::GuardHoldsAction,
+                    });
+                }
                 // The action is itself desugared first, so its inner bangs evaluate before this one (left-to-right).
                 let action = self.collect(action, binds)?;
                 let binder = self.context.fresh_binder(None);

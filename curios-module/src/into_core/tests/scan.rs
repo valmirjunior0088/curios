@@ -42,7 +42,7 @@ pub concept Shown(A: Type): pub Type {
     shown(A) -> Type,
 }
 
-test nothing = x;
+test nothing => x;
 
 pub let unread: Type = ;
 ";

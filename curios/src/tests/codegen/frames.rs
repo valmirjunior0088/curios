@@ -80,7 +80,7 @@ fn program(definitions: &str, result: &str) -> String {
         r#"
         use /std/{Str, Nat, List, Option, Result, Try, Io, Proc, Fmt};
         ${definitions}
-        let execute() -> Try(Io, Str, {}) =
+        let execute() -> Try(Io, Str, {}) =>
             let arguments = Proc/args()!;
             let bytes = Option/to_result(List/try_get(arguments, 1), "no input")!;
             let s = Result/map_failure(Str/of_bytes(bytes), (_) => "invalid utf-8")!;
@@ -103,9 +103,9 @@ const RECURSIONS: [(&str, &str, &str, &str); 8] = [
         | stop()
         | link(Nat, Chain)
         end
-        let build(n: Nat) -> Chain =
+        let build(n: Nat) -> Chain =>
             match n | 0 => Chain/stop() | m + 1 => Chain/link(n, build(m)) end;
-        let total(c: Chain) -> Nat =
+        let total(c: Chain) -> Nat =>
             match c | stop() => 0 | link(x, rest) => x + total(rest) end;
         "#,
         "total(build(n))",
@@ -114,7 +114,7 @@ const RECURSIONS: [(&str, &str, &str, &str); 8] = [
     (
         "an affine step on the call's own answer",
         r#"
-        let step(n: Nat) -> Nat =
+        let step(n: Nat) -> Nat =>
             match n | 0 => 0 | m + 1 => (step(m) * 3 + 1) % 1000003 end;
         "#,
         "step(n)",
@@ -123,9 +123,9 @@ const RECURSIONS: [(&str, &str, &str, &str); 8] = [
     (
         "two members calling each other",
         r#"
-        let ping(n: Nat) -> Nat =
+        let ping(n: Nat) -> Nat =>
             match n | 0 => 0 | m + 1 => (pong(m) * 3 + 1) % 1000003 end
-        and pong(n: Nat) -> Nat =
+        and pong(n: Nat) -> Nat =>
             match n | 0 => 1 | m + 1 => (ping(m) * 5 + 2) % 1000003 end;
         "#,
         "ping(n)",
@@ -138,9 +138,9 @@ const RECURSIONS: [(&str, &str, &str, &str); 8] = [
         | leaf()
         | node(Tree, Tree)
         end
-        let grow(n: Nat) -> Tree =
+        let grow(n: Nat) -> Tree =>
             match n | 0 => Tree/leaf() | m + 1 => Tree/node(grow(m), Tree/leaf()) end;
-        let depth(t: Tree) -> Nat =
+        let depth(t: Tree) -> Nat =>
             match t | leaf() => 0 | node(l, r) => Nat/max(depth(l), depth(r)) + 1 end;
         "#,
         "depth(grow(n))",
@@ -152,12 +152,12 @@ const RECURSIONS: [(&str, &str, &str, &str); 8] = [
         induct Pair: Type
         | pair(Nat, Nat)
         end
-        let walk(n: Nat) -> Pair =
+        let walk(n: Nat) -> Pair =>
             match n
             | 0 => Pair/pair(0, 1)
             | m + 1 => match walk(m) | pair(a, b) => Pair/pair(b, (a + b) % 1000003) end
             end;
-        let first(p: Pair) -> Nat = match p | pair(a, _) => a end;
+        let first(p: Pair) -> Nat => match p | pair(a, _) => a end;
         "#,
         "first(walk(n))",
         "3",
@@ -168,11 +168,11 @@ const RECURSIONS: [(&str, &str, &str, &str); 8] = [
         induct Rose: Type
         | rose(Nat, List(Rose))
         end
-        let grow(n: Nat) -> Rose =
+        let grow(n: Nat) -> Rose =>
             match n | 0 => Rose/rose(0, []) | m + 1 => Rose/rose(n, [grow(m)]) end;
-        let sum(l: List(Nat)) -> Nat =
+        let sum(l: List(Nat)) -> Nat =>
             match l | [] => 0 | [x, ..rest] => x + sum(rest) end;
-        let total(r: Rose) -> Nat =
+        let total(r: Rose) -> Nat =>
             match r | rose(x, children) => (x + sum(List/map(children, total))) % 1000003 end;
         "#,
         "total(grow(n))",
@@ -181,9 +181,9 @@ const RECURSIONS: [(&str, &str, &str, &str); 8] = [
     (
         "a call through a closure picked from a list",
         r#"
-        let call(gs: List((Nat) -> Nat), i: Nat, n: Nat) -> Nat =
+        let call(gs: List((Nat) -> Nat), i: Nat, n: Nat) -> Nat =>
             match List/try_get(gs, i) | some(g) => g(n) | none() => n end;
-        let down(n: Nat) -> Nat =
+        let down(n: Nat) -> Nat =>
             match n
             | 0 => 0
             | m + 1 => (call([(x: Nat) => x, down], 1 - n % 2 + n % 2, m) * 3 + 1) % 1000003
@@ -195,8 +195,8 @@ const RECURSIONS: [(&str, &str, &str, &str); 8] = [
     (
         "a recursion defined within a recursion",
         r#"
-        let outer(n: Nat) -> Nat =
-            let inner(m: Nat) -> Nat =
+        let outer(n: Nat) -> Nat =>
+            let inner(m: Nat) -> Nat =>
                 match m | 0 => n | j + 1 => (inner(j) * 3 + 1) % 1000003 end;
             match n | 0 => 0 | k + 1 => (outer(k) + inner(n % 7)) % 1000003 end;
         "#,
@@ -345,9 +345,9 @@ fn nesting(depth: usize) -> String {
     }
     fill!(
         r#"
-        let call(gs: List((Nat) -> Nat), i: Nat, n: Nat) -> Nat =
+        let call(gs: List((Nat) -> Nat), i: Nat, n: Nat) -> Nat =>
             match List/try_get(gs, i) | some(g) => g(n) | none() => n end;
-        let down(n: Nat) -> Nat =
+        let down(n: Nat) -> Nat =>
             match n | 0 => 0 | m + 1 => ${body} % 1000003 end;
         "#,
         body,

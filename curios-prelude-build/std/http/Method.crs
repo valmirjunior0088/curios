@@ -23,7 +23,7 @@ satisfy Spell(Method) {
 }
 
 --- The method as the wire spells it.
-pub let to_str(m: Method) -> Str =
+pub let to_str(m: Method) -> Str =>
     match m
     | get() => "GET"
     | head() => "HEAD"
@@ -40,7 +40,7 @@ satisfy Show(Method) {
 }
 
 --- The method `s` spells, or `none`.
-pub let of_str(s: Str) -> Option(Method) =
+pub let of_str(s: Str) -> Option(Method) =>
     match s
     | "GET" => Option/some(Method/get())
     | "HEAD" => Option/some(Method/head())

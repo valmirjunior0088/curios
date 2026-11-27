@@ -9,9 +9,9 @@ fn a_bound_over_a_recursion_returning_a_literal_discharges() {
         run(r#"
         use /std/{Str, Nat};
         use /std/Bool/{Holds};
-        let f(k : Nat, n : Nat) -> Nat =
+        let f(k : Nat, n : Nat) -> Nat =>
             match k | 0 => 5 | j + 1 => f(j, n) end;
-        let bound(n : Nat) -> Holds(5 <= f(0, n)) = Nat/le/refl(5);
+        let bound(n : Nat) -> Holds(5 <= f(0, n)) => Nat/le/refl(5);
         /std/print("ok")
         "#),
         b"ok"
@@ -25,9 +25,9 @@ fn a_bound_over_a_recursion_returning_a_parameter_discharges() {
         run(r#"
         use /std/{Str, Nat};
         use /std/Bool/{Holds};
-        let f(k : Nat, n : Nat) -> Nat =
+        let f(k : Nat, n : Nat) -> Nat =>
             match k | 0 => n | j + 1 => f(j, n) end;
-        let bound(n : Nat) -> Holds(n <= f(0, n)) = Nat/le/refl(n);
+        let bound(n : Nat) -> Holds(n <= f(0, n)) => Nat/le/refl(n);
         /std/print("ok")
         "#),
         b"ok"
@@ -44,17 +44,17 @@ fn a_guard_discharges_a_window_bound_stated_over_a_sum() {
     assert_eq!(
         run(r#"
         use /std/{Str, Bytes, Nat};
-        let head(b : Bytes) -> Bytes =
+        let head(b : Bytes) -> Bytes =>
             match 10 <= Bytes/length(b) | true => Bytes/slice(b, 0, 10) | false => 0x[] end;
-        let interior(b : Bytes, k : Nat) -> Bytes =
+        let interior(b : Bytes, k : Nat) -> Bytes =>
             match 1 + k <= Bytes/length(b) | true => Bytes/slice(b, 1, k) | false => 0x[] end;
         let named = 0x[0x61, 0x62, 0x63];
-        let over_a_definition(k : Nat) -> Bytes =
+        let over_a_definition(k : Nat) -> Bytes =>
             match 1 + k <= Bytes/length(named)
             | true => Bytes/slice(named, 1, k)
             | false => 0x[]
             end;
-        let indexed(b : Bytes, i : Nat) -> Bytes =
+        let indexed(b : Bytes, i : Nat) -> Bytes =>
             match i < Bytes/length(b) | true => 0x[Bytes/get(b, i)] | false => 0x[] end;
         /std/print("ok")
         "#),
@@ -64,7 +64,7 @@ fn a_guard_discharges_a_window_bound_stated_over_a_sum() {
     let error = typecheck(
         r#"
         use /std/{Str, Bytes, Nat};
-        let mismatched(b : Bytes, k : Nat) -> Bytes =
+        let mismatched(b : Bytes, k : Nat) -> Bytes =>
             match 1 + k <= Bytes/length(b) | true => Bytes/slice(b, 2, k) | false => 0x[] end;
         /std/print("unreachable")
         "#,
@@ -83,7 +83,7 @@ fn a_guard_over_like_terms_discharges_a_bound_spelled_the_other_way() {
     assert_eq!(
         run(r#"
         use /std/{Str, Bytes, Nat};
-        let doubled(b : Bytes, n : Nat) -> Bytes =
+        let doubled(b : Bytes, n : Nat) -> Bytes =>
             match n + n <= Bytes/length(b) | true => Bytes/slice(b, 0, 2 * n) | false => 0x[] end;
         /std/print("ok")
         "#),
@@ -97,8 +97,8 @@ fn a_difference_over_a_folded_recursion_converts_with_its_unfolding() {
     assert_eq!(
         run(r#"
         use /std/{Str, Bytes, Byte, Nat, Eq};
-        let len(b : Bytes) -> Nat = match b | 0x[] => 0 | 0x[_, ..t] => 1 + len(t) end;
-        let step(h : Byte, t : Bytes) -> Eq()(Nat/sub(len(0x[h, ..t]), 1), len(t)) = Eq/refl();
+        let len(b : Bytes) -> Nat => match b | 0x[] => 0 | 0x[_, ..t] => 1 + len(t) end;
+        let step(h : Byte, t : Bytes) -> Eq()(Nat/sub(len(0x[h, ..t]), 1), len(t)) => Eq/refl();
         /std/print("ok")
         "#),
         b"ok"
@@ -114,7 +114,7 @@ fn a_bound_over_a_diverging_subject_is_refused_by_name() {
         100_000,
         r#"
         use /std/{Nat, Int};
-        let spin(n : Nat) -> Int = match n | 0 => +0 | p + 1 => spin(p + 1) end;
+        let spin(n : Nat) -> Int => match n | 0 => +0 | p + 1 => spin(p + 1) end;
         let k : Nat = Int/to_nat(spin(3));
         /std/print("unreachable")
         "#,
@@ -137,7 +137,7 @@ fn a_guard_spelled_the_other_way_discharges_a_bound() {
     assert_eq!(
         run(r#"
         use /std/{Str, Nat, Int};
-        let narrow(a : Int) -> Nat = match 0 <= a | true => Int/to_nat(a) | false => 0 end;
+        let narrow(a : Int) -> Nat => match 0 <= a | true => Int/to_nat(a) | false => 0 end;
         /std/print(Nat/to_str(narrow(+7)))
         "#),
         b"7"
@@ -155,7 +155,7 @@ fn a_bound_on_a_computed_subject_evaluates_it() {
         500_000,
         r#"
         use /std/{Bytes, Nat, Str};
-        let go(i : Nat, acc : Bytes) -> Bytes =
+        let go(i : Nat, acc : Bytes) -> Bytes =>
             match i | 0 => acc | k + 1 => go(k, 0x[..acc, ..Str/to_bytes("0123456789")]) end;
         let built = go(100000, 0x[]);
         let head = Bytes/slice(built, 0, 10);
@@ -177,7 +177,7 @@ fn a_bound_on_a_small_computed_subject_discharges() {
         DEFAULT_BUDGET,
         r#"
         use /std/{Bytes, Nat, Str};
-        let go(i : Nat, acc : Bytes) -> Bytes =
+        let go(i : Nat, acc : Bytes) -> Bytes =>
             match i | 0 => acc | k + 1 => go(k, 0x[..acc, ..Str/to_bytes("0123456789")]) end;
         let built = go(2000, 0x[]);
         let head = Bytes/slice(built, 0, 10);
@@ -196,9 +196,9 @@ fn a_bound_behind_a_parameter_evaluates_nothing() {
         500_000,
         r#"
         use /std/{Bytes, Nat, Str};
-        let go(i : Nat, acc : Bytes) -> Bytes =
+        let go(i : Nat, acc : Bytes) -> Bytes =>
             match i | 0 => acc | k + 1 => go(k, 0x[..acc, ..Str/to_bytes("0123456789")]) end;
-        let head_of(b : Bytes) -> Bytes =
+        let head_of(b : Bytes) -> Bytes =>
             match 10 <= Bytes/length(b) | true => Bytes/slice(b, 0, 10) | false => 0x[] end;
         let built = go(100000, 0x[]);
         let head = head_of(built);
@@ -216,12 +216,12 @@ fn a_flt_narrowing_bound_discharges_behind_a_guard() {
     assert_eq!(
         run(r#"
         use /std/{Flt, Nat, Int, Str, Option};
-        let to_nat_or(f: Flt, fallback: Nat) -> Nat =
+        let to_nat_or(f: Flt, fallback: Nat) -> Nat =>
             match Flt/ge(f, +0.0) && Flt/lt(f, +inf.0)
             | true => Flt/to_nat(f)
             | false => fallback
             end;
-        let to_int_or(f: Flt, fallback: Int) -> Int =
+        let to_int_or(f: Flt, fallback: Int) -> Int =>
             match Flt/lt(-inf.0, f) && Flt/lt(f, +inf.0)
             | true => Flt/to_int(f)
             | false => fallback
@@ -242,11 +242,11 @@ fn a_flt_narrowing_bound_refuses_what_is_not_a_number() {
     assert_eq!(
         run(r#"
         use /std/{Flt, Nat, Int, Str, Option, List};
-        let to_nat(f: Flt) -> Str =
+        let to_nat(f: Flt) -> Str =>
             match Flt/try_to_nat(f) | some(n) => Nat/to_str(n) | none() => "-" end;
-        let to_int(f: Flt) -> Str =
+        let to_int(f: Flt) -> Str =>
             match Flt/try_to_int(f) | some(n) => Int/to_str(n) | none() => "-" end;
-        let probe(f: Flt) -> Str = Str/concat(Str/concat(to_nat(f), "/"), to_int(f));
+        let probe(f: Flt) -> Str => Str/concat(Str/concat(to_nat(f), "/"), to_int(f));
         /std/print(List/fold(
             [probe(2.5), probe(-0.0), probe(-2.5), probe(+inf.0), probe(-inf.0),
                 probe(+nan.0)],
@@ -289,9 +289,9 @@ fn recursion_on_a_bound_serves_a_proposition_and_a_computation() {
         run(r#"
         use /std/{Nat, Str, Char, List};
         use /std/Bool/{True, Holds};
-        let below(n: Nat) -> Holds(n < n + 3) =
+        let below(n: Nat) -> Holds(n < n + 3) =>
             Nat/descend((k: Nat) => k, (k) => Holds(k < k + 3), (k, ih) => True/qed(), n);
-        let fib(n: Nat) -> Nat =
+        let fib(n: Nat) -> Nat =>
             Nat/descend(
                 (k: Nat) => k,
                 (k) => Nat,
@@ -321,7 +321,7 @@ fn an_undischarged_bound_is_named_in_the_refusal() {
     let error = typecheck(
         r#"
         use /std/{Str, Bytes, Nat, Bool};
-        let unguarded(b : Bytes, k : Nat) -> Bytes =
+        let unguarded(b : Bytes, k : Nat) -> Bytes =>
             Bytes/slice(b, 2, k);
         /std/print("unreachable")
         "#,
@@ -342,7 +342,7 @@ fn a_fact_of_an_updates_base_is_spelled_through_the_base() {
         use /std/{Nat};
         use /std/Bool/{Holds};
         struct Positive: pub Type { n: Nat, @ok: Holds(0 < n) }
-        let zeroed(p: Positive) -> Positive = Positive { ..p, n = 0 };
+        let zeroed(p: Positive) -> Positive => Positive { ..p, n = 0 };
         /std/print("unreachable")
         "#,
     )
@@ -360,7 +360,7 @@ fn a_bound_over_one_length_reached_by_two_routes_discharges() {
         use /std/{Nat, Bytes, Char, Str};
         use /std/Bool/{True, Holds};
         let _within(c: Char, k: Nat)
-            -> Holds(k + Bytes/length(Char/to_utf8(c)) <= k + Bytes/length(Str/of_char(c).bytes) + 1) =
+            -> Holds(k + Bytes/length(Char/to_utf8(c)) <= k + Bytes/length(Str/of_char(c).bytes) + 1) =>
             True/qed();
         /std/print("ok")
         "#),
@@ -377,25 +377,25 @@ fn a_member_bound_discharges_through_a_row_the_module_declares() {
         use /std/Bool/{Holds};
         use /std/ops/{Eql, Rem, Ord};
         struct Num: Type { n : Nat }
-        let ord(a : Num, b : Num) -> Ordering = Nat/ord(a.n, b.n);
-        let lt(a : Num, b : Num) -> Bool = a.n < b.n;
-        let le(a : Num, b : Num) -> Bool = a.n <= b.n;
+        let ord(a : Num, b : Num) -> Ordering => Nat/ord(a.n, b.n);
+        let lt(a : Num, b : Num) -> Bool => a.n < b.n;
+        let le(a : Num, b : Num) -> Bool => a.n <= b.n;
         satisfy Eql(Num) { .. }
-        let one(n : Nat, m : Nat, e : Eq()(n, m)) -> Eq()(Num { n = n }, Num { n = m }) =
+        let one(n : Nat, m : Nat, e : Eq()(n, m)) -> Eq()(Num { n = n }, Num { n = m }) =>
             let refl() = e;
             Eq/refl();
         satisfy Ord(Num) {
             ord = ord,
             lt = lt,
             le = le,
-            flips(a, b) = Ord/flips(a.n, b.n),
-            trans(a, b, c, p, q) = Ord/trans(a.n, b.n, c.n, p, q),
-            eq(a, b, h) = one(a.n, b.n, Ord/eq(a.n, b.n, h)),
-            is_lt(a, b) = Ord/is_lt(a.n, b.n),
-            is_le(a, b) = Ord/is_le(a.n, b.n),
+            flips(a, b) => Ord/flips(a.n, b.n),
+            trans(a, b, c, p, q) => Ord/trans(a.n, b.n, c.n, p, q),
+            eq(a, b, h) => one(a.n, b.n, Ord/eq(a.n, b.n, h)),
+            is_lt(a, b) => Ord/is_lt(a.n, b.n),
+            is_le(a, b) => Ord/is_le(a.n, b.n),
         }
-        satisfy Rem(Num) { Ok(b) = Holds(0 < b.n), rem(a, b, @ok) = a }
-        let probe() -> Num = Rem/rem(Num { n = 10 }, Num { n = 3 });
+        satisfy Rem(Num) { Ok(b) => Holds(0 < b.n), rem(a, b, @ok) => a }
+        let probe() -> Num => Rem/rem(Num { n = 10 }, Num { n = 3 });
         /std/print("ok")
         "#),
         b"ok"

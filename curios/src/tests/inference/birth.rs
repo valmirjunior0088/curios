@@ -11,17 +11,17 @@ fn an_implicit_born_under_two_guards_is_solved_from_an_arm_inside() {
         use /std/{Eq, Bool, Nat, print};
         use /std/Bool/{Holds};
 
-        let p(x: Nat) -> Bool = x % 2 == 0;
-        let q(c: Bool, y: Nat) -> Nat = match c | true => y | false => 0 end;
+        let p(x: Nat) -> Bool => x % 2 == 0;
+        let q(c: Bool, y: Nat) -> Nat => match c | true => y | false => 0 end;
 
         struct Le(z: Nat): Type {
             low: Nat,
             @ok: Holds(low <= z),
         }
 
-        let same(@z: Nat, @w: Le(z), e: Eq(@Le(z))(w, w)) -> Nat = w.low;
+        let same(@z: Nat, @w: Le(z), e: Eq(@Le(z))(w, w)) -> Nat => w.low;
 
-        let where_born(x: Nat, y: Nat, z: Nat) -> Nat =
+        let where_born(x: Nat, y: Nat, z: Nat) -> Nat =>
             match p(x)
             | true =>
                 match q(p(x), y) <= z
@@ -31,7 +31,7 @@ fn an_implicit_born_under_two_guards_is_solved_from_an_arm_inside() {
             | false => 0
             end;
 
-        let from_an_arm(x: Nat, y: Nat, z: Nat, b: Bool) -> Nat =
+        let from_an_arm(x: Nat, y: Nat, z: Nat, b: Bool) -> Nat =>
             match p(x)
             | true =>
                 match q(p(x), y) <= z
@@ -43,7 +43,7 @@ fn an_implicit_born_under_two_guards_is_solved_from_an_arm_inside() {
             | false => 0
             end;
 
-        let from_a_guards_arm(x: Nat, y: Nat, z: Nat, k: Nat) -> Nat =
+        let from_a_guards_arm(x: Nat, y: Nat, z: Nat, k: Nat) -> Nat =>
             match p(x)
             | true =>
                 match q(p(x), y) <= z
@@ -55,7 +55,7 @@ fn an_implicit_born_under_two_guards_is_solved_from_an_arm_inside() {
             | false => 0
             end;
 
-        let under_one_guard(y: Nat, z: Nat, b: Bool) -> Nat =
+        let under_one_guard(y: Nat, z: Nat, b: Bool) -> Nat =>
             match y <= z
             | true =>
                 let r: Eq(@Le(z))(Le { low = y }, Le { low = y }) = Eq/refl();

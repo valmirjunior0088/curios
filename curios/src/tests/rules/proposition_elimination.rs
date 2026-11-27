@@ -14,7 +14,7 @@ fn a_multi_constructor_proposition_cannot_be_eliminated_into_data() {
         | mk(n : Nat)
         end
 
-        let extract(b : Box) -> True =
+        let extract(b : Box) -> True =>
             match b
             | mk(n) => True/qed()
             end;
@@ -24,7 +24,7 @@ fn a_multi_constructor_proposition_cannot_be_eliminated_into_data() {
         b"ok",
     )
     .refused(&[
-        ("-> True =", "-> Nat ="),
+        ("-> True =>", "-> Nat =>"),
         ("| mk(n) => True/qed()", "| mk(n) => n"),
         ("/std/print(\"ok\")", "extract(Box/mk(7))"),
     ])
@@ -59,9 +59,9 @@ fn a_proposition_holding_a_proof_cannot_be_eliminated_into_data() {
         | intro(@x : A, below : (y : A, r : R(y, x)) -> Accessible(R)(y)) : (x)
         end
 
-        let R(y : Nat, x : Nat) -> Prop = Holds(x < y);
+        let R(y : Nat, x : Nat) -> Prop => Holds(x < y);
 
-        let inv(n : Nat, a : Accessible(R)(n)) -> (y : Nat, r : R(y, n)) -> Accessible(R)(y) =
+        let inv(n : Nat, a : Accessible(R)(n)) -> (y : Nat, r : R(y, n)) -> Accessible(R)(y) =>
             (y, r) => match a | intro(@_, below) => below(y, r) end;
 
         /std/print(Nat/to_str(1))
@@ -69,7 +69,7 @@ fn a_proposition_holding_a_proof_cannot_be_eliminated_into_data() {
         b"1",
     )
     .refused(&[
-        ("let inv(n : Nat, a : Accessible(R)(n)) -> (y : Nat, r : R(y, n)) -> Accessible(R)(y) =\n            (y, r) => match a | intro(@_, below) => below(y, r) end;", "let f(n : Nat, lt : (k : Nat) -> Holds(k < k + 1), a : Accessible(R)(n)) -> Nat =\n            match a | intro(@_, below) => f(n + 1, lt, below(n + 1, lt(n))) end;"),
+        ("let inv(n : Nat, a : Accessible(R)(n)) -> (y : Nat, r : R(y, n)) -> Accessible(R)(y) =>\n            (y, r) => match a | intro(@_, below) => below(y, r) end;", "let f(n : Nat, lt : (k : Nat) -> Holds(k < k + 1), a : Accessible(R)(n)) -> Nat =>\n            match a | intro(@_, below) => f(n + 1, lt, below(n + 1, lt(n))) end;"),
     ])
     .by_elaborator_in("/f", |error| matches!(error, Error::LargeElimOfProp { .. }));
 }
@@ -85,7 +85,7 @@ fn a_constructor_an_index_rules_out_still_counts() {
         | left(@a : Nat) : (a, 0)
         end
 
-        let which(@n : Nat, p : Side(n, 0)) -> Nat = match p | left(@a) => a + 1 end;
+        let which(@n : Nat, p : Side(n, 0)) -> Nat => match p | left(@a) => a + 1 end;
 
         /std/print(Nat/to_str(which(Side/left(@41))))
         "#,
@@ -126,7 +126,7 @@ fn a_cast_along_a_hypothesis_whose_ends_differ_stands() {
         r#"
         use /std/{Eq, Nat};
 
-        let along(a : Nat, b : Nat, p : Eq()(a + b, b + a), v : Nat) -> Eq()(Eq/subst((_) => Nat, p, v), v) =
+        let along(a : Nat, b : Nat, p : Eq()(a + b, b + a), v : Nat) -> Eq()(Eq/subst((_) => Nat, p, v), v) =>
             Eq/refl();
 
         /std/print(Nat/to_str(1))
@@ -177,7 +177,7 @@ fn a_proposition_may_not_be_eliminated_into_a_formed_type() {
         | b()
         end
 
-        let into_record(t : Two) -> {Eq()(0, 0), Eq()(1, 1)} =
+        let into_record(t : Two) -> {Eq()(0, 0), Eq()(1, 1)} =>
             match t
             | a() => (Eq/refl(), Eq/refl())
             | b() => (Eq/refl(), Eq/refl())
@@ -189,7 +189,7 @@ fn a_proposition_may_not_be_eliminated_into_a_formed_type() {
     )
     .refused(&[
         ("{Nat, Eq}", "{Nat}"),
-        ("-> {Eq()(0, 0), Eq()(1, 1)} =", "-> {Nat, Nat} ="),
+        ("-> {Eq()(0, 0), Eq()(1, 1)} =>", "-> {Nat, Nat} =>"),
         ("| a() => (Eq/refl(), Eq/refl())", "| a() => (0, 0)"),
         ("| b() => (Eq/refl(), Eq/refl())", "| b() => (1, 1)"),
         ("/std/print(Nat/to_str(1))", "/std/Io/pure(())"),

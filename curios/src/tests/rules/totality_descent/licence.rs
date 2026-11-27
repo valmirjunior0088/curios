@@ -19,7 +19,7 @@ fn a_dispatch_that_does_not_enumerate_zero_licenses_no_decrease() {
         r#"
         use /std/{Nat};
 
-        let Down(n : Nat) -> Type =
+        let Down(n : Nat) -> Type =>
             match n
             | 0 => {}
             | _ => Down(n - 1)
@@ -56,7 +56,7 @@ fn a_boolean_guard_that_does_not_exclude_zero_licenses_no_decrease() {
         r#"
         use /std/{Nat};
 
-        let Down(n : Nat) -> Type =
+        let Down(n : Nat) -> Type =>
             match n > 0
             | true => Down(n - 1)
             | false => {}
@@ -82,7 +82,7 @@ fn a_boolean_guard_that_does_not_exclude_zero_licenses_no_decrease() {
         r#"
         use /std/{Nat};
 
-        let Down(n : Nat) -> Type =
+        let Down(n : Nat) -> Type =>
             match 0 < n
             | true => Down(n - 1)
             | false => {}
@@ -108,9 +108,9 @@ fn a_boolean_guard_that_does_not_exclude_zero_licenses_no_decrease() {
         r#"
         use /std/{Nat, Bool};
 
-        let guard(n : Nat) -> Bool = n > 0;
+        let guard(n : Nat) -> Bool => n > 0;
 
-        let Down(n : Nat) -> Type =
+        let Down(n : Nat) -> Type =>
             match guard(n)
             | true => Down(n - 1)
             | false => {}
@@ -122,7 +122,7 @@ fn a_boolean_guard_that_does_not_exclude_zero_licenses_no_decrease() {
         "#,
         b"ok",
     )
-    .refused(&[("= n > 0;", "= n < 10;")])
+    .refused(&[("=> n > 0;", "=> n < 10;")])
     .by_elaborator_in("/Down", |error| {
         matches!(
             error,
@@ -138,7 +138,7 @@ fn a_boolean_guard_that_does_not_exclude_zero_licenses_no_decrease() {
 const A_DESCENT_UNDER_A_NEGATED_GUARD: &str = r#"
     use /std/{Nat, Bool};
 
-    let Down(n : Nat) -> Type =
+    let Down(n : Nat) -> Type =>
         match ${guard}
         | true => Down(n - 1)
         | false => {}
@@ -181,7 +181,7 @@ fn an_arithmetic_decrease_needs_a_literal_operand_that_shrinks() {
         r#"
         use /std/{Nat};
 
-        let Down(n : Nat) -> Type =
+        let Down(n : Nat) -> Type =>
             match n
             | 0 => {}
             | _ => Down(n / 2)
@@ -207,7 +207,7 @@ fn an_arithmetic_decrease_needs_a_literal_operand_that_shrinks() {
         r#"
         use /std/{Nat};
 
-        let Down(n : Nat, k : Nat) -> Type =
+        let Down(n : Nat, k : Nat) -> Type =>
             match n
             | 0 => {}
             | _ => Down(n / 2, k)
@@ -244,7 +244,7 @@ fn a_nonzero_fact_does_not_escape_the_arm_that_established_it() {
         r#"
         use /std/{Nat};
 
-        let Down(n : Nat) -> Type =
+        let Down(n : Nat) -> Type =>
             match n > 0
             | true => Down(n - 1)
             | false => {}
@@ -273,7 +273,7 @@ fn a_nonzero_fact_does_not_escape_the_arm_that_established_it() {
         r#"
         use /std/{Nat};
 
-        let Down(n : Nat) -> Type =
+        let Down(n : Nat) -> Type =>
             match n > 0
             | true => Down(n / 2)
             | false => {}
@@ -315,9 +315,9 @@ fn a_sort_reached_through_an_alias_still_needs_descent() {
 
         let U : Type = Type;
 
-        let wrap(A : U) -> U = Option(A);
+        let wrap(A : U) -> U => Option(A);
 
-        let Down(n : Nat) -> U =
+        let Down(n : Nat) -> U =>
             match n
             | 0 => {}
             | _ => wrap(Down(n - 1))
@@ -357,7 +357,7 @@ fn a_call_through_a_constructor_payload_descends() {
             step : (n : Nat, ih : (m : Nat, lt : Holds(m < n)) -> P(m)) -> P(n),
             n : Nat,
             acc : Accessible((a : Nat, b : Nat) => Holds(a < b))(n),
-        ) -> P(n) =
+        ) -> P(n) =>
             match acc
             | intro(@w, below) => step(w, (m, lt) => strong(P, step, m, below(m, lt)))
             end;
@@ -389,7 +389,7 @@ fn a_subtraction_by_zero_licenses_no_decrease() {
         r#"
         use /std/{Nat};
 
-        let Down(n : Nat) -> Type =
+        let Down(n : Nat) -> Type =>
             match n
             | 0 => {}
             | _ => Down(n - 1)
@@ -420,7 +420,7 @@ fn a_subtraction_past_the_layer_a_successor_arm_peels_descends() {
         r#"
         use /std/{Nat};
 
-        let Down(n : Nat) -> Type =
+        let Down(n : Nat) -> Type =>
             match n
             | 0 => {}
             | _ => Down(n - 2)
@@ -451,7 +451,7 @@ fn a_guard_with_no_head_that_does_not_exclude_zero_licenses_no_decrease() {
         r#"
         use /std/{Nat};
 
-        let Down(n : Nat) -> Type =
+        let Down(n : Nat) -> Type =>
             match
             | n > 0 => Down(n - 1)
             | _ => {}
@@ -483,7 +483,7 @@ fn a_recursion_that_hands_its_arguments_on_exchanged_does_not_descend() {
         use /std/{Nat};
         use /std/Bool/{True, False};
 
-        let swap(x : Nat, y : Nat) -> True =
+        let swap(x : Nat, y : Nat) -> True =>
             match x
             | 0 => True/qed()
             | k + 1 => swap(k, y + 1)
@@ -494,7 +494,7 @@ fn a_recursion_that_hands_its_arguments_on_exchanged_does_not_descend() {
         b"ok",
     )
     .refused(&[
-        ("-> True =", "-> False ="),
+        ("-> True =>", "-> False =>"),
         ("| 0 => True/qed()", "| 0 => swap(y, 0)"),
     ])
     .by_elaborator_in("/swap", |error| {
@@ -516,7 +516,7 @@ fn an_element_read_at_an_index_is_below_its_list() {
         | rose(Nat, List(Rose))
         end
 
-        let leftmost(t: Rose) -> Nat =
+        let leftmost(t: Rose) -> Nat =>
             match t
             | rose(n, cs) =>
                 match 0 < List/length(cs)
@@ -525,7 +525,7 @@ fn an_element_read_at_an_index_is_below_its_list() {
                 end
             end;
 
-        let Small(t: Rose) -> /std/Bool/True =
+        let Small(t: Rose) -> /std/Bool/True =>
             match leftmost(t) == 0 | true => /std/Bool/True/qed() | false => /std/Bool/True/qed() end;
 
         /std/print("ok")

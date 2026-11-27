@@ -5,11 +5,11 @@ use /std/Flt/digits/{pow2, div_mod};
 use /std/Bool/{Holds};
 
 --- The number a run of decimal digits spells, `0` for an empty one.
-pub let decimal_value(run: Str) -> Nat =
+pub let decimal_value(run: Str) -> Nat =>
     Str/fold(run, 0, (c, n) => n * 10 + (Char/to_nat(c) - '0'));
 
 --- What a value of `negative`'s sign beyond the overflow threshold rounds to in `r`, or one below half the least subnormal when `below`. The decimal and hex readers answer with it rather than build so large or so small a number.
-pub let clamped(r: Rounding, negative: Bool, below: Bool) -> Flt =
+pub let clamped(r: Rounding, negative: Bool, below: Bool) -> Flt =>
     match below
     | true => exact/round(r, negative, 1, -1200, false)
     | false => exact/round(r, negative, 1, +1100, false)
@@ -20,7 +20,7 @@ pub let Ratio: Type =
     {numerator: Nat, denominator: Nat, positive: Holds(0 < denominator)};
 
 --- `of_decimal` in the direction `r`. The sign goes into the rounding rather than after it, since a directed rounding reads it.
-pub let of_decimal_in(r: Rounding, negative: Bool, d: Nat, e: Int, digits: Nat) -> Flt =
+pub let of_decimal_in(r: Rounding, negative: Bool, d: Nat, e: Int, digits: Nat) -> Flt =>
     match
     | d == 0 => match negative | true => -0.0 | false => +0.0 end
     | e >= +0 && (exact/bit_length(d) >= 1025 || e >= +309) => clamped(r, negative, false)
@@ -61,30 +61,30 @@ pub let of_decimal_in(r: Rounding, negative: Bool, d: Nat, e: Int, digits: Nat) 
     end;
 
 --- `of_str` in the direction `r`.
-pub let of_str_in(r: Rounding, s: Str) -> Option(Flt) =
+pub let of_str_in(r: Rounding, s: Str) -> Option(Flt) =>
     Result/to_option(Parse/run(number(r, true), s));
 
 --- An optional sign: whether it is `-`.
-pub let sign() -> Parse(Str, Bool) =
+pub let sign() -> Parse(Str, Bool) =>
     let written = Parse/optional(Parse/str/char_if((c) => c == '+' || c == '-'))!;
     Parse/pure(match written | some(c) => c == '-' | none() => false end);
 
 --- A run of decimal digits, possibly empty.
-pub let decimal_run() -> Parse(Str, Str) =
+pub let decimal_run() -> Parse(Str, Str) =>
     Parse/str/take_while(Char/is_ascii_digit);
 
 --- A run of hex digits in either case, possibly empty.
-pub let hex_run() -> Parse(Str, Str) =
+pub let hex_run() -> Parse(Str, Str) =>
     Parse/str/take_while((c) => Option/is_some(Char/of_hex_digit(c)));
 
 --- `0x`, in either case.
-pub let hex_mark() -> Parse(Str, {}) =
+pub let hex_mark() -> Parse(Str, {}) =>
     let _ = Parse/str/expect('0')!;
     let _ = Parse/str/char_if((c) => c == 'x' || c == 'X')!;
     Parse/pure(());
 
 --- What follows a significand: nothing, which is an exponent of zero, or `lower` or `upper` and then an optional sign and at least one decimal digit.
-pub let exponent_after(lower: Char, upper: Char) -> Parse(Str, Int) =
+pub let exponent_after(lower: Char, upper: Char) -> Parse(Str, Int) =>
     let marker = Parse/optional(Parse/str/char_if((c) => c == lower || c == upper))!;
     match marker
     | none() => Parse/pure(+0)
@@ -101,12 +101,12 @@ pub let exponent_after(lower: Char, upper: Char) -> Parse(Str, Int) =
     end;
 
 --- What follows a point, or nothing where no point is written: the run `digits` reads after it.
-pub let fraction_of(digits: Parse(Str, Str)) -> Parse(Str, Str) =
+pub let fraction_of(digits: Parse(Str, Str)) -> Parse(Str, Str) =>
     let point = Parse/optional(Parse/str/expect('.'))!;
     match point | some(_) => digits | none() => Parse/pure("") end;
 
 --- A NaN's payload: `(0x…)` in hex of either case, or the kind's own where none is written.
-pub let nan_payload(signaling: Bool) -> Parse(Str, Nat) =
+pub let nan_payload(signaling: Bool) -> Parse(Str, Nat) =>
     let open = Parse/optional(Parse/str/expect('('))!;
     match open
     | none() => Parse/pure(match signaling | true => 1 | false => 0 end)
@@ -121,7 +121,7 @@ pub let nan_payload(signaling: Bool) -> Parse(Str, Nat) =
     end;
 
 --- The NaN of one kind, of `negative`'s sign, with the payload written after its name. A payload the kind cannot carry is refused rather than read as zero: text that spells no NaN is not a number here.
-pub let nan(negative: Bool, signaling: Bool) -> Parse(Str, Flt) =
+pub let nan(negative: Bool, signaling: Bool) -> Parse(Str, Flt) =>
     let payload = nan_payload(signaling)!;
     let kind =
         match signaling
@@ -137,7 +137,7 @@ pub let nan(negative: Bool, signaling: Bool) -> Parse(Str, Flt) =
     end;
 
 --- The infinity or NaN a special name spells, of `negative`'s sign: `inf` or `infinity`, and `nan` or `snan` with an optional payload, in any case. The decimal and hex readers share it, since both write these values the same way.
-pub let special(negative: Bool) -> Parse(Str, Flt) =
+pub let special(negative: Bool) -> Parse(Str, Flt) =>
     let name = Parse/str/take_while(Char/is_ascii_alpha)!;
     match
     | Str/eql_ignoring_ascii_case(name, "inf") || Str/eql_ignoring_ascii_case(name, "infinity") =>
@@ -148,7 +148,7 @@ pub let special(negative: Bool) -> Parse(Str, Flt) =
     end;
 
 --- Hex text after its sign, rounded once in the direction `r`: `0x`, hex digits with an optional point and at least one digit among them, and an optional `p` exponent. A nonzero significand is the exact dyadic `Dyadic/to_flt` rounds, whatever its exponent; a zero takes its sign here, since a dyadic's zero has none.
-pub let hexadecimal(r: Rounding, negative: Bool) -> Parse(Str, Flt) =
+pub let hexadecimal(r: Rounding, negative: Bool) -> Parse(Str, Flt) =>
     let () = hex_mark()!;
     let whole = hex_run()!;
     let fraction = fraction_of(hex_run())!;
@@ -171,7 +171,7 @@ pub let hexadecimal(r: Rounding, negative: Bool) -> Parse(Str, Flt) =
     end;
 
 --- Decimal text after its sign, rounded once in the direction `r`: digits with an optional point and at least one digit among them, and an optional `e` exponent.
-pub let decimal(r: Rounding, negative: Bool) -> Parse(Str, Flt) =
+pub let decimal(r: Rounding, negative: Bool) -> Parse(Str, Flt) =>
     let whole = decimal_run()!;
     let fraction = fraction_of(decimal_run())!;
     match Str/is_empty(whole) && Str/is_empty(fraction)
@@ -189,7 +189,7 @@ pub let decimal(r: Rounding, negative: Bool) -> Parse(Str, Flt) =
     end;
 
 --- A whole number text, read to its end: a sign, then a special name, hex text, or — where `decimals` — decimal text.
-pub let number(r: Rounding, decimals: Bool) -> Parse(Str, Flt) =
+pub let number(r: Rounding, decimals: Bool) -> Parse(Str, Flt) =>
     let negative = sign()!;
     let finite: Parse(Str, Flt) =
         match decimals
@@ -201,7 +201,7 @@ pub let number(r: Rounding, decimals: Bool) -> Parse(Str, Flt) =
     Parse/pure(value);
 
 --- The number a nonempty run of hex digits spells, in either case, or `none`.
-pub let hex_value(s: Str) -> Option(Nat) =
+pub let hex_value(s: Str) -> Option(Nat) =>
     match Str/is_empty(s)
     | true => Option/none()
     | false =>
@@ -215,5 +215,5 @@ pub let hex_value(s: Str) -> Option(Nat) =
     end;
 
 --- `of_hex_str` in the direction `r`.
-pub let of_hex_str_in(r: Rounding, s: Str) -> Option(Flt) =
+pub let of_hex_str_in(r: Rounding, s: Str) -> Option(Flt) =>
     Result/to_option(Parse/run(number(r, false), s));

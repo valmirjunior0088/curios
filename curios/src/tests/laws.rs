@@ -55,7 +55,7 @@ fn program(header: &str, rows: &[(String, String)], body: &str) -> String {
     let items = rows
         .iter()
         .enumerate()
-        .map(|(index, (binders, claim))| format!("let law{index}({binders}) -> {claim} = {body};"))
+        .map(|(index, (binders, claim))| format!("let law{index}({binders}) -> {claim} => {body};"))
         .collect::<Vec<_>>()
         .join("\n");
     format!("{header}\n{items}\nIo/pure(())")
@@ -175,7 +175,7 @@ const PROOF: usize = 3;
 
 /// What a row's statement is a call of, answering at [`PACKED`]. One call hands both halves the same type and the same left side, so they differ in nothing but the right side — two statements written apart would each settle levels of their own, and the certifier would refuse the claim for those.
 fn claimed() -> String {
-    format!("let claimed(@A: Type, a: A, b: A) -> {PACKED} = (A, Eq(@A)(a, b), a, Eq/refl());")
+    format!("let claimed(@A: Type, a: A, b: A) -> {PACKED} => (A, Eq(@A)(a, b), a, Eq/refl());")
 }
 
 /// What the certifier says of each row when it alone is asked, in the rows' order: `None` where it holds the row, and its refusal where it does not.
@@ -197,7 +197,7 @@ fn certifier_alone(header: &str, rows: &[(String, String)]) -> Vec<Option<curios
                 type_ => format!("{type_}, {left}, {right}"),
             };
             // A top-level definition states its type, which here restates the call's; the claim is taken from the call.
-            format!("let stated{index}({binders}) -> {PACKED} = claimed({arguments});")
+            format!("let stated{index}({binders}) -> {PACKED} => claimed({arguments});")
         })
         .collect::<Vec<_>>()
         .join("\n");

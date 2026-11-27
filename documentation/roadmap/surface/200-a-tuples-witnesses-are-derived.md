@@ -22,7 +22,7 @@
 
 ## Stages
 
-1. **The struct's path at `{A, B}`.** Tried over a copy of the tree, the fix then stated with the lines it removes, or this specification dropped. Check: `satisfy (@A: Type, use Eql(A), @B: Type, use Eql(B)) => Eql({A, B}) { .. }` and its `Ord`, `Hash` and `Hash/Key` accepted by both checkers in the copy.
+1. **The struct's path at `{A, B}`.** Tried over a copy of the tree, the fix then stated with the lines it removes, or this specification dropped. Check: `satisfy (@A: Type, use Eql(A), @B: Type, use Eql(B)) -> Eql({A, B}) { .. }` and its `Ord`, `Hash` and `Hash/Key` accepted by both checkers in the copy.
 2. **`/std/Tuple` derives.** Each per-arity witness replaced by a derived one. Check: `/std` builds and `Tuple`'s tests pass.
 
 ## Verification and retirement

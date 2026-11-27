@@ -9,18 +9,18 @@ fn a_lambda_applied_to_a_let_bound_local_stands_for_what_the_let_stands_for() {
         r#"
         use /std/{Nat, Bool};
 
-        let f(n: Nat) -> Bool =
+        let f(n: Nat) -> Bool =>
             let u = n;
             ((x: Nat) => match x | 0 => false | k + 1 => f(k) end)(u);
 
-        let F(n: Nat) -> /std/Bool/True =
+        let F(n: Nat) -> /std/Bool/True =>
             match f(n) | true => /std/Bool/True/qed() | false => /std/Bool/True/qed() end;
 
-        let g(n: Nat) -> Bool =
+        let g(n: Nat) -> Bool =>
             let u = n;
             ((x: Nat) => match x | 0 => false | _ => g(x - 1) end)(u);
 
-        let G(n: Nat) -> /std/Bool/True =
+        let G(n: Nat) -> /std/Bool/True =>
             match g(n) | true => /std/Bool/True/qed() | false => /std/Bool/True/qed() end;
 
         /std/print("ok")
@@ -43,10 +43,10 @@ fn zero_ruled_out_of_a_binder_standing_for_a_successor_is_ruled_out_of_no_parame
         r#"
         use /std/{Nat, Bool};
 
-        let f(n : Nat) -> Bool =
+        let f(n : Nat) -> Bool =>
             ((x : Nat) => match x | 0 => false | _ => f(n - 1) end)(n);
 
-        let F(n : Nat) -> /std/Bool/True =
+        let F(n : Nat) -> /std/Bool/True =>
             match f(n) | true => /std/Bool/True/qed() | false => /std/Bool/True/qed() end;
 
         /std/print("ok")
@@ -69,12 +69,12 @@ fn what_an_arm_establishes_of_an_applied_lambdas_binder_leaves_with_the_arm() {
         r#"
         use /std/{Nat, Bool};
 
-        let g(n : Nat) -> Bool =
+        let g(n : Nat) -> Bool =>
             ((x : Nat) =>
                 let b : Bool = match x | 0 => false | _ => g(n - 1) end;
                 match b | true => false | false => false end)(n);
 
-        let G(n : Nat) -> /std/Bool/True =
+        let G(n : Nat) -> /std/Bool/True =>
             match g(n) | true => /std/Bool/True/qed() | false => /std/Bool/True/qed() end;
 
         /std/print("ok")
@@ -95,12 +95,12 @@ fn what_an_arm_establishes_of_an_applied_lambdas_binder_leaves_with_the_arm() {
         r#"
         use /std/{Nat, Bool};
 
-        let h(n : Nat) -> Bool =
+        let h(n : Nat) -> Bool =>
             ((x : Nat) =>
                 let b : Bool = match x | 0 => false | k + 1 => h(n - 1) end;
                 match b | true => false | false => false end)(n);
 
-        let H(n : Nat) -> /std/Bool/True =
+        let H(n : Nat) -> /std/Bool/True =>
             match h(n) | true => /std/Bool/True/qed() | false => /std/Bool/True/qed() end;
 
         /std/print("ok")
@@ -130,7 +130,7 @@ fn an_arm_after_an_inversion_takes_apart_the_variable_a_call_names() {
         | c(k: Nat): (k)
         end
 
-        let direct(t: Nat, q: Q(t)) -> Bool =
+        let direct(t: Nat, q: Q(t)) -> Bool =>
             match q
             | c(k) =>
                 match t
@@ -139,7 +139,7 @@ fn an_arm_after_an_inversion_takes_apart_the_variable_a_call_names() {
                 end
             end;
 
-        let Direct(t: Nat, q: Q(t)) -> /std/Bool/True =
+        let Direct(t: Nat, q: Q(t)) -> /std/Bool/True =>
             match direct(t, q) | true => /std/Bool/True/qed() | false => /std/Bool/True/qed() end;
 
         /std/print("ok")
@@ -169,7 +169,7 @@ fn a_guard_after_an_inversion_rules_zero_out_of_the_variable_a_call_names() {
         | c(k: Nat): (k)
         end
 
-        let guarded(t: Nat, q: Q(t)) -> Bool =
+        let guarded(t: Nat, q: Q(t)) -> Bool =>
             match q
             | c(k) =>
                 match t == 0
@@ -178,7 +178,7 @@ fn a_guard_after_an_inversion_rules_zero_out_of_the_variable_a_call_names() {
                 end
             end;
 
-        let Guarded(t: Nat, q: Q(t)) -> /std/Bool/True =
+        let Guarded(t: Nat, q: Q(t)) -> /std/Bool/True =>
             match guarded(t, q) | true => /std/Bool/True/qed() | false => /std/Bool/True/qed() end;
 
         /std/print("ok")

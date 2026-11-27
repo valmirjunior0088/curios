@@ -22,7 +22,7 @@ fn a_fill_and_its_snoc_spelling_are_never_told_apart() {
         use /std/{Nat, Byte, Bytes};
         use /std/Bool/{True, False, Holds};
 
-        let absurd(n: Nat, a: Byte, h: Holds(Bytes/eql(Bytes/replicate(n + 1, a), 0x[..Bytes/replicate(n, a), a]))) -> Holds(Bytes/eql(Bytes/replicate(n + 1, a), 0x[..Bytes/replicate(n, a), a])) =
+        let absurd(n: Nat, a: Byte, h: Holds(Bytes/eql(Bytes/replicate(n + 1, a), 0x[..Bytes/replicate(n, a), a]))) -> Holds(Bytes/eql(Bytes/replicate(n + 1, a), 0x[..Bytes/replicate(n, a), a])) =>
             h;
 
         let at_zero = absurd(0, 7, True/qed());
@@ -31,7 +31,7 @@ fn a_fill_and_its_snoc_spelling_are_never_told_apart() {
         b"ok",
     )
     .refused(&[
-        (") -> Holds(Bytes/eql(Bytes/replicate(n + 1, a), 0x[..Bytes/replicate(n, a), a])) =", ") -> False ="),
+        (") -> Holds(Bytes/eql(Bytes/replicate(n + 1, a), 0x[..Bytes/replicate(n, a), a])) =>", ") -> False =>"),
     ])
     .by_elaborator_in("/absurd", |error| matches!(error, curios_elab::Error::TypeMismatch { inferred, .. } if pinned(inferred) == "/sys/Bool/Holds(0x[a, ..Bytes/replicate(n, a)] == 0x[..Bytes/replicate(n, a), a])"));
 }
@@ -44,7 +44,7 @@ fn a_fill_that_may_be_empty_does_not_clash_with_the_empty_value() {
         use /std/{Eq, Nat, Byte, Bytes};
         use /std/Bool/{False};
 
-        let absurd(n: Nat, a: Byte, h: Eq()(Bytes/replicate(n + 1, a), 0x[])) -> False =
+        let absurd(n: Nat, a: Byte, h: Eq()(Bytes/replicate(n + 1, a), 0x[])) -> False =>
             match h end;
 
         let bad = absurd;
@@ -80,7 +80,7 @@ fn two_windows_across_a_gap_are_not_one_window() {
             m: Nat,
             n: Nat,
             @ok: Holds(m + 1 + n <= Bytes/length(b)),
-        ) -> Holds(Bytes/eql(0x[..Bytes/slice(b, 0, m), ..Bytes/slice(b, m, n)], Bytes/slice(b, 0, m + n))) =
+        ) -> Holds(Bytes/eql(0x[..Bytes/slice(b, 0, m), ..Bytes/slice(b, m, n)], Bytes/slice(b, 0, m + n))) =>
             True/qed();
 
         let at = fused(0x[1, 2, 3], 1, 1);
@@ -107,7 +107,7 @@ fn an_index_past_the_wrong_operand_is_no_seam() {
             c: Bytes,
             @inside: Holds(Bytes/length(b) < Bytes/length(0x[..b, ..c])),
             @first: Holds(0 < Bytes/length(c)),
-        ) -> Eq()(Bytes/get(0x[..b, ..c], Bytes/length(b)), Bytes/get(c, 0)) =
+        ) -> Eq()(Bytes/get(0x[..b, ..c], Bytes/length(b)), Bytes/get(c, 0)) =>
             Eq/refl();
 
         let read: Eq()(Byte/to_nat(Bytes/get(0x[1, 2, 3], 1)), Byte/to_nat(Bytes/get(0x[2, 3], 0))) =
@@ -133,7 +133,7 @@ fn a_length_past_an_operand_that_may_be_empty_is_no_strict_bound() {
         use /std/{Bytes};
         use /std/Bool/{True, Holds};
 
-        let longer(b: Bytes, c: Bytes) -> Holds(Bytes/length(b) <= Bytes/length(0x[..b, ..c])) =
+        let longer(b: Bytes, c: Bytes) -> Holds(Bytes/length(b) <= Bytes/length(0x[..b, ..c])) =>
             True/qed();
 
         let at = longer(0x[], 0x[]);
@@ -155,10 +155,10 @@ fn a_map_by_a_function_that_is_the_identity_almost_everywhere_is_not_its_list() 
         use /std/{Nat, List, Eq};
         use /std/Bool/{True, Holds};
 
-        let moved(xs: List(Nat)) -> Eq()(List/map(xs, (v: Nat) => v + 1 - 1), xs) =
+        let moved(xs: List(Nat)) -> Eq()(List/map(xs, (v: Nat) => v + 1 - 1), xs) =>
             Eq/refl();
 
-        let sum(ys: List(Nat)) -> Nat = List/fold(ys, 0, (y: Nat, acc: Nat) => y + acc);
+        let sum(ys: List(Nat)) -> Nat => List/fold(ys, 0, (y: Nat, acc: Nat) => y + acc);
 
         let at_zero: Eq()(sum(List/map([0], (v: Nat) => v + 1 - 1)), sum([0])) =
             Eq/cong(sum, moved([0]));
@@ -182,9 +182,9 @@ fn a_fold_over_a_concatenation_threads_its_operands_in_order() {
         use /std/{Nat, List, Eq};
         use /std/Bool/{True, Holds};
 
-        let step(x: Nat, acc: Nat) -> Nat = acc * 10 + x;
+        let step(x: Nat, acc: Nat) -> Nat => acc * 10 + x;
 
-        let swapped(xs: List(Nat), ys: List(Nat)) -> Eq()(List/fold([..xs, ..ys], 0, step), List/fold(ys, List/fold(xs, 0, step), step)) =
+        let swapped(xs: List(Nat), ys: List(Nat)) -> Eq()(List/fold([..xs, ..ys], 0, step), List/fold(ys, List/fold(xs, 0, step), step)) =>
             Eq/refl();
 
         let at = swapped([1], [2]);
@@ -271,7 +271,7 @@ fn two_runs_whose_sampled_bytes_agree_are_still_two_values() {
 
         let zeros : Bytes = Bytes/replicate(100, 0x00);
         let marked : Bytes = Bytes/xor(zeros, 0x[..0x[0x00, 0x01], ..Bytes/replicate(98, 0x00)]);
-        let sum(z: Bytes) -> Nat = Bytes/fold(z, 0, (h: Byte, acc: Nat) => acc + Byte/to_nat(h));
+        let sum(z: Bytes) -> Nat => Bytes/fold(z, 0, (h: Byte, acc: Nat) => acc + Byte/to_nat(h));
 
         let conflated : Eq()(sum(zeros) + sum(marked), 1) = Eq/refl();
 
@@ -374,15 +374,15 @@ fn a_match_or_a_projection_forces_the_call_a_fold_answers() {
             use /std/{Nat, List, Bool};
             use /std/Bool/{True, Holds};
 
-            pub let f(n: Nat) -> Nat = match n | 0 => 0 | k + 1 => match List/fold([5], f(k), (_: Nat, b: Nat) => b) | 0 => 7 | _ => 9 end end;
+            pub let f(n: Nat) -> Nat => match n | 0 => 0 | k + 1 => match List/fold([5], f(k), (_: Nat, b: Nat) => b) | 0 => 7 | _ => 9 end end;
             pub let y: Holds(f(1) == 7) = True/qed();
 
-            pub let member(n: Nat) -> Nat = match n | 0 => 0 | k + 1 => member(k) end;
+            pub let member(n: Nat) -> Nat => match n | 0 => 0 | k + 1 => member(k) end;
             pub let c3: match List/fold([5], member(3), (_: Nat, b: Nat) => b) | 0 => Bool | _ => Nat end = true;
             pub let S: match List/fold([5], member(3), (_: Nat, b: Nat) => b) | 0 => Type | _ => Type end = Bool;
             pub let s: S = true;
 
-            pub let pair(n: Nat) -> {Nat, Nat} = match n | 0 => (0, 1) | k + 1 => pair(k) end;
+            pub let pair(n: Nat) -> {Nat, Nat} => match n | 0 => (0, 1) | k + 1 => pair(k) end;
             pub let p: Holds(List/fold([5], pair(3), (_: Nat, b: {Nat, Nat}) => b).0 == 0) = True/qed();
 
             /std/print("ok")
@@ -399,7 +399,7 @@ fn byte_runs_of_one_length_are_not_apart_by_their_lengths() {
         use /std/{Byte};
         use /std/Bool/{True, False, Holds};
 
-        pub let apart(c: Byte, d: Byte) -> Holds(0x[c, d] != 0x[1, 2, 3]) = True/qed();
+        pub let apart(c: Byte, d: Byte) -> Holds(0x[c, d] != 0x[1, 2, 3]) => True/qed();
 
         let forged = apart;
 

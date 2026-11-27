@@ -63,10 +63,10 @@ fn with_no_width_every_ladder_keeps_its_line() {
 // A ladder's columns run from where its line's text begins, so one after a long head is read with the head it ends: it takes a line of its own, where it is measured again, and keeps one there within them.
 #[test]
 fn a_ladder_past_its_columns_after_a_head_takes_a_line_of_its_own() {
-    let source = "let go(k: Nat, i: Nat) -> List(Nat) = match k | 0 => [] | kp + 1 => [i, ..go(kp, i + 1)] end;\ngo(2, 0)";
+    let source = "let go(k: Nat, i: Nat) -> List(Nat) => match k | 0 => [] | kp + 1 => [i, ..go(kp, i + 1)] end;\ngo(2, 0)";
     assert_eq!(
         render(source, 100),
-        "let go(k: Nat, i: Nat) -> List(Nat) =\n    match k | 0 => [] | kp + 1 => [i, ..go(kp, i + 1)] end;\ngo(2, 0)"
+        "let go(k: Nat, i: Nat) -> List(Nat) =>\n    match k | 0 => [] | kp + 1 => [i, ..go(kp, i + 1)] end;\ngo(2, 0)"
     );
 }
 

@@ -6,7 +6,7 @@ use {crate::test_support::*, curios_native::test_support::*};
 fn read_all_reads_a_seeded_file() {
     let source = r#"
         use /std/{File, Path, Try, Io, Proc};
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             match Try/run(File/read_all(Path/of_str("data.txt")))!
             | success(contents) => Io/bind(Try/run(Io/write(Proc/stdout, contents)), (_) => Io/pure(()))
             | failure(_) => /std/print("error")
@@ -25,7 +25,7 @@ fn read_all_reads_a_seeded_file() {
 fn read_all_of_a_missing_path_is_not_found() {
     let source = r#"
         use /std/{File, Path, Try, Io};
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             match Try/run(File/read_all(Path/of_str("nope.txt")))!
             | success(_) => /std/print("contents")
             | failure(e) =>
@@ -61,7 +61,7 @@ fn read_all_text_answers_text_and_refuses_bytes_that_are_none() {
     ] {
         let source = r#"
             use /std/{File, Path, Show, Try, Io, print};
-            let entry() -> /std/Io({}) =
+            let entry() -> /std/Io({}) =>
                 match Try/run(File/read_all_text(Path/of_str("data.txt")))!
                 | success(text) => print(text)
                 | failure(why) => print(Show/show(why))
@@ -79,7 +79,7 @@ fn read_all_text_answers_text_and_refuses_bytes_that_are_none() {
 fn a_file_opened_to_write_persists_through_its_scopes_close() {
     let source = r#"
         use /std/{File, Path, Try, Io};
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             match Try/run(Try/scope((s) => Try/bind(File/open(s, Path/of_str("out.txt"), File/Mode/write()), (f) => Io/write(f, /std/Str/to_bytes("written")))))!
             | success(_) => /std/print("ok")
             | failure(_) => /std/print("error")
@@ -98,7 +98,7 @@ fn a_file_opened_to_write_persists_through_its_scopes_close() {
 fn read_pulls_bytes_inside_the_scope() {
     let source = r#"
         use /std/{File, Path, Str, Bytes, Try, Io, Proc};
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let bytes = Try/run(Try/scope((s) => Try/bind(File/open(s, Path/of_str("lines.txt"), File/Mode/read()), (f) =>
                 let c = Io/read(f, 1024)!;
                 Try/pure(match c | bytes(b, @_) => b | ended() => 0x[] end))))!;
@@ -126,7 +126,7 @@ fn a_scoped_file_reads_through_its_stream_witness_across_a_suspension() {
                 let _ = Io/yield()!;
                 let c = Io/read(f, 1024)!;
                 Try/pure(match c | bytes(b, @_) => b | _ => 0x[] end)));
-        let main() -> Io({}) =
+        let main() -> Io({}) =>
             let r = Try/run(program)!;
             match r
             | success(b) => Io/bind(Try/run(Io/write(Proc/stdout, b)), (_) => Io/pure(()))
@@ -147,12 +147,12 @@ fn a_scoped_file_reads_through_its_stream_witness_across_a_suspension() {
 fn a_file_opened_to_create_refuses_a_path_something_is_at() {
     let source = r#"
         use /std/{File, Path, Try, Io, Str, Show};
-        let made() -> /std/Io(Str) =
+        let made() -> /std/Io(Str) =>
             match Try/run(Try/scope((s) => Try/bind(File/open(s, Path/of_str("lock"), File/Mode/create()), (f) => Io/write(f, Str/to_bytes("first")))))!
             | success(_) => Io/pure("made")
             | failure(e) => Io/pure(Show/show(e))
             end;
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let first = made()!;
             let second = made()!;
             /std/print(Str/join(" ", [first, second]));

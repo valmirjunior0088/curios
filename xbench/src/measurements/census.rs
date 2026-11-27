@@ -1276,7 +1276,7 @@ const WORKLOADS: [(&str, &str); 3] = [
 pub const TOML_DRIVER: &str = r#"
 use /std/{Str, Nat, Map, Toml, Option, Result, Io};
 
-let entry() -> /std/Io({}) =
+let entry() -> /std/Io({}) =>
     let arguments = /std/Proc/args()!;
     let input = /std/List/try_get(arguments, 1);
     match input

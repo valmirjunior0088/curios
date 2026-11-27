@@ -28,7 +28,7 @@ fn parameterized_transparent_alias_preserves_representation_provenance() {
         mod M
             struct Hidden : Type { Type }
             struct Open(A : Type) : pub Type { hidden : Hidden, value : A }
-            pub let Alias(A : Type) -> Type = Open(A);
+            pub let Alias(A : Type) -> Type => Open(A);
         end
         Type
     "#,
@@ -66,7 +66,7 @@ fn reordered_direct_type_alias_preserves_representation_provenance() {
         mod M
             struct Hidden : Type { Type }
             struct Open(A : Type, B : Type) : pub Type { hidden : Hidden, a : A, b : B }
-            pub let Alias(A : Type, B : Type) -> Type = Open(B, A);
+            pub let Alias(A : Type, B : Type) -> Type => Open(B, A);
         end
         Type
     "#,
@@ -85,8 +85,8 @@ fn chained_direct_type_aliases_preserve_representation_provenance() {
         mod M
             struct Hidden : Type { Type }
             struct Open(A : Type) : pub Type { hidden : Hidden, value : A }
-            let Middle(A : Type) -> Type = Open(A);
-            pub let Alias(A : Type) -> Type = Middle(A);
+            let Middle(A : Type) -> Type => Open(A);
+            pub let Alias(A : Type) -> Type => Middle(A);
         end
         Type
     "#,
@@ -105,7 +105,7 @@ fn constant_direct_type_family_alias_preserves_representation_provenance() {
         mod M
             struct Hidden : Type { Type }
             struct Open : pub Type { hidden : Hidden }
-            pub let Alias(_A : Type) -> Type = Open;
+            pub let Alias(_A : Type) -> Type => Open;
         end
         Type
     "#,
@@ -167,7 +167,7 @@ fn local_head_is_not_a_direct_type_alias() {
         mod M
             struct Hidden : Type { Type }
             struct Open(A : Type) : pub Type { value : A }
-            pub let Alias(F : (Type) -> Type) -> Type = F(Hidden);
+            pub let Alias(F : (Type) -> Type) -> Type => F(Hidden);
         end
         Type
     "#);
@@ -211,8 +211,8 @@ fn aliased_universe_annotation_is_not_a_direct_type_alias() {
 fn cyclic_direct_type_aliases_terminate_without_nominal_exposure() {
     run(r#"
         mod M
-            pub let A(T : Type) -> Type = B(T)
-            and B(T : Type) -> Type = A(T);
+            pub let A(T : Type) -> Type => B(T)
+            and B(T : Type) -> Type => A(T);
         end
         Type
     "#);

@@ -7,11 +7,11 @@ use /std/Bool/{Holds};
 foreign rand_bytes(Nat) -> Bytes;
 
 --- `n` bytes from the operating system's generator.
-pub let bytes(n: Nat) -> Io(Bytes) =
+pub let bytes(n: Nat) -> Io(Bytes) =>
     rand_bytes(n);
 
 -- A draw of as many bits as `n - 1` has, taken again while it is `n` or more: every number below `n` is one draw's value as often as any other, so none is favoured, where reducing a draw modulo `n` favours the low ones. Fewer than two draws are taken on average, the bits never reaching twice `n`.
-let drawn(n: Nat, @ok: Holds(0 < n)) -> Io({value: Nat, below: Holds(value < n)}) =
+let drawn(n: Nat, @ok: Holds(0 < n)) -> Io({value: Nat, below: Holds(value < n)}) =>
     let bits = Nat/log2(n - 1) + 1;
     let raw = rand_bytes((bits + 7) / 8)!;
     let value = Bytes/to_nat(raw) % Nat/pow(2, bits);
@@ -21,12 +21,12 @@ let drawn(n: Nat, @ok: Holds(0 < n)) -> Io({value: Nat, below: Holds(value < n)}
     end;
 
 --- A number below `n`, each as likely as any other, from the operating system's generator.
-pub let below(n: Nat, @ok: Holds(0 < n)) -> Io(Nat) =
+pub let below(n: Nat, @ok: Holds(0 < n)) -> Io(Nat) =>
     let d = drawn(n, @ok)!;
     Io/pure(d.value);
 
 -- Fisher–Yates from the last place down: the element at `i` trades places with one drawn from the first `i + 1`, so each order of `l` is as likely as any other.
-let shuffled(@T: Type, l: List(T), i: Nat, @within: Holds(i < List/length(l))) -> Io(List(T)) =
+let shuffled(@T: Type, l: List(T), i: Nat, @within: Holds(i < List/length(l))) -> Io(List(T)) =>
     match i
     | 0 => Io/pure(l)
     | k + 1 =>
@@ -38,7 +38,7 @@ let shuffled(@T: Type, l: List(T), i: Nat, @within: Holds(i < List/length(l))) -
     end;
 
 --- `l` in an order drawn from the operating system's generator, each order as likely as any other.
-pub let shuffle(@T: Type, l: List(T)) -> Io(List(T)) =
+pub let shuffle(@T: Type, l: List(T)) -> Io(List(T)) =>
     match List/length(l)
     | 0 => Io/pure(l)
     | n + 1 => shuffled(l, n, @proved())

@@ -89,7 +89,7 @@ pub let unrelated: Nat = 7;
 fn an_edited_body_reaches_the_declaration_that_unfolded_it_and_stops_there() {
     let base = "use /std/{Nat, Eq};
 
-pub let double(n: Nat) -> Nat = n + n;
+pub let double(n: Nat) -> Nat => n + n;
 
 pub let two: Eq()(double(1), 2) = Eq/refl();
 
@@ -118,8 +118,8 @@ pub let unrelated: Nat = 7;
 #[test]
 fn a_renamed_parameter_is_elaborated_again_with_its_dependents() {
     let edited = BASE.replace(
-        "double(n: Nat) -> Nat = n + n",
-        "double(m: Nat) -> Nat = m + m",
+        "double(n: Nat) -> Nat => n + n",
+        "double(m: Nat) -> Nat => m + m",
     );
     let baseline = unit_of(BASE);
 
@@ -139,15 +139,15 @@ fn a_renamed_parameter_is_elaborated_again_with_its_dependents() {
 fn a_renamed_parameter_reaches_the_dependent_that_was_handed_its_signature() {
     let base = "use /std/{Nat};
 
-pub let f(base: Nat, exp: Nat) -> Nat = base;
+pub let f(base: Nat, exp: Nat) -> Nat => base;
 
-pub let same(@A: Type, x: A) -> A = x;
+pub let same(@A: Type, x: A) -> A => x;
 
-pub let g(n: Nat) -> Nat = same(f)(n, n);
+pub let g(n: Nat) -> Nat => same(f)(n, n);
 ";
     let edited = base.replace(
-        "f(base: Nat, exp: Nat) -> Nat = base",
-        "f(b: Nat, e: Nat) -> Nat = b",
+        "f(base: Nat, exp: Nat) -> Nat => base",
+        "f(b: Nat, e: Nat) -> Nat => b",
     );
     let baseline = unit_of(base);
 
@@ -197,7 +197,7 @@ fn an_item_moved_past_another_reuses_every_item() {
 
 pub let unrelated: Nat = 7;
 
-pub let double(n: Nat) -> Nat = n + n;
+pub let double(n: Nat) -> Nat => n + n;
 
 pub let twice: Nat = double(2);
 ";
@@ -225,14 +225,14 @@ pub concept Measured(A: Type): pub Type {
 }
 
 satisfy Measured(Nat) {
-    measure(n) = n,
+    measure(n) => n,
 }
 
 pub let measured: Nat = Measured/measure(2);
 ";
     let inserted = base.replace(
         "satisfy Measured(Nat)",
-        "satisfy Measured(/std/Bool) {\n    measure(_) = 1,\n}\n\nsatisfy Measured(Nat)",
+        "satisfy Measured(/std/Bool) {\n    measure(_) => 1,\n}\n\nsatisfy Measured(Nat)",
     );
     let baseline = unit_of(base);
 
@@ -258,7 +258,7 @@ fn an_edited_struct_recompiles_the_items_that_construct_it() {
 
 pub struct Box: pub Type { value: Nat }
 
-pub let unbox(b: Box) -> Nat = b.value;
+pub let unbox(b: Box) -> Nat => b.value;
 
 pub let value_of_boxed: Nat = (Box { value = 1 }).value;
 
@@ -286,17 +286,17 @@ pub let unrelated: Nat = 7;
 fn a_type_former_elaborated_again_to_what_it_was_keeps_what_read_it() {
     let base = "use /std/{Nat, Option};
 
-pub let Same(T: Type) -> Type = T;
+pub let Same(T: Type) -> Type => T;
 
-pub let Wrapped(T: Type) -> Type = T;
+pub let Wrapped(T: Type) -> Type => T;
 
 pub struct Chain: pub Type { next: Wrapped(Option(Chain)) }
 
-pub let length(_chain: Chain) -> Nat = 0;
+pub let length(_chain: Chain) -> Nat => 0;
 ";
     let edited = base.replace(
-        "Wrapped(T: Type) -> Type = T",
-        "Wrapped(T: Type) -> Type = Same(T)",
+        "Wrapped(T: Type) -> Type => T",
+        "Wrapped(T: Type) -> Type => Same(T)",
     );
     let baseline = unit_of(base);
 
@@ -320,9 +320,9 @@ pub let length(_chain: Chain) -> Nat = 0;
 fn a_family_elaborated_again_to_its_entry_keeps_what_read_its_constructors() {
     let base = "use /std/{Nat, Bool, Option};
 
-pub let Same(T: Type) -> Type = T;
+pub let Same(T: Type) -> Type => T;
 
-pub let Wrapped(T: Type) -> Type = T;
+pub let Wrapped(T: Type) -> Type => T;
 
 pub induct Chain: pub Type
 | stop()
@@ -331,12 +331,12 @@ end
 
 pub let first: Chain = Chain/stop();
 
-pub let count(c: Chain) -> Nat =
+pub let count(c: Chain) -> Nat =>
     match c | stop() => 0 | link(_, _) => 1 end;
 ";
     let respelled = base.replace(
-        "Wrapped(T: Type) -> Type = T",
-        "Wrapped(T: Type) -> Type = Same(T)",
+        "Wrapped(T: Type) -> Type => T",
+        "Wrapped(T: Type) -> Type => Same(T)",
     );
     let repaid = base.replace(
         "Wrapped(Option(Chain)), Nat)",
@@ -375,7 +375,7 @@ use /std/Bool/{Holds};
 
 pub struct Positive: pub Type { n: Nat, ok: Holds(0 < n) }
 
-pub let n_of(p: Positive) -> Nat = p.n;
+pub let n_of(p: Positive) -> Nat => p.n;
 
 pub let unrelated: Nat = 7;
 ";
@@ -406,7 +406,7 @@ pub induct Held(A: Type): pub Type
 | held(w: Wrap(A))
 end
 
-pub let reader(@A: Type, h: Held(A)) -> Held(A) = h;
+pub let reader(@A: Type, h: Held(A)) -> Held(A) => h;
 
 pub let unrelated: Nat = 7;
 ";
@@ -434,14 +434,14 @@ fn a_witness_declared_where_none_stood_reaches_the_declaration_that_asked() {
 
 pub struct Box(A: Type): pub Type { value: A }
 
-pub let make(n: Nat) -> Box(Nat) = Box { value = n };
+pub let make(n: Nat) -> Box(Nat) => Box { value = n };
 
 pub let boxed: Box(Nat) = make(1);
 
 pub let unrelated: Nat = 7;
 ";
     let witnessed = fill!(
-        "${base}\nsatisfy Monad(Box) { pure(@_, a) = Box { value = a }, bind(@_, @_, m, f) = f(m.value) }\n",
+        "${base}\nsatisfy Monad(Box) { pure(@_, a) => Box { value = a }, bind(@_, @_, m, f) => f(m.value) }\n",
         base
     );
     let baseline = unit_of(base);

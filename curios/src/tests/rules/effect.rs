@@ -19,7 +19,7 @@ fn an_effectful_scrutinee_is_not_a_value() {
         r#"
         use /std/{Box, Eq, Bool, Str};
 
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let c = Box/new(true)!;
             let read = Box/get(c)!;
 
@@ -56,7 +56,7 @@ fn an_effect_behind_a_stuck_head_is_not_an_argument() {
         r#"
         use /std/{Box, Eq, Bool, Str};
 
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             /std/print(
                 ((f : (Bool) -> Bool,
                   g : (Bool) -> Bool,
@@ -65,7 +65,7 @@ fn an_effect_behind_a_stuck_head_is_not_an_argument() {
                     let read = true;
                     match f(read)
                     | true =>
-                        let step(p : Eq()(g(read), true)) -> Str =
+                        let step(p : Eq()(g(read), true)) -> Str =>
                             let done = Box/change(c, (_: Bool) => (false, ()));
                             match g(read)
                             | true => "second read true"
@@ -96,7 +96,7 @@ fn an_effect_cannot_inhabit_a_pure_arrow() {
         use /std/{Box, Eq, Bool, Str};
         use /std/Bool/{False};
 
-        let forge(f : (Bool) -> Bool, c : Box(Bool), p : Eq()(f(true), true)) -> Str =
+        let forge(f : (Bool) -> Bool, c : Box(Bool), p : Eq()(f(true), true)) -> Str =>
             let done = Box/change(c, (_: Bool) => (false, ()));
             match f(true)
             | false =>
@@ -105,7 +105,7 @@ fn an_effect_cannot_inhabit_a_pure_arrow() {
             | true => "no contradiction"
             end;
 
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             /std/print(
                 ((c : Box(Bool)) =>
                     ((f : (Bool) -> Bool) =>
@@ -144,7 +144,7 @@ fn a_description_is_no_empty_type() {
 
         induct Empty : pub Type end
 
-        let boom(e : Empty) -> False =
+        let boom(e : Empty) -> False =>
             match e end;
 
         /std/print("ok")
@@ -170,10 +170,10 @@ fn a_description_is_no_record() {
 
         induct Empty : pub Type end
 
-        let absurd(e : Empty) -> False =
+        let absurd(e : Empty) -> False =>
             match e end;
 
-        let boom(r : {Empty, Empty}) -> False =
+        let boom(r : {Empty, Empty}) -> False =>
             absurd(r.0);
 
         /std/print("ok")
@@ -203,15 +203,15 @@ fn a_description_cannot_be_carried_out_of_its_monad() {
         struct Box(A : Type) : pub Type { held : A }
 
         satisfy Monad(Box) {
-            pure(@_, a) = Box { a },
-            bind(@_, @_, m, f) = f(m.held),
+            pure(@_, a) => Box { a },
+            bind(@_, @_, m, f) => f(m.held),
         }
 
         satisfy Monad/Lift(Box, Box) {
-            lift(@_, m) = Box { m.held },
+            lift(@_, m) => Box { m.held },
         }
 
-        let carried(@A : Type, a : Box(A)) -> Box(A) =
+        let carried(@A : Type, a : Box(A)) -> Box(A) =>
             Monad/lift(a);
 
         let boom = carried;
@@ -221,9 +221,9 @@ fn a_description_cannot_be_carried_out_of_its_monad() {
         b"ok",
     )
     .refused(&[
-        ("satisfy Monad/Lift(Box, Box) {\n            lift(@_, m) = Box { m.held },", "satisfy Monad/Lift(Io, Box) {\n            lift(@_, m) = Box { m },"),
+        ("satisfy Monad/Lift(Box, Box) {\n            lift(@_, m) => Box { m.held },", "satisfy Monad/Lift(Io, Box) {\n            lift(@_, m) => Box { m },"),
         ("a : Box(A)) -> Box(A)", "a : Io(A)) -> Box(A)"),
-        ("let boom = carried;", "let boom() -> False =\n            match carried(Proc/exit(@Empty, 1)).held end;"),
+        ("let boom = carried;", "let boom() -> False =>\n            match carried(Proc/exit(@Empty, 1)).held end;"),
     ])
     .by_elaborator_in("/witness~/std/Monad/Lift(Io, /Box)", |error| {
         matches!(error, Error::TypeMismatch { inferred, expected, .. } if pinned(inferred) == "Io(x0)" && pinned(expected) == "x0")
@@ -263,9 +263,9 @@ fn a_description_is_taken_apart_by_no_elimination() {
         | mk(a: A)
         end
 
-        pub let matched(io: Wrap(False)) -> False = match io | mk(a) => a end;
-        pub let projected(io: {False, False}) -> False = io.0;
-        pub let split(io: Bool) -> Bool = match io | true => true | false => false end;
+        pub let matched(io: Wrap(False)) -> False => match io | mk(a) => a end;
+        pub let projected(io: {False, False}) -> False => io.0;
+        pub let split(io: Bool) -> Bool => match io | true => true | false => false end;
 
         /std/print("ok")
         "#,

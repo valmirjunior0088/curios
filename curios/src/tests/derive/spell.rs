@@ -10,7 +10,7 @@ fn an_enumeration_spells_as_its_constructor_paths() {
         use /std/{Str, Spell, print};
         induct Color: pub Type | red() | green() end
         satisfy Spell(Color) { .. }
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let _ = print(Spell/spell(Color/red()))!;
             let _ = print("\n")!;
             print(Spell/spell(Color/green()));
@@ -27,7 +27,7 @@ fn payloads_spell_through_their_own_witnesses() {
         use /std/{Nat, Str, Bool, List, Spell, print};
         induct Shape: pub Type | dot(Nat) | tag(Str, Bool) | many(List(Nat)) end
         satisfy Spell(Shape) { .. }
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let _ = print(Spell/spell(Shape/dot(1)))!;
             let _ = print("\n")!;
             let _ = print(Spell/spell(Shape/tag("a\n", true)))!;
@@ -48,8 +48,8 @@ fn a_parameterized_family_spells_under_its_premise() {
     let source = r#"
         use /std/{Nat, Str, Spell, print};
         induct Box(A: Type): pub Type | boxed(A) end
-        satisfy (@A: Type, use Spell(A)) => Spell(Box(A)) { .. }
-        let entry() -> /std/Io({}) =
+        satisfy (@A: Type, use Spell(A)) -> Spell(Box(A)) { .. }
+        let entry() -> /std/Io({}) =>
             let _ = print(Spell/spell(Box/boxed(3)))!;
             let _ = print("\n")!;
             print(Spell/spell(Box/boxed(Box/boxed("x"))));
@@ -66,7 +66,7 @@ fn a_recursive_family_spells_through_its_own_entry_and_re_parses() {
         use /std/{Nat, Str, Spell, print};
         induct Tree: pub Type | leaf(Nat) | node(Tree, Tree) end
         satisfy Spell(Tree) { .. }
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let built = Tree/node(Tree/leaf(1), Tree/node(Tree/leaf(2), Tree/leaf(3)));
             let written: Tree = Tree/node(Tree/leaf(1), Tree/node(Tree/leaf(2), Tree/leaf(3)));
             let _ = print(Spell/spell(built))!;
@@ -106,7 +106,7 @@ fn a_struct_spells_as_its_literal() {
         struct Meters: pub Type { Nat }
         satisfy Spell(Point) { .. }
         satisfy Spell(Meters) { .. }
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let _ = print(Spell/spell(Point { x = 1, y = 2 }))!;
             let _ = print("\n")!;
             print(Spell/spell(Meters { 5 }));
@@ -150,7 +150,7 @@ fn an_indexed_family_spells_each_constructor() {
         | nil(): (0)
         | cons(@n: Nat, head: T, tail: Vec(T)(n)): (n + 1)
         end
-        satisfy (@T: Type, @n: Nat, use Spell(T)) => Spell(Vec(T)(n)) { .. }
+        satisfy (@T: Type, @n: Nat, use Spell(T)) -> Spell(Vec(T)(n)) { .. }
         print(Spell/spell(Vec/cons(1, Vec/cons(2, Vec/nil()))))
         "#;
 
@@ -163,7 +163,7 @@ fn the_renderers_spell_a_call_and_a_record() {
     let source = r#"
         use /std/{Str, print};
         use /std/Spell/{call, record};
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let _ = print(call("/Tree/leaf", []))!;
             let _ = print("\n")!;
             let _ = print(call("/Tree/node", ["1", "/Tree/leaf()"]))!;
@@ -187,7 +187,7 @@ fn the_renderers_spell_a_call_and_a_record() {
 fn a_tuple_spells_as_its_literal() {
     let source = r#"
         use /std/{Nat, Bool, Str, Spell, print};
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let _ = print(Spell/spell(()))!;
             let _ = print("\n")!;
             let _ = print(Spell/spell((1,)))!;

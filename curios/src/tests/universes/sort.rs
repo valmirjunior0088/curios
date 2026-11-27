@@ -8,7 +8,7 @@ fn one_definition_serves_a_number_and_a_proof() {
     let source = r#"
         use /std/{Nat};
         use /std/Bool/{True};
-        let keep(@A: Sort, a: A) -> A = a;
+        let keep(@A: Sort, a: A) -> A => a;
         let proof: True = keep(True/qed());
         /std/print(Nat/to_str(keep(41) + 1))
         "#;
@@ -21,9 +21,9 @@ fn one_definition_serves_a_number_and_a_proof() {
 fn each_written_sort_is_a_parameter_of_its_declaration() {
     let source = r#"
         use /std/{Nat};
-        let none(@A: Type, a: A) -> A = a;
-        let one(@A: Sort, a: A) -> A = a;
-        let two(@A: Sort, @B: Sort, a: A, b: B) -> A = a;
+        let none(@A: Type, a: A) -> A => a;
+        let one(@A: Sort, a: A) -> A => a;
+        let two(@A: Sort, @B: Sort, a: A, b: B) -> A => a;
         /std/print("")
         "#;
     let sorts = sort_parameters(source);
@@ -38,7 +38,7 @@ fn each_written_sort_is_a_parameter_of_its_declaration() {
 fn two_written_sorts_a_declaration_identifies_are_one_parameter() {
     let source = r#"
         use /std/{Nat, Eq};
-        let cast(@A: Sort, @B: Sort, e: Eq()(A, B), a: A) -> B = match e | refl() => a end;
+        let cast(@A: Sort, @B: Sort, e: Eq()(A, B), a: A) -> B => match e | refl() => a end;
         /std/print(Nat/to_str(cast(Eq/refl(), 5)))
         "#;
 
@@ -58,7 +58,7 @@ fn a_family_over_a_sort_holds_a_number_and_a_proof() {
         end
         struct Kept(A: Sort): pub Type { value: A }
         let found: Maybe(True) = Maybe/some(True/qed());
-        let count(m: Maybe(True)) -> Nat = match m | some(_) => 1 | none() => 0 end;
+        let count(m: Maybe(True)) -> Nat => match m | some(_) => 1 | none() => 0 end;
         let number: Kept(Nat) = Kept { value = 41 };
         let proof: Kept(True) = Kept { value = True/qed() };
         /std/print(Nat/to_str(number.value + count(found)))
@@ -73,9 +73,9 @@ fn a_predicate_into_a_sort_serves_data_and_proofs() {
     let source = r#"
         use /std/{Nat, Eq, proved};
         use /std/Bool/{True, False, Holds};
-        let carry(@A: Type, @x: A, @y: A, P: (A) -> Sort, p: Eq()(x, y), v: P(x)) -> P(y) =
+        let carry(@A: Type, @x: A, @y: A, P: (A) -> Sort, p: Eq()(x, y), v: P(x)) -> P(y) =>
             match p | refl() => v end;
-        let none_below(m: Nat, k: Nat, below: Holds(m < k), within: Holds(k <= 0)) -> False =
+        let none_below(m: Nat, k: Nat, below: Holds(m < k), within: Holds(k <= 0)) -> False =>
             proved();
         let down(
             @S: Type,
@@ -83,8 +83,8 @@ fn a_predicate_into_a_sort_serves_data_and_proofs() {
             P: (S) -> Sort,
             step: (s: S, ih: (t: S, r: Holds(measure(t) < measure(s))) -> P(t)) -> P(s),
             s: S,
-        ) -> P(s) =
-            let go(k: Nat, s: S, within: Holds(measure(s) <= k)) -> P(s) =
+        ) -> P(s) =>
+            let go(k: Nat, s: S, within: Holds(measure(s) <= k)) -> P(s) =>
                 match k
                 | 0 => step(s, (t, r) => match none_below(measure(t), measure(s), r, within) end)
                 | kp + 1 => step(s, (t, r) => go(kp, t, proved()))
@@ -108,7 +108,7 @@ fn a_recursive_definition_leaves_a_sort_to_its_caller() {
     let source = r#"
         use /std/{Nat};
         use /std/Bool/{True};
-        let after(@A: Sort, n: Nat, a: A) -> A =
+        let after(@A: Sort, n: Nat, a: A) -> A =>
             match n
             | 0 => a
             | m + 1 => after(m, a)
@@ -130,12 +130,12 @@ fn a_call_at_one_sort_nests_in_a_call_at_the_other() {
         | some(A)
         | none()
         end
-        let map(@A: Sort, @B: Sort, m: Maybe(A), f: (A) -> B) -> Maybe(B) =
+        let map(@A: Sort, @B: Sort, m: Maybe(A), f: (A) -> B) -> Maybe(B) =>
             match m | some(a) => Maybe/some(f(a)) | none() => Maybe/none() end;
-        let or(@A: Sort, m: Maybe(A), default: A) -> A =
+        let or(@A: Sort, m: Maybe(A), default: A) -> A =>
             match m | some(a) => a | none() => default end;
-        let count(found: Maybe(True)) -> Nat = or(map(found, (p) => 41), 0);
-        let proof(found: Maybe(Nat)) -> True = or(map(found, (n) => True/qed()), True/qed());
+        let count(found: Maybe(True)) -> Nat => or(map(found, (p) => 41), 0);
+        let proof(found: Maybe(Nat)) -> True => or(map(found, (n) => True/qed()), True/qed());
         let held: True = proof(Maybe/some(1));
         /std/print(Nat/to_str(count(Maybe/some(True/qed())) + 1))
         "#;
@@ -148,7 +148,7 @@ fn a_call_at_one_sort_nests_in_a_call_at_the_other() {
 fn a_sort_its_declaration_decides_is_refused_with_what_it_is() {
     let a_type = error(
         r#"
-        let f(A: Sort) -> Type = A;
+        let f(A: Sort) -> Type => A;
         /std/print("")
         "#,
     );
@@ -164,7 +164,7 @@ fn a_sort_its_declaration_decides_is_refused_with_what_it_is() {
         | a()
         | b()
         end
-        let pick(@A: Sort, t: Two, x: A, y: A) -> A = match t | a() => x | b() => y end;
+        let pick(@A: Sort, t: Two, x: A, y: A) -> A => match t | a() => x | b() => y end;
         /std/print("")
         "#,
     );
@@ -180,31 +180,31 @@ fn a_sort_two_terms_decide_apart_is_refused_as_decided_twice() {
     for (rule, declaration, here, there) in [
         (
             "two arms of a match",
-            "pub let F(c: Bool) -> Sort = match c | true => Two | false => Nat end;",
+            "pub let F(c: Bool) -> Sort => match c | true => Two | false => Nat end;",
             "Prop",
             "Type",
         ),
         (
             "two explicit arguments",
-            "pub let both(A: Sort) -> Nat = at_type(A) + at_prop(A);",
+            "pub let both(A: Sort) -> Nat => at_type(A) + at_prop(A);",
             "Prop",
             "Type",
         ),
         (
             "two implicit arguments",
-            "pub let both(@A: Sort, x: A) -> Nat = takes(x) + proves(x);",
+            "pub let both(@A: Sort, x: A) -> Nat => takes(x) + proves(x);",
             "Prop",
             "Type",
         ),
         (
             "a use at a type, then a match on a proposition",
-            "pub let pick(@A: Sort, t: Two, x: A, y: A) -> A = after(takes(x), match t | a() => x | b() => y end);",
+            "pub let pick(@A: Sort, t: Two, x: A, y: A) -> A => after(takes(x), match t | a() => x | b() => y end);",
             "Prop",
             "Type",
         ),
         (
             "a match on a proposition, then a use at a type",
-            "pub let pick(@A: Sort, t: Two, x: A, y: A) -> Nat = let z: A = match t | a() => x | b() => y end; takes(z);",
+            "pub let pick(@A: Sort, t: Two, x: A, y: A) -> Nat => let z: A = match t | a() => x | b() => y end; takes(z);",
             "Type",
             "Prop",
         ),
@@ -216,11 +216,11 @@ fn a_sort_two_terms_decide_apart_is_refused_as_decided_twice() {
             | a()
             | b()
             end
-            let at_type(B: Type) -> Nat = 0;
-            let at_prop(P: Prop) -> Nat = 0;
-            let takes(@B: Type, b: B) -> Nat = 0;
-            let proves(@P: Prop, p: P) -> Nat = 0;
-            let after(@B: Sort, n: Nat, b: B) -> B = b;
+            let at_type(B: Type) -> Nat => 0;
+            let at_prop(P: Prop) -> Nat => 0;
+            let takes(@B: Type, b: B) -> Nat => 0;
+            let proves(@P: Prop, p: P) -> Nat => 0;
+            let after(@B: Sort, n: Nat, b: B) -> B => b;
             ${declaration}
             /std/print("")
             "#,
@@ -239,9 +239,9 @@ fn a_sort_two_terms_decide_apart_is_refused_as_decided_twice() {
     let report = error(
         r#"
         use /std/{Nat, Bool};
-        let at_type(B: Type) -> Nat = 0;
-        let at_prop(P: Prop) -> Nat = 0;
-        pub let both(A: Sort) -> Nat = at_type(A) + at_prop(A);
+        let at_type(B: Type) -> Nat => 0;
+        let at_prop(P: Prop) -> Nat => 0;
+        pub let both(A: Sort) -> Nat => at_type(A) + at_prop(A);
         /std/print("")
         "#,
     );
@@ -275,8 +275,8 @@ fn a_sort_is_written_where_a_caller_states_it() {
             "a local definition",
             r#"
             use /std/{Nat};
-            let f(n: Nat) -> Nat =
-                let id(@A: Sort, a: A) -> A = a;
+            let f(n: Nat) -> Nat =>
+                let id(@A: Sort, a: A) -> A => a;
                 id(n);
             /std/print("")
             "#,
@@ -332,7 +332,7 @@ fn a_sort_is_written_where_a_caller_states_it() {
 fn a_tuple_type_over_two_sorts_left_to_a_caller_is_refused() {
     let report = error(
         r#"
-        let both(@A: Sort, @B: Sort, a: A, b: B) -> {A, B} = (a, b);
+        let both(@A: Sort, @B: Sort, a: A, b: B) -> {A, B} => (a, b);
         /std/print("")
         "#,
     );
@@ -344,7 +344,7 @@ fn a_tuple_type_over_two_sorts_left_to_a_caller_is_refused() {
     // Over one sort left to a caller and a type, the tuple is a type whatever the caller states.
     let one_sort = r#"
         use /std/{Nat};
-        let beside(@A: Sort, a: A, n: Nat) -> {A, Nat} = (a, n);
+        let beside(@A: Sort, a: A, n: Nat) -> {A, Nat} => (a, n);
         /std/print(Nat/to_str(beside(1, 41).1 + 1))
         "#;
     assert_eq!(run(one_sort), b"42");
@@ -356,7 +356,7 @@ fn a_value_at_a_sort_left_to_a_caller_is_known_neither_proof_nor_data() {
     let not_irrelevant = error(
         r#"
         use /std/{Eq};
-        let same(@A: Sort, a: A, b: A) -> Eq()(a, b) = Eq/refl();
+        let same(@A: Sort, a: A, b: A) -> Eq()(a, b) => Eq/refl();
         /std/print("")
         "#,
     );
@@ -365,7 +365,7 @@ fn a_value_at_a_sort_left_to_a_caller_is_known_neither_proof_nor_data() {
     let partial = error(
         r#"
         use /std/{Nat};
-        let spin(@A: Sort, n: Nat) -> A = spin(n);
+        let spin(@A: Sort, n: Nat) -> A => spin(n);
         /std/print("")
         "#,
     );
@@ -379,7 +379,7 @@ fn a_declaration_leaves_a_bounded_number_of_sorts() {
         let nine(
             @A: Sort, @B: Sort, @C: Sort, @D: Sort, @E: Sort, @F: Sort, @G: Sort, @H: Sort, @I: Sort,
             a: A, b: B, c: C, d: D, e: E, f: F, g: G, h: H, i: I,
-        ) -> A = a;
+        ) -> A => a;
         /std/print("")
         "#;
     let report = error(nine);
@@ -389,7 +389,7 @@ fn a_declaration_leaves_a_bounded_number_of_sorts() {
         let eight(
             @A: Sort, @B: Sort, @C: Sort, @D: Sort, @E: Sort, @F: Sort, @G: Sort, @H: Sort,
             a: A, b: B, c: C, d: D, e: E, f: F, g: G, h: H,
-        ) -> A = a;
+        ) -> A => a;
         /std/print("")
         "#;
     assert_eq!(typecheck(eight), Ok(()));
@@ -404,7 +404,7 @@ fn the_library_holds_proofs_where_it_holds_data() {
         let proofs: List(True) = [True/qed(), True/qed()];
         let found: Option(True) = Option/some(True/qed());
         let same: Eq()(True/qed(), True/qed()) = Eq/refl();
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let _held = Box/new(True/qed())!;
             let count = match found | some(_) => 1 | none() => 0 end;
             /std/print(Nat/to_str(List/length(proofs) + count));

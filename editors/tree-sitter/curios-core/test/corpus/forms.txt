@@ -73,7 +73,7 @@ end
 let /p : Prop =
     #{node = InductType}
     /Holds();
-test /held = 1;
+test /held => 1;
 /p
 : Prop
 

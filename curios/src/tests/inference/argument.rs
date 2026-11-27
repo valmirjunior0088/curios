@@ -8,7 +8,7 @@ fn a_lambda_in_the_wrong_position_names_the_parameter_it_filled_and_the_one_it_f
     let report = error(
         r#"
         use /std/{Nat, List};
-        let bump(xs: List(Nat)) -> List(Nat) = List/map((x) => x + 1, xs);
+        let bump(xs: List(Nat)) -> List(Nat) => List/map((x) => x + 1, xs);
         /std/print("ok")
         "#,
     );
@@ -25,7 +25,7 @@ fn an_implicit_lambda_before_any_plain_argument_is_named_among_the_implicit_ones
     let report = error(
         r#"
         use /std/{Nat};
-        let f(@n: Nat, k: (Nat) -> Nat) -> Nat = k(n);
+        let f(@n: Nat, k: (Nat) -> Nat) -> Nat => k(n);
         let g: Nat = f(@(x) => x, (y) => y);
         /std/print("unreachable")
         "#,
@@ -42,7 +42,7 @@ fn an_implicit_lambda_after_a_plain_argument_is_not_named_by_the_plain_ones_posi
     let report = error(
         r#"
         use /std/{Nat};
-        let f(m: Nat, @n: Nat) -> Nat = m + n;
+        let f(m: Nat, @n: Nat) -> Nat => m + n;
         let g: Nat = f(1, @(x) => x);
         /std/print("unreachable")
         "#,
@@ -59,7 +59,7 @@ fn a_mismatched_implicit_argument_before_any_plain_one_is_refused_as_a_mismatch(
     let report = error(
         r#"
         use /std/{Nat};
-        let f(@n: Nat) -> Nat = n;
+        let f(@n: Nat) -> Nat => n;
         let g: Nat = f(@true);
         /std/print("unreachable")
         "#,
@@ -76,7 +76,7 @@ fn a_use_lambda_is_named_among_the_use_arguments_without_a_parameter_name() {
     let report = error(
         r#"
         use /std/{Nat, Show};
-        let f(use Show(Nat), m: Nat) -> Nat = m;
+        let f(use Show(Nat), m: Nat) -> Nat => m;
         let g: Nat = f(use (x) => x, 1);
         /std/print("unreachable")
         "#,
@@ -110,8 +110,8 @@ fn a_missing_witness_after_a_written_one_is_named_by_its_own_position() {
         r#"
         use /std/{Nat, Show, Str};
         struct Foo: Type { Nat }
-        let f(use Show(Nat), use Show(Foo)) -> Nat = 0;
-        let mine: Show(Nat) = Show { show(_n) = "n" };
+        let f(use Show(Nat), use Show(Foo)) -> Nat => 0;
+        let mine: Show(Nat) = Show { show(_n) => "n" };
         let g: Nat = f(use mine);
         /std/print("unreachable")
         "#,
@@ -128,7 +128,7 @@ fn an_operators_undischarged_bound_names_the_operator_and_what_establishes_it() 
     let report = error(
         r#"
         use /std/{Nat};
-        let halve(n: Nat) -> Nat = 7 / n;
+        let halve(n: Nat) -> Nat => 7 / n;
         /std/print("unreachable")
         "#,
     );
@@ -151,7 +151,7 @@ fn a_witness_telescopes_undischarged_bound_names_the_witness() {
         use /std/{Nat, Str, Show};
         use /std/Bool/{Holds};
         struct Small(n: Nat): pub Type { Nat }
-        satisfy (@n: Nat, @ok: Holds(n < 2)) => Show(Small(n)) { show(_s) = "small" }
+        satisfy (@n: Nat, @ok: Holds(n < 2)) -> Show(Small(n)) { show(_s) => "small" }
         let s: Str = Show/show(Small(3) { 0 });
         /std/print("unreachable")
         "#,
@@ -171,8 +171,8 @@ fn a_witness_telescopes_undischarged_bound_names_the_witness() {
 fn a_mismatched_argument_names_the_parameter_it_was_checked_as() {
     let report = error(
         r#"
-        let pair(n: /std/Nat, s: /std/Str) -> /std/Nat = n;
-        let bad() -> /std/Nat = pair(1, 2);
+        let pair(n: /std/Nat, s: /std/Str) -> /std/Nat => n;
+        let bad() -> /std/Nat => pair(1, 2);
         /std/print("no")
         "#,
     );
@@ -187,8 +187,8 @@ fn a_mismatched_argument_names_the_parameter_it_was_checked_as() {
 fn a_mismatch_in_an_arm_of_an_argument_names_the_parameter() {
     let report = error(
         r#"
-        let pair(n: /std/Nat, s: /std/Str) -> /std/Nat = n;
-        let bad(b: /std/Bool) -> /std/Nat = pair(1, match b | true => "yes" | false => 2 end);
+        let pair(n: /std/Nat, s: /std/Str) -> /std/Nat => n;
+        let bad(b: /std/Bool) -> /std/Nat => pair(1, match b | true => "yes" | false => 2 end);
         /std/print("no")
         "#,
     );
@@ -204,7 +204,7 @@ fn a_mismatched_field_or_operand_names_its_slot() {
     let field = error(
         r#"
         struct Point: pub Type { x: /std/Nat, y: /std/Nat }
-        let bad() -> Point = Point { x = 1, y = "two" };
+        let bad() -> Point => Point { x = 1, y = "two" };
         /std/print("no")
         "#,
     );
@@ -216,7 +216,7 @@ fn a_mismatched_field_or_operand_names_its_slot() {
     let operand = error(
         r#"
         use /std/{Nat};
-        let bad(n: Nat) -> Nat = n + "two";
+        let bad(n: Nat) -> Nat => n + "two";
         /std/print("no")
         "#,
     );
@@ -231,8 +231,8 @@ fn a_mismatched_field_or_operand_names_its_slot() {
 fn an_argument_checked_after_it_waited_names_the_parameter() {
     let report = error(
         r#"
-        let pick(@F: (Type) -> Type, a: F(/std/Nat), k: (X: Type) -> F(X)) -> F(/std/Nat) = a;
-        let bad() -> Type = pick(true, (X) => X);
+        let pick(@F: (Type) -> Type, a: F(/std/Nat), k: (X: Type) -> F(X)) -> F(/std/Nat) => a;
+        let bad() -> Type => pick(true, (X) => X);
         /std/print("no")
         "#,
     );
@@ -247,8 +247,8 @@ fn an_argument_checked_after_it_waited_names_the_parameter() {
 fn a_mismatch_in_a_lambdas_body_names_no_parameter() {
     let report = error(
         r#"
-        let apply(f: (/std/Nat) -> /std/Nat, n: /std/Nat) -> /std/Nat = f(n);
-        let bad() -> /std/Nat = apply((x) => "s", 1);
+        let apply(f: (/std/Nat) -> /std/Nat, n: /std/Nat) -> /std/Nat => f(n);
+        let bad() -> /std/Nat => apply((x) => "s", 1);
         /std/print("no")
         "#,
     );

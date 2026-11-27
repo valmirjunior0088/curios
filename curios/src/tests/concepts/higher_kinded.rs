@@ -20,7 +20,7 @@ fn written_higher_kinded_argument_resolves_the_witness() {
     let source = r#"
         use /std/{Monad};
         use /std/{Nat, Str, Option};
-        pub let lift(@M : (Type) -> Type, use Monad(M), seed : Nat) -> M(Nat) =
+        pub let lift(@M : (Type) -> Type, use Monad(M), seed : Nat) -> M(Nat) =>
             Monad/pure(seed);
         let o : Option(Nat) = lift(@Option, 7);
         /std/print(Nat/to_str(Option/unwrap_or(o, 0)))
@@ -35,7 +35,7 @@ fn written_hidden_argument_after_an_explicit_slot_resolves() {
     let source = r#"
         use /std/{Monad};
         use /std/{Nat, Str, Option};
-        pub let lift2(seed : Nat, @M : (Type) -> Type, use Monad(M)) -> M(Nat) =
+        pub let lift2(seed : Nat, @M : (Type) -> Type, use Monad(M)) -> M(Nat) =>
             Monad/pure(seed);
         let o : Option(Nat) = lift2(7, @Option);
         /std/print(Nat/to_str(Option/unwrap_or(o, 0)))
@@ -54,10 +54,10 @@ fn written_type_lambda_argument_resolves_the_witness() {
             A
         }
         satisfy Monad(Box) {
-            pure(x) = Box { x },
-            bind(m, f) = f(m.0)
+            pure(x) => Box { x },
+            bind(m, f) => f(m.0)
         }
-        pub let lift(@M : (Type) -> Type, use Monad(M), seed : Nat) -> M(Nat) =
+        pub let lift(@M : (Type) -> Type, use Monad(M), seed : Nat) -> M(Nat) =>
             Monad/pure(seed);
         let b : Box(Nat) = lift(@((A : Type) => Box(A)), 3);
         /std/print(Nat/to_str(b.0))
@@ -72,7 +72,7 @@ fn bare_generic_reference_resolves_toward_a_rigid_expectation() {
     let source = r#"
         use /std/{Monad};
         use /std/{Nat, Str, Option};
-        pub let mk(@M : (Type) -> Type, use Monad(M)) -> M(Nat) =
+        pub let mk(@M : (Type) -> Type, use Monad(M)) -> M(Nat) =>
             Monad/pure(5);
         let z : Option(Nat) = mk;
         /std/print(Nat/to_str(Option/unwrap_or(z, 0)))
@@ -102,18 +102,18 @@ fn a_witness_keys_through_a_partially_applied_family() {
         induct Box(S : Type, A : Type) : Type
         | wrap(A)
         end
-        satisfy (@S : Type) => Monad((A : Type) => Box(S, A)) {
-            pure(@A, a) = Box/wrap(a),
-            bind(@A, @B, m, f) =
+        satisfy (@S : Type) -> Monad((A : Type) => Box(S, A)) {
+            pure(@A, a) => Box/wrap(a),
+            bind(@A, @B, m, f) =>
                 match m
                 | wrap(a) => f(a)
                 end,
         }
-        let unwrap(@S : Type, @A : Type, m : Box(S, A)) -> A =
+        let unwrap(@S : Type, @A : Type, m : Box(S, A)) -> A =>
             match m
             | wrap(a) => a
             end;
-        let doubled(@M : (Type) -> Type, use Monad(M), m : M(Nat)) -> M(Nat) =
+        let doubled(@M : (Type) -> Type, use Monad(M), m : M(Nat)) -> M(Nat) =>
             Monad/bind(m, (n) => Monad/pure(Nat/add(n, n)));
         let boxed : Box(Str, Nat) = Box/wrap(21);
         /std/print(Nat/to_str(unwrap(doubled(@(A : Type) => Box(Str, A), boxed))))

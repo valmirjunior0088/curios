@@ -7,12 +7,12 @@ use {crate::test_support::*, curios_common::fill};
 fn a_bool_is_taken_apart_by_its_numerals() {
     let source = r#"
         use /std/{Bool, Eq, List, Nat, Str};
-        let bit(b: Bool) -> Nat = match b | 0 => 0 | 1 => 1 end;
-        let mixed(b: Bool) -> Nat = match b | 0 => 10 | true => 11 end;
-        let both(b: Bool, c: Bool) -> Nat = match (b, c) | (0, 0) => 1 | (_, 1) => 2 | (1, 0) => 3 end;
-        let T(c: Bool) -> Type = match c | true => Nat | false => Str end;
-        let pick(b: Bool, c: Bool) -> T(c) = match (b, c) | (0, 0) => "zero" | (_, 1) => 7 | (1, 0) => "one" end;
-        let known(b: Bool) -> Eq()(b, Bool/not(Bool/not(b))) = match b | 0 => Eq/refl() | 1 => Eq/refl() end;
+        let bit(b: Bool) -> Nat => match b | 0 => 0 | 1 => 1 end;
+        let mixed(b: Bool) -> Nat => match b | 0 => 10 | true => 11 end;
+        let both(b: Bool, c: Bool) -> Nat => match (b, c) | (0, 0) => 1 | (_, 1) => 2 | (1, 0) => 3 end;
+        let T(c: Bool) -> Type => match c | true => Nat | false => Str end;
+        let pick(b: Bool, c: Bool) -> T(c) => match (b, c) | (0, 0) => "zero" | (_, 1) => 7 | (1, 0) => "one" end;
+        let known(b: Bool) -> Eq()(b, Bool/not(Bool/not(b))) => match b | 0 => Eq/refl() | 1 => Eq/refl() end;
         let () = /std/print(Str/join(" ", List/map([bit(false), bit(true), mixed(false), mixed(true), both(false, false), both(false, true), both(true, true), both(true, false)], Nat/to_str)))!;
         /std/print(Str/join(" ", ["", pick(false, false), Nat/to_str(pick(false, true)), pick(true, false)]))
         "#;
@@ -25,27 +25,27 @@ fn a_bool_is_taken_apart_by_its_numerals() {
 fn a_numeral_pattern_is_refused_where_its_column_has_no_value_it_spells() {
     for (declaration, refusal) in [
         (
-            "let f(n: Nat) -> Nat = match n | +1 => 1 | _ => 0 end;",
+            "let f(n: Nat) -> Nat => match n | +1 => 1 | _ => 0 end;",
             "`+1` takes an `Int` apart by its value",
         ),
         (
-            "let f(b: Byte) -> Nat = match b | -1 => 1 | _ => 0 end;",
+            "let f(b: Byte) -> Nat => match b | -1 => 1 | _ => 0 end;",
             "`-1` takes an `Int` apart by its value",
         ),
         (
-            "let f(b: Bool) -> Nat = match b | +1 => 1 | _ => 0 end;",
+            "let f(b: Bool) -> Nat => match b | +1 => 1 | _ => 0 end;",
             "`+1` takes an `Int` apart by its value",
         ),
         (
-            "let f(b: Bool) -> Nat = match b | 0 => 0 | 2 => 1 | _ => 2 end;",
+            "let f(b: Bool) -> Nat => match b | 0 => 0 | 2 => 1 | _ => 2 end;",
             "`2` is no `Bool`",
         ),
         (
-            "let f(b: Bool) -> Nat = match b | 'a' => 1 | _ => 0 end;",
+            "let f(b: Bool) -> Nat => match b | 'a' => 1 | _ => 0 end;",
             "takes a `Nat`, a `Byte` or a `Char` apart",
         ),
         (
-            "let f(b: Bool) -> Nat = match b | 0 => 0 | p + 1 => 1 end;",
+            "let f(b: Bool) -> Nat => match b | 0 => 0 | p + 1 => 1 end;",
             "`p + 1` takes a `Nat` apart by its predecessor",
         ),
     ] {
@@ -69,11 +69,11 @@ fn a_numeral_pattern_is_refused_where_its_column_has_no_value_it_spells() {
 fn an_int_is_taken_apart_by_its_signed_keys() {
     let source = r#"
         use /std/{Eq, Int, List, Nat, Str};
-        let name(i: Int) -> Str = match i | -1 => "minus one" | +0 => "zero" | +2 => "two" | _ => "other" end;
-        let at(i: Int, @same: Eq()(i, -1)) -> Nat = 1;
-        let known(i: Int) -> Nat = match i | -1 => at(i, @Eq/refl()) | _ => 0 end;
-        let need(i: Int, @ok: Int/NonZero(i)) -> Nat = Int/abs(i);
-        let past(i: Int) -> Nat = match i | +0 => 0 | _ => need(i) end;
+        let name(i: Int) -> Str => match i | -1 => "minus one" | +0 => "zero" | +2 => "two" | _ => "other" end;
+        let at(i: Int, @same: Eq()(i, -1)) -> Nat => 1;
+        let known(i: Int) -> Nat => match i | -1 => at(i, @Eq/refl()) | _ => 0 end;
+        let need(i: Int, @ok: Int/NonZero(i)) -> Nat => Int/abs(i);
+        let past(i: Int) -> Nat => match i | +0 => 0 | _ => need(i) end;
         let () = /std/print(Str/join(" ", List/map([-1, +0, +2, +7], name)))!;
         /std/print(Str/join(" ", ["", Nat/to_str(known(-1)), Nat/to_str(known(+3)), Nat/to_str(past(-5))]))
         "#;
@@ -86,27 +86,27 @@ fn an_int_is_taken_apart_by_its_signed_keys() {
 fn an_int_column_refuses_what_no_signed_key_spells() {
     for (declaration, refusal) in [
         (
-            "let f(i: Int) -> Nat = match i | 1 => 1 | _ => 0 end;",
+            "let f(i: Int) -> Nat => match i | 1 => 1 | _ => 0 end;",
             "write `+1`",
         ),
         (
-            "let f(i: Int) -> Nat = match i | 'a' => 1 | _ => 0 end;",
+            "let f(i: Int) -> Nat => match i | 'a' => 1 | _ => 0 end;",
             "write `+97`",
         ),
         (
-            "let f(i: Int) -> Nat = match i | p + 1 => 1 | _ => 0 end;",
+            "let f(i: Int) -> Nat => match i | p + 1 => 1 | _ => 0 end;",
             "`p + 1` takes a `Nat` apart by its predecessor",
         ),
         (
-            "let f(i: Int) -> Nat = match i | -1 => 1 | +3 => 2 | +3 => 3 | _ => 0 end;",
+            "let f(i: Int) -> Nat => match i | -1 => 1 | +3 => 2 | +3 => 3 | _ => 0 end;",
             "unreachable arm",
         ),
         (
-            "let f(i: Int) -> Nat = match i | -1 => 1 | +1 => 2 end;",
+            "let f(i: Int) -> Nat => match i | -1 => 1 | +1 => 2 end;",
             "no arm matches `+0`",
         ),
         (
-            "let f(i: Int) -> Nat = match i | +0 => 1 | +1 => 2 end;",
+            "let f(i: Int) -> Nat => match i | +0 => 1 | +1 => 2 end;",
             "no arm matches `-1`",
         ),
     ] {

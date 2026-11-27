@@ -15,7 +15,7 @@ pub induct Fmt: pub Type
 end
 
 --- The type of a function taking one argument per place in `f` — a `Show`-able one at a `%`, a `Spell`-able one at a `#` — and answering a `T`.
-pub let format_type_with(T: Type, f: Fmt) -> Type =
+pub let format_type_with(T: Type, f: Fmt) -> Type =>
     match f
     | nil() => T
     | lit(_, rest) => format_type_with(T, rest)
@@ -28,7 +28,7 @@ let Walk: Type =
     {Fmt, Str, Bool};
 
 --- `c` read where no backslash waits: a place closes the run before it, a backslash waits for what follows, and any other character joins the run.
-let plain(c: Char, read: Fmt, run: Str) -> Walk =
+let plain(c: Char, read: Fmt, run: Str) -> Walk =>
     match c
     | '%' => (Fmt/show(Fmt/lit(run, read)), "", false)
     | '#' => (Fmt/spell(Fmt/lit(run, read)), "", false)
@@ -37,7 +37,7 @@ let plain(c: Char, read: Fmt, run: Str) -> Walk =
     end;
 
 --- The walk one character on. After a backslash a place's character is the literal one, and any other character leaves the backslash a character of the run and is read as it stands.
-let step(c: Char, walk: Walk) -> Walk =
+let step(c: Char, walk: Walk) -> Walk =>
     let (read, run, escaped) = walk;
     match escaped
     | false => plain(c, read, run)
@@ -50,7 +50,7 @@ let step(c: Char, walk: Walk) -> Walk =
     end;
 
 --- `read`, a tree whose last piece comes first, turned around onto `rest`.
-let turned(read: Fmt, rest: Fmt) -> Fmt =
+let turned(read: Fmt, rest: Fmt) -> Fmt =>
     match read
     | nil() => rest
     | lit(piece, before) => turned(before, Fmt/lit(piece, rest))
@@ -60,7 +60,7 @@ let turned(read: Fmt, rest: Fmt) -> Fmt =
 
 -- A fold over the characters, so every piece is text because every character it is built from is, and the walk ends where the string does.
 --- The format `s` spells: `%` is a place an argument is shown at and `#` one it is spelled at; `\%` and `\#` are the literal characters, and a backslash before anything else is itself.
-pub let parse(s: Str) -> Fmt =
+pub let parse(s: Str) -> Fmt =>
     let start: Walk = (Fmt/nil(), "", false);
     let (read, run, escaped) = Str/fold(s, start, step);
     turned(
@@ -69,7 +69,7 @@ pub let parse(s: Str) -> Fmt =
             read),
         Fmt/nil());
 
-let go_with(T: Type, finish: (Str) -> T, f: Fmt, acc: Str) -> format_type_with(T, f) =
+let go_with(T: Type, finish: (Str) -> T, f: Fmt, acc: Str) -> format_type_with(T, f) =>
     match f
     | nil() => finish(acc)
     | lit(piece, rest) => go_with(T, finish, rest, Str/concat(acc, piece))
@@ -78,13 +78,13 @@ let go_with(T: Type, finish: (Str) -> T, f: Fmt, acc: Str) -> format_type_with(T
     end;
 
 --- The text of `s` with its places filled by the arguments that follow.
-pub let render(s: Str) -> format_type_with(Str, parse(s)) =
+pub let render(s: Str) -> format_type_with(Str, parse(s)) =>
     go_with(Str, (x) => x, parse(s), "");
 
 --- The text of `s` with its places filled, written to standard output.
-pub let print(s: Str) -> format_type_with(Io({}), parse(s)) =
+pub let print(s: Str) -> format_type_with(Io({}), parse(s)) =>
     go_with(Io({}), (x) => /std/print(x), parse(s), "");
 
 --- The text of `s` with its places filled, written to standard error.
-pub let print_err(s: Str) -> format_type_with(Io({}), parse(s)) =
+pub let print_err(s: Str) -> format_type_with(Io({}), parse(s)) =>
     go_with(Io({}), (x) => /std/print_err(x), parse(s), "");

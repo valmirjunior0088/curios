@@ -2,6 +2,6 @@
 pub mod Nat
     pub use /sys/{let Nat};
 
-    pub let NonZero(n: Nat) -> Prop =
+    pub let NonZero(n: Nat) -> Prop =>
         /sys/Bool/True;
 end

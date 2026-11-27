@@ -8,7 +8,7 @@ fn slice_proof_aligns_with_byte_walk() {
     let source = r#"
         use /std/{Byte, Bytes, Nat, Bool, Io, Try, Proc};
 
-        let in_range(c : Nat, lo : Nat, hi : Nat) -> Bool =
+        let in_range(c : Nat, lo : Nat, hi : Nat) -> Bool =>
             match Nat/ge(c, lo)
             | true => Nat/le(c, hi)
             | false => false
@@ -20,7 +20,7 @@ fn slice_proof_aligns_with_byte_walk() {
         | bad()
         end
 
-        let classify(c : Nat) -> Scan =
+        let classify(c : Nat) -> Scan =>
             match in_range(c, 0, 127)
             | true => Scan/lead()
             | false =>
@@ -30,7 +30,7 @@ fn slice_proof_aligns_with_byte_walk() {
                 end
             end;
 
-        let step(c : Nat, s : Scan) -> Scan =
+        let step(c : Nat, s : Scan) -> Scan =>
             match s
             | bad() => Scan/bad()
             | cont(rem, lo, hi) =>
@@ -51,9 +51,9 @@ fn slice_proof_aligns_with_byte_walk() {
             : (st, 0x[c, ..t])
         end
 
-        let Valid(b : Bytes) -> Type = Utf8(Scan/lead(), b);
+        let Valid(b : Bytes) -> Type => Utf8(Scan/lead(), b);
 
-        let to_lead_bytes(s : Scan, b : Bytes) -> Bytes =
+        let to_lead_bytes(s : Scan, b : Bytes) -> Bytes =>
             match s
             | lead() => b
             | cont(rem, lo, hi) =>
@@ -68,7 +68,7 @@ fn slice_proof_aligns_with_byte_walk() {
                 end
             end;
 
-        let to_lead_proof(s : Scan, b : Bytes, d : Utf8(s, b)) -> Valid(to_lead_bytes(s, b)) =
+        let to_lead_proof(s : Scan, b : Bytes, d : Utf8(s, b)) -> Valid(to_lead_bytes(s, b)) =>
             match s
             | lead() => d
             | cont(rem, lo, hi) =>
@@ -80,7 +80,7 @@ fn slice_proof_aligns_with_byte_walk() {
                 | more(c, st, t, rest) => to_lead_proof(step(Byte/to_nat(c), st), t, rest)
                 end
             end;
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let _ = Try/run(Io/write(Proc/stdout, 0x[0x6F, 0x6B]))!;
             /std/Io/pure(());
         entry()
@@ -108,9 +108,9 @@ fn char_to_utf8_matches_rust_across_widths_and_boundaries() {
     ];
     let source = r#"
         use /std/{Char, Nat, Bytes, Option, List, Io, Try, Proc};
-        let encode(n : Nat) -> Bytes =
+        let encode(n : Nat) -> Bytes =>
             Char/to_utf8(Option/unwrap_or(Char/of_nat(n), '?'));
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let _ = Try/run(Io/write(Proc/stdout, Bytes/flatten(List/map(
                 [0, 0x7F, 0x80, 0x3BB, 0x7FF, 0x800, 0xD7FF, 0xE000, 0xFFFF,
                  0x10000, 0x1F600, 0x10FFFF], encode))))!;
@@ -142,7 +142,7 @@ fn utf8_inductive_spike() {
         | bad()
         end
 
-        let step(c : Nat, s : Scan) -> Scan =
+        let step(c : Nat, s : Scan) -> Scan =>
             match s
             | lead() => match Nat/lt(c, 128) | true => Scan/lead() | false => Scan/cont() end
             | cont() => Scan/lead()
@@ -156,12 +156,12 @@ fn utf8_inductive_spike() {
         end
 
         let seq(@s : Scan, @a : Bytes, @b : Bytes, va : Utf8(s, a), vb : Utf8(Scan/lead(), b))
-            -> Utf8(s, 0x[..a, ..b]) =
+            -> Utf8(s, 0x[..a, ..b]) =>
             match va
             | stop() => vb
             | more(c, st, t, rest) => Utf8/more(c, st, 0x[..t, ..b], seq(rest, vb))
             end;
-        let main() -> /std/Io({}) =
+        let main() -> /std/Io({}) =>
             let _ = /std/print("ok")!;
             /std/Io/pure(());
         main()
@@ -180,12 +180,12 @@ fn utf8_construction_spike() {
         | snoc(c : Nat, t : Bytes, rest : All(t)) : (0x[Nat/to_byte(c % 256), ..t])
         end
 
-        let build(b : Bytes) -> All(b) =
+        let build(b : Bytes) -> All(b) =>
             match b
             | 0x[] => All/empty()
             | 0x[h, ..t] => All/snoc(/std/Byte/to_nat(h), t, build(t))
             end;
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let _ = /std/print("ok")!;
             /std/Io/pure(());
         entry()
@@ -199,7 +199,7 @@ fn concat_closed_holds_for_the_real_automaton() {
     let source = r#"
         use /std/{Str, Nat, Byte, Bytes, Bool, Io};
 
-        let in_range(c : Nat, lo : Nat, hi : Nat) -> Bool =
+        let in_range(c : Nat, lo : Nat, hi : Nat) -> Bool =>
             match Nat/ge(c, lo)
             | true => Nat/le(c, hi)
             | false => false
@@ -211,7 +211,7 @@ fn concat_closed_holds_for_the_real_automaton() {
         | bad()
         end
 
-        let classify(c : Nat) -> Scan =
+        let classify(c : Nat) -> Scan =>
             match in_range(c, 0, 127)
             | true => Scan/lead()
             | false =>
@@ -235,7 +235,7 @@ fn concat_closed_holds_for_the_real_automaton() {
                 end
             end;
 
-        let step(c : Nat, s : Scan) -> Scan =
+        let step(c : Nat, s : Scan) -> Scan =>
             match s
             | bad() => Scan/bad()
             | cont(rem, lo, hi) =>
@@ -256,19 +256,19 @@ fn concat_closed_holds_for_the_real_automaton() {
             : (st, 0x[c, ..t])
         end
 
-        let Valid(b : Bytes) -> Type = Utf8(Scan/lead(), b);
+        let Valid(b : Bytes) -> Type => Utf8(Scan/lead(), b);
 
         let seq(@s : Scan, @a : Bytes, @b : Bytes, va : Utf8(s, a), vb : Valid(b))
-            -> Utf8(s, 0x[..a, ..b]) =
+            -> Utf8(s, 0x[..a, ..b]) =>
             match va
             | stop() => vb
             | more(c, st, t, rest) => Utf8/more(c, st, 0x[..t, ..b], seq(rest, vb))
             end;
 
         let concat_closed(@a : Bytes, @b : Bytes, va : Valid(a), vb : Valid(b))
-            -> Valid(0x[..a, ..b]) =
+            -> Valid(0x[..a, ..b]) =>
             seq(va, vb);
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let _ = /std/print("ok")!;
             /std/Io/pure(());
         entry()
@@ -282,7 +282,7 @@ fn utf8_of_bytes_checker_decides_and_builds_derivations() {
     let source = r#"
         use /std/{Str, Nat, Bytes, Bool, Option, Io, Try, Proc};
 
-        let in_range(c : Nat, lo : Nat, hi : Nat) -> Bool =
+        let in_range(c : Nat, lo : Nat, hi : Nat) -> Bool =>
             match Nat/ge(c, lo)
             | true => Nat/le(c, hi)
             | false => false
@@ -294,7 +294,7 @@ fn utf8_of_bytes_checker_decides_and_builds_derivations() {
         | bad()
         end
 
-        let classify(c : Nat) -> Scan =
+        let classify(c : Nat) -> Scan =>
             match in_range(c, 0, 127)
             | true => Scan/lead()
             | false =>
@@ -318,7 +318,7 @@ fn utf8_of_bytes_checker_decides_and_builds_derivations() {
                 end
             end;
 
-        let step(c : Nat, s : Scan) -> Scan =
+        let step(c : Nat, s : Scan) -> Scan =>
             match s
             | bad() => Scan/bad()
             | cont(rem, lo, hi) =>
@@ -339,9 +339,9 @@ fn utf8_of_bytes_checker_decides_and_builds_derivations() {
             : (st, 0x[Nat/to_byte(c % 256), ..t])
         end
 
-        let Valid(b : Bytes) -> Type = Utf8(Scan/lead(), b);
+        let Valid(b : Bytes) -> Type => Utf8(Scan/lead(), b);
 
-        let check(b : Bytes) -> ((s : Scan) -> Option(Utf8(s, b))) =
+        let check(b : Bytes) -> ((s : Scan) -> Option(Utf8(s, b))) =>
             match b
             | 0x[] => (s) =>
                 match s
@@ -356,15 +356,15 @@ fn utf8_of_bytes_checker_decides_and_builds_derivations() {
                 end
             end;
 
-        let of_bytes_valid(b : Bytes) -> Option(Valid(b)) =
+        let of_bytes_valid(b : Bytes) -> Option(Valid(b)) =>
             check(b)(Scan/lead());
 
-        let decide(b : Bytes) -> Bytes =
+        let decide(b : Bytes) -> Bytes =>
             match of_bytes_valid(b)
             | some(_) => Str/to_bytes("yes")
             | none() => Str/to_bytes("no")
             end;
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let _ = Try/run(Io/write(Proc/stdout, 0x[..decide(0x[0x68, 0x69]), ..decide(0x[0x80])]))!;
             /std/Io/pure(());
         entry()
@@ -378,7 +378,7 @@ fn decimal_is_ascii_carries_its_proof() {
     let source = r#"
         use /std/{Str, Nat, Bytes, Bool, Eq, Io, Try, Proc};
 
-        let in_range(c : Nat, lo : Nat, hi : Nat) -> Bool =
+        let in_range(c : Nat, lo : Nat, hi : Nat) -> Bool =>
             match Nat/ge(c, lo)
             | true => Nat/le(c, hi)
             | false => false
@@ -390,7 +390,7 @@ fn decimal_is_ascii_carries_its_proof() {
         | bad()
         end
 
-        let classify(c : Nat) -> Scan =
+        let classify(c : Nat) -> Scan =>
             match in_range(c, 0, 127)
             | true => Scan/lead()
             | false =>
@@ -414,7 +414,7 @@ fn decimal_is_ascii_carries_its_proof() {
                 end
             end;
 
-        let step(c : Nat, s : Scan) -> Scan =
+        let step(c : Nat, s : Scan) -> Scan =>
             match s
             | bad() => Scan/bad()
             | cont(rem, lo, hi) =>
@@ -435,26 +435,26 @@ fn decimal_is_ascii_carries_its_proof() {
             : (st, 0x[Nat/to_byte(c % 256), ..t])
         end
 
-        let Valid(b : Bytes) -> Type = Utf8(Scan/lead(), b);
+        let Valid(b : Bytes) -> Type => Utf8(Scan/lead(), b);
 
         let seq(@s : Scan, @a : Bytes, @b : Bytes, va : Utf8(s, a), vb : Valid(b))
-            -> Utf8(s, 0x[..a, ..b]) =
+            -> Utf8(s, 0x[..a, ..b]) =>
             match va
             | stop() => vb
             | more(c, st, t, rest) => Utf8/more(c, st, 0x[..t, ..b], seq(rest, vb))
             end;
 
         let concat_closed(@a : Bytes, @b : Bytes, va : Valid(a), vb : Valid(b))
-            -> Valid(0x[..a, ..b]) =
+            -> Valid(0x[..a, ..b]) =>
             seq(va, vb);
 
         let single(c : Nat, ok : Eq()(step(c, Scan/lead()), Scan/lead()))
-            -> Valid(0x[Nat/to_byte(c % 256)]) =
+            -> Valid(0x[Nat/to_byte(c % 256)]) =>
             let r : Utf8(step(c, Scan/lead()), 0x[]) =
                 Eq/subst((sc) => Utf8(sc, 0x[]), Eq/sym(ok), Utf8/stop());
             Utf8/more(c, Scan/lead(), 0x[], r);
 
-        let digit(d : Nat) -> { c : Nat, ok : Eq()(step(c, Scan/lead()), Scan/lead()) } =
+        let digit(d : Nat) -> { c : Nat, ok : Eq()(step(c, Scan/lead()), Scan/lead()) } =>
             match Nat/eql(d, 0) | true => (48, Eq/refl()) | false =>
             match Nat/eql(d, 1) | true => (49, Eq/refl()) | false =>
             match Nat/eql(d, 2) | true => (50, Eq/refl()) | false =>
@@ -468,11 +468,11 @@ fn decimal_is_ascii_carries_its_proof() {
             (48, Eq/refl())
             end end end end end end end end end end;
 
-        let single_digit(d : Nat) -> { b : Bytes, v : Valid(b) } =
+        let single_digit(d : Nat) -> { b : Bytes, v : Valid(b) } =>
             let g = digit(d);
             (0x[Nat/to_byte(g.c % 256)], single(g.c, g.ok));
 
-        let decimal(n : Nat) -> { b : Bytes, v : Valid(b) } =
+        let decimal(n : Nat) -> { b : Bytes, v : Valid(b) } =>
             match Nat/lt(n, 10)
             | true => single_digit(n)
             | false =>
@@ -481,9 +481,9 @@ fn decimal_is_ascii_carries_its_proof() {
                 (0x[..hi.b, ..lo.b], concat_closed(@hi.b, @lo.b, hi.v, lo.v))
             end;
 
-        let decimal_is_ascii(n : Nat) -> Valid(decimal(n).b) =
+        let decimal_is_ascii(n : Nat) -> Valid(decimal(n).b) =>
             decimal(n).v;
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let _ = Try/run(Io/write(Proc/stdout, decimal(255).b))!;
             /std/Io/pure(());
         entry()
@@ -497,7 +497,7 @@ fn slice_closed_peels_codepoints() {
     let source = r#"
         use /std/{Str, Nat, Byte, Bytes, Bool, Io};
 
-        let in_range(c : Nat, lo : Nat, hi : Nat) -> Bool =
+        let in_range(c : Nat, lo : Nat, hi : Nat) -> Bool =>
             match Nat/ge(c, lo)
             | true => Nat/le(c, hi)
             | false => false
@@ -509,7 +509,7 @@ fn slice_closed_peels_codepoints() {
         | bad()
         end
 
-        let classify(c : Nat) -> Scan =
+        let classify(c : Nat) -> Scan =>
             match in_range(c, 0, 127)
             | true => Scan/lead()
             | false =>
@@ -527,7 +527,7 @@ fn slice_closed_peels_codepoints() {
                 end
             end;
 
-        let step(c : Nat, s : Scan) -> Scan =
+        let step(c : Nat, s : Scan) -> Scan =>
             match s
             | bad() => Scan/bad()
             | cont(rem, lo, hi) =>
@@ -548,21 +548,21 @@ fn slice_closed_peels_codepoints() {
             : (st, 0x[c, ..t])
         end
 
-        let Valid(b : Bytes) -> Type = Utf8(Scan/lead(), b);
+        let Valid(b : Bytes) -> Type => Utf8(Scan/lead(), b);
 
         let seq(@s : Scan, @a : Bytes, @b : Bytes, va : Utf8(s, a), vb : Valid(b))
-            -> Utf8(s, 0x[..a, ..b]) =
+            -> Utf8(s, 0x[..a, ..b]) =>
             match va
             | stop() => vb
             | more(c, st, t, rest) => Utf8/more(c, st, 0x[..t, ..b], seq(rest, vb))
             end;
 
         let concat_closed(@a : Bytes, @b : Bytes, va : Valid(a), vb : Valid(b))
-            -> Valid(0x[..a, ..b]) =
+            -> Valid(0x[..a, ..b]) =>
             seq(va, vb);
 
         let take_to_lead(@s : Scan, @b : Bytes, d : Utf8(s, b))
-            -> { mid : Bytes, tail : Bytes, midd : Utf8(s, mid), tv : Valid(tail) } =
+            -> { mid : Bytes, tail : Bytes, midd : Utf8(s, mid), tv : Valid(tail) } =>
             match s
             | lead() => (0x[], b, Utf8/stop(), d)
             | cont(rem, lo, hi) =>
@@ -581,7 +581,7 @@ fn slice_closed_peels_codepoints() {
                 end
             end;
 
-        let take1(@b : Bytes, d : Valid(b)) -> { cp : Bytes, v : Valid(cp) } =
+        let take1(@b : Bytes, d : Valid(b)) -> { cp : Bytes, v : Valid(cp) } =>
             match d
             | stop() => (0x[], Utf8/stop())
             | more(c, st, t, rest) =>
@@ -589,7 +589,7 @@ fn slice_closed_peels_codepoints() {
                 (0x[c, ..w.mid], Utf8/more(c, st, w.mid, w.midd))
             end;
 
-        let drop1(@b : Bytes, d : Valid(b)) -> { rest : Bytes, v : Valid(rest) } =
+        let drop1(@b : Bytes, d : Valid(b)) -> { rest : Bytes, v : Valid(rest) } =>
             match d
             | stop() => (0x[], Utf8/stop())
             | more(c, st, t, rest) =>
@@ -597,7 +597,7 @@ fn slice_closed_peels_codepoints() {
                 (w.tail, w.tv)
             end;
 
-        let drop_n(n : Nat, @b : Bytes, d : Valid(b)) -> { r : Bytes, v : Valid(r) } =
+        let drop_n(n : Nat, @b : Bytes, d : Valid(b)) -> { r : Bytes, v : Valid(r) } =>
             match Nat/eql(n, 0)
             | true => (b, d)
             | false =>
@@ -605,7 +605,7 @@ fn slice_closed_peels_codepoints() {
                 drop_n(Nat/sub(n, 1), @w.rest, w.v)
             end;
 
-        let take_n(n : Nat, @b : Bytes, d : Valid(b)) -> { r : Bytes, v : Valid(r) } =
+        let take_n(n : Nat, @b : Bytes, d : Valid(b)) -> { r : Bytes, v : Valid(r) } =>
             match Nat/eql(n, 0)
             | true => (0x[], Utf8/stop())
             | false =>
@@ -615,10 +615,10 @@ fn slice_closed_peels_codepoints() {
                 (0x[..hd.cp, ..tn.r], concat_closed(@hd.cp, @tn.r, hd.v, tn.v))
             end;
 
-        let slice(@b : Bytes, d : Valid(b), x : Nat, n : Nat) -> { r : Bytes, v : Valid(r) } =
+        let slice(@b : Bytes, d : Valid(b), x : Nat, n : Nat) -> { r : Bytes, v : Valid(r) } =>
             let dropped = drop_n(x, d);
             take_n(n, @dropped.r, dropped.v);
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let _ = /std/print("ok")!;
             /std/Io/pure(());
         entry()
@@ -668,7 +668,7 @@ fn of_bytes_stops_where_rust_says_valid_text_ends() {
     let source = fill!(
         r#"
         use /std/{Str, Nat, Bytes, List};
-        let stops(bytes : Bytes) -> Str =
+        let stops(bytes : Bytes) -> Str =>
             match Str/of_bytes(bytes) | success(_) => "text" | failure(at) => Nat/to_str(at) end;
         /std/print(Str/join(",", List/map([${literals}], stops)))
         "#,

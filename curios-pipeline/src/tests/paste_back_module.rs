@@ -10,7 +10,7 @@ fn a_nested_modules_goal_is_spelled_by_what_that_module_imports() {
     // `use` binds to the end of the module it is written in and a nested module starts with nothing, so the root's `Nat` import does not reach `Inner`, and a root declaration is reached from there by its absolute path.
     let source = r#"
         use /std/{Nat};
-        pub let double(n: Nat) -> Nat = n + n;
+        pub let double(n: Nat) -> Nat => n + n;
         pub mod Inner
             pub let t: ? = /double;
         end
@@ -58,12 +58,12 @@ fn an_answer_naming_another_modules_own_declaration_is_declined() {
     let source = r#"
         mod Inner
             use /std/{Nat};
-            let hidden(n: Nat) -> Nat = match n | 0 => 0 | k + 1 => hidden(k) end;
-            pub let shown(n: Nat) -> Nat = hidden(n) + 1;
+            let hidden(n: Nat) -> Nat => match n | 0 => 0 | k + 1 => hidden(k) end;
+            pub let shown(n: Nat) -> Nat => hidden(n) + 1;
         end
         use /std/{Nat, Eq};
-        let below(@m: Nat, _e: Eq()(m + 1, m + 1)) -> Nat = m;
-        pub let t(n: Nat) -> Nat = below(@?, Eq/refl(@Nat, @/Inner/shown(n)));
+        let below(@m: Nat, _e: Eq()(m + 1, m + 1)) -> Nat => m;
+        pub let t(n: Nat) -> Nat => below(@?, Eq/refl(@Nat, @/Inner/shown(n)));
         /std/print("")
     "#;
 

@@ -7,13 +7,13 @@ use {crate::test_support::*, curios_common::fill};
 fn a_value_whose_guards_fail_goes_on_to_the_arms_after_it() {
     let source = r#"
         use /std/{Nat, Option, Bytes, rand};
-        let size(o: Option(Nat)) -> Nat =
+        let size(o: Option(Nat)) -> Nat =>
             match o
             | some(n), n > 9 => 2
             | some(n), n != 0, 100 / n > 20 => 1
             | _ => 0
             end;
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let z = Bytes/length(rand/bytes(0)!);
             let a = size(Option/some(10 + z));
             let b = size(Option/some(3 + z));
@@ -32,12 +32,12 @@ fn a_value_whose_guards_fail_goes_on_to_the_arms_after_it() {
 fn a_bind_guard_binds_for_the_guards_after_it_and_the_body() {
     let source = r#"
         use /std/{Nat, Option, Bytes, rand};
-        let inner(o: Option(Option(Nat))) -> Nat =
+        let inner(o: Option(Option(Nat))) -> Nat =>
             match o
             | some(held), some(n) = held, n > 1 => n
             | _ => 0
             end;
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let z = Bytes/length(rand/bytes(0)!);
             let a = inner(Option/some(Option/some(7 + z)));
             let b = inner(Option/some(Option/some(z)));
@@ -54,7 +54,7 @@ fn a_bind_guard_binds_for_the_guards_after_it_and_the_body() {
 fn a_failed_lone_condition_is_a_fact_in_the_arms_after_it_and_a_failed_chain_is_none() {
     let lone = r#"
         use /std/{Nat, Option};
-        let share(o: Option(Nat)) -> Nat =
+        let share(o: Option(Nat)) -> Nat =>
             match o
             | some(n), n == 0 => 0
             | some(n) => 100 / n
@@ -66,7 +66,7 @@ fn a_failed_lone_condition_is_a_fact_in_the_arms_after_it_and_a_failed_chain_is_
 
     let chain = r#"
         use /std/{Nat, Option};
-        let share(o: Option(Nat)) -> Nat =
+        let share(o: Option(Nat)) -> Nat =>
             match o
             | some(n), n < 5, n == 0 => 0
             | some(n) => 100 / n
@@ -87,7 +87,7 @@ fn a_value_only_a_guarded_arm_reaches_is_refused() {
     let report = error(
         r#"
         use /std/{Nat, Option};
-        let f(o: Option(Nat)) -> Nat =
+        let f(o: Option(Nat)) -> Nat =>
             match o
             | some(n), n > 9 => 2
             | none() => 0
@@ -107,7 +107,7 @@ fn a_guarded_arm_before_a_case_of_it_is_refused() {
     let report = error(
         r#"
         use /std/{Nat, Option};
-        let f(o: Option(Nat), flag: /std/Bool) -> Nat =
+        let f(o: Option(Nat), flag: /std/Bool) -> Nat =>
             match o
             | _, flag => 0
             | some(n) => n
@@ -127,7 +127,7 @@ fn a_guarded_arm_before_a_case_of_it_is_refused() {
 fn guards_are_read_under_each_alternative() {
     let source = r#"
         use /std/{Nat, Option};
-        let either(a: Option(Nat), b: Option(Nat)) -> Nat =
+        let either(a: Option(Nat), b: Option(Nat)) -> Nat =>
             match (a, b)
             | (some(x), none()) | (none(), some(x)), x > 3 => x
             | _ => 0
@@ -143,7 +143,7 @@ fn guards_are_read_under_each_alternative() {
 fn a_guarded_arm_typed_once_for_several_places_falls_through_at_each() {
     let source = r#"
         use /std/{Nat, Option};
-        let sum(a: Option(Nat), b: Option(Nat)) -> Nat =
+        let sum(a: Option(Nat), b: Option(Nat)) -> Nat =>
             match (a, b)
             | (some(x), some(y)) => x + y
             | (_, some(y)), y > 3 => y
@@ -164,7 +164,7 @@ fn a_bind_guard_that_cannot_fail_is_refused() {
     let report = error(
         r#"
         use /std/{Nat, Option};
-        let f(o: Option(Nat)) -> Nat =
+        let f(o: Option(Nat)) -> Nat =>
             match
             | x = o => 0
             | _ => 1
@@ -183,37 +183,37 @@ fn a_bind_guard_that_cannot_fail_is_refused() {
 fn guards_run_at_every_level_of_a_recursion() {
     let source = r#"
         use /std/{Bool, List, Nat, Str, Bytes, rand};
-        let count(n: Nat) -> Nat =
+        let count(n: Nat) -> Nat =>
             match n
             | 0 => 0
             | k + 1, k > 2 => count(k) + 1
             | k + 1 => count(k)
             end;
-        let capped(n: Nat) -> Nat =
+        let capped(n: Nat) -> Nat =>
             match n
             | 0 => 0
             | k + 1, capped(k) > 3 => capped(k)
             | k + 1 => capped(k) + 1
             end;
-        let based(flag: Bool, n: Nat) -> Nat =
+        let based(flag: Bool, n: Nat) -> Nat =>
             match n
             | 0, flag => 100
             | 0 => 0
             | k + 1 => based(flag, k) + 1
             end;
-        let big(l: List(Nat)) -> Nat =
+        let big(l: List(Nat)) -> Nat =>
             match l
             | [] => 0
             | [h, ..t], h > 2 => big(t) + h
             | [_, ..t] => big(t)
             end;
-        let shares(n: Nat) -> Nat =
+        let shares(n: Nat) -> Nat =>
             match n
             | 0 => 0
             | k + 1, k == 0 => shares(k)
             | k + 1 => shares(k) + 10 / k
             end;
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let z = Bytes/length(rand/bytes(0)!);
             /std/print(Str/join(" ", [
                 Nat/to_str(count(6 + z)),
@@ -232,14 +232,14 @@ fn guards_run_at_every_level_of_a_recursion() {
 fn a_guard_may_call_the_recursion_its_arm_stands_in() {
     let source = r#"
         use /std/{Bool, Nat, Str, Bytes, rand};
-        let even(n: Nat) -> Bool =
+        let even(n: Nat) -> Bool =>
             match n
             | 0 => true
             | k + 1, even(k) => false
             | _ => true
             end;
-        let shown(b: Bool) -> Str = match b | true => "even" | false => "odd" end;
-        let entry() -> /std/Io({}) =
+        let shown(b: Bool) -> Str => match b | true => "even" | false => "odd" end;
+        let entry() -> /std/Io({}) =>
             let z = Bytes/length(rand/bytes(0)!);
             /std/print(Str/join(" ", [shown(even(7 + z)), shown(even(4 + z)), shown(even(z))]));
         entry()
@@ -253,15 +253,15 @@ fn a_guard_may_call_the_recursion_its_arm_stands_in() {
 fn a_bind_guard_takes_a_recursive_call_apart() {
     let source = r#"
         use /std/{List, Nat, Option, Str, Bytes, rand};
-        let last_big(l: List(Nat)) -> Option(Nat) =
+        let last_big(l: List(Nat)) -> Option(Nat) =>
             match l
             | [] => Option/none()
             | [_, ..t], some(v) = last_big(t) => Option/some(v)
             | [h, .._], h > 2 => Option/some(h)
             | [_, .._] => Option/none()
             end;
-        let shown(o: Option(Nat)) -> Str = match o | some(v) => Nat/to_str(v) | none() => "-" end;
-        let entry() -> /std/Io({}) =
+        let shown(o: Option(Nat)) -> Str => match o | some(v) => Nat/to_str(v) | none() => "-" end;
+        let entry() -> /std/Io({}) =>
             let z = Bytes/length(rand/bytes(0)!);
             /std/print(Str/join(" ", [
                 shown(last_big([5 + z, 1, 3, 0])),
@@ -278,19 +278,19 @@ fn a_bind_guard_takes_a_recursive_call_apart() {
 fn a_chain_failing_at_a_level_falls_through_the_arms_after_it() {
     let source = r#"
         use /std/{Nat, Str, Bytes, rand};
-        let ramp(n: Nat) -> Nat =
+        let ramp(n: Nat) -> Nat =>
             match n
             | 0 => 0
             | k + 1, k > 5, ramp(k) > 10 => ramp(k)
             | k + 1, k > 2 => ramp(k) + 2
             | k + 1 => ramp(k) + 1
             end;
-        let late(n: Nat) -> Nat =
+        let late(n: Nat) -> Nat =>
             match n
             | k + 1, k > 2 => late(k) + 1
             | _ => 7
             end;
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let z = Bytes/length(rand/bytes(0)!);
             /std/print(Str/join(" ", [
                 Nat/to_str(ramp(6 + z)),
@@ -311,25 +311,25 @@ fn a_chain_failing_at_a_level_falls_through_the_arms_after_it() {
 fn guards_read_a_recursive_call_projected_applied_and_over_bytes() {
     let source = r#"
         use /std/{Byte, List, Nat, Str, Bytes, rand};
-        let tally(l: List(Nat)) -> {Nat, Nat} =
+        let tally(l: List(Nat)) -> {Nat, Nat} =>
             match l
             | [] => (0, 0)
             | [h, ..t], h > 2, tally(t).0 < 2 => (tally(t).0 + 1, tally(t).1 + h)
             | [_, ..t] => tally(t)
             end;
-        let skip(l: List(Nat)) -> (Nat) -> Nat =
+        let skip(l: List(Nat)) -> (Nat) -> Nat =>
             match l
             | [] => (a) => a
             | [h, ..t], skip(t)(h) > 10 => (a) => skip(t)(a)
             | [h, ..t] => (a) => skip(t)(a + h)
             end;
-        let high(b: Bytes) -> Nat =
+        let high(b: Bytes) -> Nat =>
             match b
             | 0x[] => 0
             | 0x[h, ..t], Byte/to_nat(h) > 127 => high(t) + 1
             | 0x[_, ..t] => high(t)
             end;
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let z = Bytes/length(rand/bytes(0)!);
             let (count, total) = tally([1 + z, 5, 3, 7, 2]);
             /std/print(Str/join(" ", [
@@ -349,27 +349,27 @@ fn guards_read_a_recursive_call_projected_applied_and_over_bytes() {
 fn a_guard_holds_a_match_and_reads_the_columns_beside_one() {
     let source = r#"
         use /std/{Bool, List, Nat, Str, Bytes, rand};
-        let even(n: Nat) -> Bool = match n | 0 => true | k + 1 => even(k) == false end;
-        let evens(l: List(Nat)) -> Nat =
+        let even(n: Nat) -> Bool => match n | 0 => true | k + 1 => even(k) == false end;
+        let evens(l: List(Nat)) -> Nat =>
             match l
             | [] => 0
             | [h, ..t], (match h | 0 => true | k + 1 => even(k) == false end) => evens(t) + 1
             | [_, ..t] => evens(t)
             end;
-        let over(l: List(Nat), m: Nat) -> Nat =
+        let over(l: List(Nat), m: Nat) -> Nat =>
             match (l, m)
             | ([], _) => 0
             | ([h, ..t], k), h > k => over(t, m) + 1
             | ([_, ..t], _) => over(t, m)
             end;
-        let stray(l: List(Nat), m: Nat) -> Nat =
+        let stray(l: List(Nat), m: Nat) -> Nat =>
             match (l, m)
             | ([], _) => 0
             | ([_, ..t], 0) => stray(t, 0) + 1
             | (_, k), k > 5 => k
             | _ => 1
             end;
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let z = Bytes/length(rand/bytes(0)!);
             /std/print(Str/join(" ", [
                 Nat/to_str(evens([1 + z, 2, 3, 4, 6])),
@@ -392,9 +392,9 @@ fn a_failed_guard_at_a_step_is_a_fact_a_proof_by_induction_reads() {
             r#"
             use /std/{Nat, Bool, Eq, proved};
             use /std/Bool/{True, Holds};
-            let below(k: Nat, p: (Nat) -> Bool) -> Bool =
+            let below(k: Nat, p: (Nat) -> Bool) -> Bool =>
                 match k | 0 => true | j + 1 => p(j) && below(j, p) end;
-            let at(k: Nat, p: (Nat) -> Bool, n: Nat, all: Holds(below(k, p)), under: Holds(n < k)) -> Holds(p(n)) =
+            let at(k: Nat, p: (Nat) -> Bool, n: Nat, all: Holds(below(k, p)), under: Holds(n < k)) -> Holds(p(n)) =>
                 match k
                 | 0 => match under end
                 | j + 1, ${guards} => at(j, p, n, Bool/and/second(p(j), below(j, p), all), proved())
@@ -427,7 +427,7 @@ fn conversion_runs_a_recursion_whose_arms_take_guards() {
             r#"
             use /std/{Nat};
             use /std/Bool/{True, Holds};
-            let count(n: Nat) -> Nat =
+            let count(n: Nat) -> Nat =>
                 match n
                 | 0 => 0
                 | k + 1, k > 2 => count(k) + 1
@@ -450,14 +450,14 @@ fn conversion_runs_a_recursion_whose_arms_take_guards() {
 fn a_match_its_guards_flatten_converts_with_the_nested_one() {
     let source = r#"
         use /std/{Bool, Nat, Option, Eq};
-        let nested(m: Option(Nat), pred: (Nat) -> Bool) -> Option(Nat) =
+        let nested(m: Option(Nat), pred: (Nat) -> Bool) -> Option(Nat) =>
             match m
             | some(a) => match pred(a) | true => Option/some(a) | false => Option/none() end
             | none() => Option/none()
             end;
-        let guarded(m: Option(Nat), pred: (Nat) -> Bool) -> Option(Nat) =
+        let guarded(m: Option(Nat), pred: (Nat) -> Bool) -> Option(Nat) =>
             match m | some(a), pred(a) => Option/some(a) | _ => Option/none() end;
-        let same(m: Option(Nat), pred: (Nat) -> Bool) -> Eq()(nested(m, pred), guarded(m, pred)) =
+        let same(m: Option(Nat), pred: (Nat) -> Bool) -> Eq()(nested(m, pred), guarded(m, pred)) =>
             Eq/refl();
         /std/print("ok")
         "#;
@@ -471,7 +471,7 @@ fn a_sequence_split_with_guards_is_held_to_coverage_and_order() {
     let uncovered = error(
         r#"
         use /std/{Bool, Nat};
-        let f(flag: Bool, n: Nat) -> Nat =
+        let f(flag: Bool, n: Nat) -> Nat =>
             match n
             | 0, flag => 1
             | k + 1 => f(flag, k)
@@ -487,7 +487,7 @@ fn a_sequence_split_with_guards_is_held_to_coverage_and_order() {
     let misplaced = error(
         r#"
         use /std/{List, Nat};
-        let f(l: List(Nat), m: Nat) -> Nat =
+        let f(l: List(Nat), m: Nat) -> Nat =>
             match (l, m)
             | ([], _) => 0
             | ([_, ..t], _), m > 3 => f(t, m)
@@ -509,20 +509,20 @@ fn a_sequence_split_with_guards_is_held_to_coverage_and_order() {
 fn a_guarded_arm_is_read_in_a_region_whose_type_holds_a_sealed_method() {
     let source = r#"
         use /std/{Char, Nat, Option, Parse, Result, Str};
-        let two_guards() -> Parse(Str, Nat) =
+        let two_guards() -> Parse(Str, Nat) =>
             let c = Parse/str/char()!;
             match Option/some(Char/to_nat(c))
             | some(n), n > 50, n < 55 => Parse/pure(1)
             | _ => Parse/pure(0)
             end;
-        let walked() -> Parse(Str, Nat) =
+        let walked() -> Parse(Str, Nat) =>
             let c = Parse/str/char()!;
             match Char/to_nat(c)
             | '/' => Parse/pure(2)
             | _, Char/is_ascii_digit(c) => Parse/pure(3)
             | _ => Parse/pure(4)
             end;
-        let read(p: Parse(Str, Nat), s: Str) -> Str =
+        let read(p: Parse(Str, Nat), s: Str) -> Str =>
             match Parse/run(p, s) | success(n) => Nat/to_str(n) | failure(_) => "refused" end;
         /std/print(Str/join(" ", [read(two_guards(), "4"), read(walked(), "/"), read(walked(), "7"), read(walked(), "x")]))
         "#;

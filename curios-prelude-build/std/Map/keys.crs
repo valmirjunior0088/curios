@@ -6,7 +6,7 @@ use /std/Map/internal/{Node};
 use /std/Bool/{Holds};
 
 --- The keys, in their type's own order: each is before every one after it, by [`pairwise`].
-pub let keys(@K: Type, use Hash/Key(K), @V: Type, m: Map(K, V)) -> List(K) =
+pub let keys(@K: Type, use Hash/Key(K), @V: Type, m: Map(K, V)) -> List(K) =>
     Node/collect(m.root, []);
 
 -- A map's trie is sound, so a key under a branch's twig is before every key under the twigs after it as `Bytes/ord` reads their encodings, and `Hash/Key/mono` makes that the keys' own order. It asks nothing beyond the map's `Hash/Key(K)`.
@@ -16,7 +16,7 @@ pub let pairwise(
     use Hash/Key(K),
     @V: Type,
     m: Map(K, V),
-) -> Pairwise(Ord/lt_by((a: K, b: K) => Ord/ord(a, b)))(keys(m)) =
+) -> Pairwise(Ord/lt_by((a: K, b: K) => Ord/ord(a, b)))(keys(m)) =>
     Eq/subst(
         (l: List(K)) => Pairwise(Ord/lt_by((a: K, b: K) => Ord/ord(a, b)))(l),
         Eq/sym(Node/collected(m.root, [])),
@@ -28,5 +28,5 @@ pub let ordered(
     use Hash/Key(K),
     @V: Type,
     m: Map(K, V),
-) -> Holds(List/ordered(keys(m), Ord/lt_by((a: K, b: K) => Ord/ord(a, b)))) =
+) -> Holds(List/ordered(keys(m), Ord/lt_by((a: K, b: K) => Ord/ord(a, b)))) =>
     Pairwise/adjacent(Ord/lt_by((a: K, b: K) => Ord/ord(a, b)), keys(m), pairwise(m));

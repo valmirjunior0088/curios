@@ -23,19 +23,19 @@ pub induct Test(A: Type): Type
 end
 
 --- Succeed with `a` without performing an effect.
-pub let pure(@A: Type, a: A) -> Test(A) =
+pub let pure(@A: Type, a: A) -> Test(A) =>
     Test/success(a);
 
 -- End the current test with a check that failed, stating `statement` beside the values `facts` spell.
-let failing(@A: Type, statement: Str, facts: List({Str, Str})) -> Test(A) =
+let failing(@A: Type, statement: Str, facts: List({Str, Str})) -> Test(A) =>
     Test/failure([Failure { steps = [], statement = statement, facts = facts }]);
 
 --- End the current test with `message`, skipping its remaining continuations.
-pub let fail(@A: Type, message: Str) -> Test(A) =
+pub let fail(@A: Type, message: Str) -> Test(A) =>
     failing(message, []);
 
 --- Continue a successful computation; a failure skips `next`.
-pub let bind(@A: Type, @B: Type, test: Test(A), next: (A) -> Test(B)) -> Test(B) =
+pub let bind(@A: Type, @B: Type, test: Test(A), next: (A) -> Test(B)) -> Test(B) =>
     match test
     | success(a) => next(a)
     | failure(failures) => Test/failure(failures)
@@ -43,16 +43,16 @@ pub let bind(@A: Type, @B: Type, test: Test(A), next: (A) -> Test(B)) -> Test(B)
     end;
 
 satisfy Monad(Test) {
-    pure(@_, a) = pure(a),
-    bind(@_, @_, test, next) = bind(test, next),
+    pure(@_, a) => pure(a),
+    bind(@_, @_, test, next) => bind(test, next),
 }
 
 satisfy Monad/Lift(Io, Test) {
-    lift(@_, action) = Test/perform(Io/bind(action, (a) => Io/pure(pure(a)))),
+    lift(@_, action) => Test/perform(Io/bind(action, (a) => Io/pure(pure(a)))),
 }
 
 satisfy Monad/Lift(Test, Test) {
-    lift(@_, test) = test,
+    lift(@_, test) => test,
 }
 
 satisfy (
@@ -61,8 +61,8 @@ satisfy (
     use Monad(M),
     use Monad/Lift(M, Test),
     use Show(E),
-) => Monad/Lift((A: Type) => Try(M, E, A), Test) {
-    lift(@_, action) =
+) -> Monad/Lift((A: Type) => Try(M, E, A), Test) {
+    lift(@_, action) =>
         bind(
             Monad/lift(Try/run(action)),
             (result) =>
@@ -73,11 +73,11 @@ satisfy (
 }
 
 --- The test that holds when `condition` is true, stating `label` where it does not: what the condition claims, in its author's words, since a condition has no sides to show.
-pub let assert(label: Str, condition: Bool) -> Test({}) =
+pub let assert(label: Str, condition: Bool) -> Test({}) =>
     match condition | true => pure(()) | false => fail(label) end;
 
 --- The test that holds when the two are equal, reporting both when they are not.
-pub let equal(@A: Type, use Eql(A), use Spell(A), actual: A, expected: A) -> Test({}) =
+pub let equal(@A: Type, use Eql(A), use Spell(A), actual: A, expected: A) -> Test({}) =>
     match actual == expected
     | true => pure(())
     | false =>
@@ -87,11 +87,11 @@ pub let equal(@A: Type, use Eql(A), use Spell(A), actual: A, expected: A) -> Tes
     end;
 
 --- The test `thunk` builds, where it builds one; where it fails, its error is the test's failure.
-pub let try(@E: Type, @A: Type, use Show(E), thunk: () -> Try(Io, E, Test(A))) -> Test(A) =
+pub let try(@E: Type, @A: Type, use Show(E), thunk: () -> Try(Io, E, Test(A))) -> Test(A) =>
     bind(Monad/lift(thunk()), (inner) => inner);
 
 --- `test` as a named step: `label` leads the path of each failure it reports, ahead of the steps within it, as `Test/all` names each of its cases by its position.
-pub let step(@A: Type, label: Str, test: Test(A)) -> Test(A) =
+pub let step(@A: Type, label: Str, test: Test(A)) -> Test(A) =>
     match test
     | success(_) => test
     | failure(failures) =>
@@ -102,7 +102,7 @@ pub let step(@A: Type, label: Str, test: Test(A)) -> Test(A) =
     end;
 
 -- The failures `found` holds, then those `next` ends with: `next` runs whatever `found` held, after its actions.
-let gathered(found: Test(List(Failure)), next: Test({})) -> Test(List(Failure)) =
+let gathered(found: Test(List(Failure)), next: Test({})) -> Test(List(Failure)) =>
     match found
     | success(failures) =>
         match next
@@ -115,7 +115,7 @@ let gathered(found: Test(List(Failure)), next: Test({})) -> Test(List(Failure)) 
     end;
 
 --- Check each test in order, reporting every one that fails under its zero-based case index: the cases are independent, so each runs whatever the others found, where `bind` stops at the first failure of steps that depend on one another.
-pub let all(tests: List(Test({}))) -> Test({}) =
+pub let all(tests: List(Test({}))) -> Test({}) =>
     let found =
         List/fold(
             tests,
@@ -131,26 +131,26 @@ pub let all(tests: List(Test({}))) -> Test({}) =
         match failures | [] => pure(()) | _ => Test/failure(failures) end);
 
 -- Keeping an outcome inside Io lets a scope release before the failure resumes propagating through Test.
-let finish(@A: Type, test: Test(A)) -> Io(Result(List(Failure), A)) =
+let finish(@A: Type, test: Test(A)) -> Io(Result(List(Failure), A)) =>
     match test
     | success(a) => Io/pure(Result/success(a))
     | failure(failures) => Io/pure(Result/failure(failures))
     | perform(io) => Io/bind(io, (inner) => finish(inner))
     end;
 
-let from_result(@A: Type, result: Result(List(Failure), A)) -> Test(A) =
+let from_result(@A: Type, result: Result(List(Failure), A)) -> Test(A) =>
     match result
     | success(a) => pure(a)
     | failure(failures) => Test/failure(failures)
     end;
 
 --- `body` run with a scope, as `Io/scope` runs one: its children cancelled and its releases run after a success or an assertion failure, and when a suspended body is cancelled.
-pub let scope(@A: Type, body: (Io/Scope) -> Test(A)) -> Test(A) =
+pub let scope(@A: Type, body: (Io/Scope) -> Test(A)) -> Test(A) =>
     let result = Io/scope((s) => finish(body(s)))!;
     from_result(result);
 
 --- Fail if the deadline wins, after cancelling the suspended body and running its releases.
-pub let timeout(@A: Type, d: Duration, body: () -> Test(A)) -> Test(A) =
+pub let timeout(@A: Type, d: Duration, body: () -> Test(A)) -> Test(A) =>
     let result = Io/timeout(d, finish(body()))!;
     match result
     | some(outcome) => from_result(outcome)
@@ -158,7 +158,7 @@ pub let timeout(@A: Type, d: Duration, body: () -> Test(A)) -> Test(A) =
     end;
 
 --- Run `test` to its end and answer each check that failed, in the order it met them, and none where it held: what a runner reports of a test, since nothing else takes one apart.
-pub let run(@A: Type, test: Test(A)) -> Io(List(Failure)) =
+pub let run(@A: Type, test: Test(A)) -> Io(List(Failure)) =>
     let result = finish(test)!;
     match result
     | success(_) => Io/pure([])

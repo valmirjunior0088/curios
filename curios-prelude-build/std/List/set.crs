@@ -10,7 +10,7 @@ pub let length(
     i: Nat,
     x: T,
     @ok: Holds(i < List/length(l)),
-) -> Eq()(List/length(List/set(l, i, x)), List/length(l)) =
+) -> Eq()(List/length(List/set(l, i, x)), List/length(l)) =>
     Eq/refl();
 
 --- The element at the index an update writes is the one written.
@@ -20,7 +20,7 @@ pub let at(
     i: Nat,
     x: T,
     @ok: Holds(i < List/length(l)),
-) -> Eq()(List/get(List/set(l, i, x), i), x) =
+) -> Eq()(List/get(List/set(l, i, x), i), x) =>
     match l
     | [] => match ok end
     | [_, ..t] =>
@@ -37,7 +37,7 @@ pub let other(
     @ok: Holds(i < List/length(l)),
     @within: Holds(j < List/length(l)),
     apart: Holds(i != j),
-) -> Eq()(List/get(List/set(l, i, x), j), List/get(l, j)) =
+) -> Eq()(List/get(List/set(l, i, x), j), List/get(l, j)) =>
     match l
     | [] => match ok end
     | [_, ..t] =>
@@ -61,7 +61,7 @@ pub let itself(
     l: List(T),
     i: Nat,
     @ok: Holds(i < List/length(l)),
-) -> Eq()(List/set(l, i, List/get(l, i)), l) =
+) -> Eq()(List/set(l, i, List/get(l, i)), l) =>
     match l
     | [] => match ok end
     | [h, ..r] =>

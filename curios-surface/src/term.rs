@@ -209,13 +209,13 @@ pub struct TupleType<D: Dialect = Program> {
 #[derive(Debug, Clone, PartialEq)]
 pub struct TupleField<D: Dialect = Program> {
     pub label: Option<Label>,
-    /// `Some` for the definition sugar `label(params) = value` — the written parameter list, each a lambda's parameter, kept verbatim so the printer round-trips it. `into_core` undoes the sugar, lowering the field as `label = (params) => value` (see `TupleField::desugared_value`). Always paired with a label.
+    /// `Some` for the definition sugar `label(params) => value` — the written parameter list, each a lambda's parameter, kept verbatim so the printer round-trips it. `into_core` undoes the sugar, lowering the field as `label = (params) => value` (see `TupleField::desugared_value`). Always paired with a label.
     pub func_params: Option<Vec<FuncParam<D>>>,
     pub value: Term<D>,
 }
 
 impl<D: Dialect> TupleField<D> {
-    /// The field's value with the definition sugar undone: the written value when the field is plain, the lambda `(params) => value` when it was written `label(params) = value`.
+    /// The field's value with the definition sugar undone: the written value when the field is plain, the lambda `(params) => value` when it was written `label(params) => value`.
     pub fn desugared_value(&self) -> Term<D> {
         match &self.func_params {
             Some(params) => Subterm::Func(Func {
@@ -546,7 +546,7 @@ pub struct MatchPatternField<D: Dialect = Program> {
     pub value: MatchPattern<D>,
 }
 
-/// One parameter of the function-definition sugar `let f(x : T, …) -> R = body`. A plain-name (`Pattern::Binder`) binder flows into both the Π-type binder and the lambda parameter. A compound (tuple/struct) pattern has no single name to give the Π-type binder, so it lowers to an *anonymous* Π-binder (see `LetSignature::type_`) — its destructured leaves are visible only in the function's value body, never in a later parameter's type or the output type.
+/// One parameter of the function-definition sugar `let f(x : T, …) -> R => body`. A plain-name (`Pattern::Binder`) binder flows into both the Π-type binder and the lambda parameter. A compound (tuple/struct) pattern has no single name to give the Π-type binder, so it lowers to an *anonymous* Π-binder (see `LetSignature::type_`) — its destructured leaves are visible only in the function's value body, never in a later parameter's type or the output type.
 ///
 /// A member is one of two things, and the tree holds no third: a premise has no binder, and a plain or `@` member always has one, `_` where the body never names it — `let f(n: Nat, @_: Holds(0 < n))`.
 #[derive(Debug, Clone, PartialEq)]
@@ -581,7 +581,7 @@ impl<D: Dialect> FuncSugarParam<D> {
     }
 }
 
-/// The right-hand side shared by every `let`-like binding site (local [`Let`], top-level [`TopLet`](crate::TopLet)): a plain annotated body, or the function-definition sugar `f(x : T, …) -> R = body`, kept verbatim so the printer round-trips it. Lowering undoes the sugar — the type becomes a Π-type, the body a lambda binding every parameter — over one set of binders, so a parameter is the same binder in both; the crate-internal `type_()`/`body()` accessors spell the two halves as surface terms for a site that lowers them apart.
+/// The right-hand side shared by every `let`-like binding site (local [`Let`], top-level [`TopLet`](crate::TopLet)): a plain annotated body, or the function-definition sugar `f(x : T, …) -> R => body`, kept verbatim so the printer round-trips it. Lowering undoes the sugar — the type becomes a Π-type, the body a lambda binding every parameter — over one set of binders, so a parameter is the same binder in both; the crate-internal `type_()`/`body()` accessors spell the two halves as surface terms for a site that lowers them apart.
 #[derive(Debug, Clone, PartialEq)]
 pub enum LetSignature<D: Dialect = Program> {
     Name {
@@ -592,6 +592,12 @@ pub enum LetSignature<D: Dialect = Program> {
     Func {
         params: Vec<FuncSugarParam<D>>,
         output: Term<D>,
+        body: Term<D>,
+    },
+    /// A local function read as a lambda reads, `let increment(n) => n + 1`: each parameter's type and the result optional, as a lambda's are. One that states every type is a [`LetSignature::Func`], so this one states its type only in part and binds its lambda as a local value does.
+    Lambda {
+        params: Vec<FuncParam<D>>,
+        output: Option<Term<D>>,
         body: Term<D>,
     },
 }
@@ -656,6 +662,33 @@ impl<D: Dialect> LetSignature<D> {
                 output: output.clone(),
             })
             .into(),
+            // With no result, the type is the lambda's to infer, as `let f = (n) => …` leaves it; with one, a parameter with no type is a hole in the Π-type it states.
+            LetSignature::Lambda { output: None, .. } => Subterm::Hole.into(),
+            LetSignature::Lambda {
+                params,
+                output: Some(output),
+                ..
+            } => Subterm::FuncType(FuncType {
+                params: params
+                    .iter()
+                    .map(|param| FuncTypeParam {
+                        plicity: param.plicity,
+                        core: D::Fields::default(),
+                        label: match &param.pattern {
+                            Pattern::Binder(binder) => Some(binder.label.clone()),
+                            Pattern::Tuple(_)
+                            | Pattern::Struct { .. }
+                            | Pattern::Variant { .. } => None,
+                        },
+                        type_: param
+                            .annotation
+                            .clone()
+                            .unwrap_or_else(|| Subterm::Hole.into()),
+                    })
+                    .collect(),
+                output: output.clone(),
+            })
+            .into(),
         }
     }
 
@@ -663,6 +696,11 @@ impl<D: Dialect> LetSignature<D> {
         match self {
             LetSignature::Name { body, .. } => body.clone(),
             LetSignature::Func { params, body, .. } => func_sugar_lambda(params, body),
+            LetSignature::Lambda { params, body, .. } => Subterm::Func(Func {
+                params: params.clone(),
+                body: body.clone(),
+            })
+            .into(),
         }
     }
 }
@@ -672,7 +710,7 @@ impl<D: Dialect> LetSignature<D> {
 pub struct LetBinding<D: Dialect = Program> {
     /// Where the `and` before a later member of a group was read.
     pub word: WordAt,
-    /// The bound pattern — `let x = …`, `let (x, y) = …`, or the `f` in the `let f(…) -> R = …` function-definition sugar. A compound pattern here is grammatically legal for the function-sugar form too, but pointless: a function's own binding is never itself a tuple/struct value, so destructuring it fails the same "not a tuple/struct" projection type error a hand-written misuse would (no special-casing needed).
+    /// The bound pattern — `let x = …`, `let (x, y) = …`, or the `f` in the `let f(…) -> R => …` function-definition sugar. A compound pattern here is grammatically legal for the function-sugar form too, but pointless: a function's own binding is never itself a tuple/struct value, so destructuring it fails the same "not a tuple/struct" projection type error a hand-written misuse would (no special-casing needed).
     pub binder: Pattern<D>,
     pub signature: LetSignature<D>,
 }

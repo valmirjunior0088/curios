@@ -2,7 +2,7 @@
 use /std/{Nat, Eq, Bool};
 use /std/Bool/{True, False, Holds};
 
-let g(n: Nat) -> Nat =
+let g(n: Nat) -> Nat =>
     match n | 0 => 0 | j + 1 => 1 end;
 
 let f(
@@ -11,7 +11,7 @@ let f(
     p: Eq()(g(n), g(g(n))),
     guard: Holds(match p | refl(@z) => h(z) end),
     nonzero: Holds(n != 0),
-) -> Holds(h(0)) =
+) -> Holds(h(0)) =>
     match match p | refl(@z) => h(z) end
     | false => match guard end
     | true =>

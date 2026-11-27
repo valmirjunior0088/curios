@@ -14,13 +14,13 @@ fn a_result_is_typed_at_an_index_that_rules_an_arm_of_it_out() {
         | zero(): (0)
         | other(n: Nat): (n + 1)
         end
-        let needs_zero(n: Nat, @ok: Holds(n == 0)) -> Nat = 7;
-        let h(n: Nat, t: Tag(n)) -> Holds((match t | zero() => needs_zero(n) | other(_) => 0 end) <= 7) =
+        let needs_zero(n: Nat, @ok: Holds(n == 0)) -> Nat => 7;
+        let h(n: Nat, t: Tag(n)) -> Holds((match t | zero() => needs_zero(n) | other(_) => 0 end) <= 7) =>
             match t
             | zero() => True/qed()
             | other(_) => True/qed()
             end;
-        let used(t: Tag(${index})) -> Nat =
+        let used(t: Tag(${index})) -> Nat =>
             let x = h(${index}, t);
             0;
         /std/print("held")
@@ -37,7 +37,7 @@ fn a_result_is_typed_at_an_index_that_rules_an_arm_of_it_out() {
 const BOUNDED: &str = r#"
     use /std/{Nat, Bool, proved};
     use /std/Bool/{True, Holds};
-    let g(c: Bool, @ok: Holds(c)) -> Nat = 1;
+    let g(c: Bool, @ok: Holds(c)) -> Nat => 1;
     "#;
 
 // An arm under a scrutinee that computes to another case is not typed. `h`'s result matches on `c`, and its `true` arm holds a proof that `c` holds, which the arm's case is. A `let` at `h(Bool/not(true))` is written at the result at a scrutinee that names no local, so no equation is recorded for the arm, and that computes to `false`; at `Bool/not(false)` the arm is the one taken, and its proof holds by reduction.
@@ -46,12 +46,12 @@ fn a_result_is_typed_at_a_value_that_computes_to_another_case() {
     let at = |argument: &str| {
         format!(
             r#"{BOUNDED}
-        let h(c: Bool) -> Holds((match c | true => g(c, @True/qed()) | false => 0 end) <= 1) =
+        let h(c: Bool) -> Holds((match c | true => g(c, @True/qed()) | false => 0 end) <= 1) =>
             match c
             | false => True/qed()
             | true => True/qed()
             end;
-        let used() -> Nat =
+        let used() -> Nat =>
             let x = h({argument});
             0;
         /std/print("held")
@@ -69,7 +69,7 @@ fn a_result_is_typed_at_a_value_that_computes_to_another_case() {
 fn an_arms_goal_is_typed_wherever_it_is_written() {
     let domain = format!(
         r#"{BOUNDED}
-        let k(c: Bool) -> (x: Holds((match Bool/not(c) | true => g(Bool/not(c), @True/qed()) | false => 0 end) <= 1)) -> Nat =
+        let k(c: Bool) -> (x: Holds((match Bool/not(c) | true => g(Bool/not(c), @True/qed()) | false => 0 end) <= 1)) -> Nat =>
             match c
             | false => (x) => 0
             | true => (x) => 1
@@ -79,7 +79,7 @@ fn an_arms_goal_is_typed_wherever_it_is_written() {
     );
     let goal = format!(
         r#"{BOUNDED}
-        let f(c: Bool, k: Nat) -> Holds((match Bool/not(c) | true => g(Bool/not(c), @True/qed()) | false => 0 end) <= 1) =
+        let f(c: Bool, k: Nat) -> Holds((match Bool/not(c) | true => g(Bool/not(c), @True/qed()) | false => 0 end) <= 1) =>
             match c
             | false => proved()
             | true => match k | 0 => True/qed() | _ + 1 => True/qed() end
@@ -90,8 +90,8 @@ fn an_arms_goal_is_typed_wherever_it_is_written() {
     let comparison = r#"
         use /std/{Nat, Bool, proved};
         use /std/Bool/{True, Holds};
-        let positive(n: Nat, @ok: Holds(0 < n)) -> Nat = 1;
-        let f(n: Nat, k: Nat) -> Holds((match 0 < n | true => positive(n, @True/qed()) | false => 0 end) <= 1) =
+        let positive(n: Nat, @ok: Holds(0 < n)) -> Nat => 1;
+        let f(n: Nat, k: Nat) -> Holds((match 0 < n | true => positive(n, @True/qed()) | false => 0 end) <= 1) =>
             match n
             | 0 => match k | 0 => True/qed() | _ + 1 => True/qed() end
             | _ + 1 => proved()
@@ -101,13 +101,13 @@ fn an_arms_goal_is_typed_wherever_it_is_written() {
     let again = fill!(
         r#"${BOUNDED}
         use /std/{Eq};
-        let h(c: Bool) -> Holds((match c | true => g(c, @True/qed()) | false => 0 end) <= 1) =
+        let h(c: Bool) -> Holds((match c | true => g(c, @True/qed()) | false => 0 end) <= 1) =>
             match c
             | false => True/qed()
             | true => True/qed()
             end;
-        let used(n: Nat) -> Eq()(0, 0) =
-            let of(k: Nat) -> Nat =
+        let used(n: Nat) -> Eq()(0, 0) =>
+            let of(k: Nat) -> Nat =>
                 match k
                 | 0 =>
                     let x = h(Bool/not(true));
@@ -132,12 +132,12 @@ fn an_arms_goal_is_typed_wherever_it_is_written() {
 fn a_result_is_typed_where_an_equation_around_an_arm_computes_to_another_case() {
     let restated = format!(
         r#"{BOUNDED}
-        let h2(c: Bool, d: Bool) -> Holds((match Bool/not(c) && d | true => (match d | true => g(Bool/not(c) && d, @True/qed()) | false => 0 end) | false => 0 end) <= 1) =
+        let h2(c: Bool, d: Bool) -> Holds((match Bool/not(c) && d | true => (match d | true => g(Bool/not(c) && d, @True/qed()) | false => 0 end) | false => 0 end) <= 1) =>
             match c
             | true => True/qed()
             | false => match d | true => True/qed() | false => True/qed() end
             end;
-        let used(d: Bool) -> Nat =
+        let used(d: Bool) -> Nat =>
             let x = h2(true, d);
             0;
         /std/print("held")
@@ -145,12 +145,12 @@ fn a_result_is_typed_where_an_equation_around_an_arm_computes_to_another_case() 
     );
     let respelled = format!(
         r#"{BOUNDED}
-        let h3(c: Bool, d: Bool) -> Holds((match Bool/not(c) && d | true => g(d && Bool/not(c), @True/qed()) | false => 0 end) <= 1) =
+        let h3(c: Bool, d: Bool) -> Holds((match Bool/not(c) && d | true => g(d && Bool/not(c), @True/qed()) | false => 0 end) <= 1) =>
             match c
             | true => True/qed()
             | false => match d | true => True/qed() | false => True/qed() end
             end;
-        let used(d: Bool) -> Nat =
+        let used(d: Bool) -> Nat =>
             let x = h3(true, d);
             0;
         /std/print("held")
@@ -166,7 +166,7 @@ fn a_result_is_typed_where_an_equation_around_an_arm_computes_to_another_case() 
 fn a_row_reached_at_two_leaves_is_typed_at_each() {
     let source = r#"
         use /std/{Bool, Nat, Option};
-        let f(m: Option(Nat), c: Bool, d: Bool) -> Nat =
+        let f(m: Option(Nat), c: Bool, d: Bool) -> Nat =>
             match (m, c)
             | (_, true) => (match d | true => 1 | false => 2 end)
             | (some(x), false) => x

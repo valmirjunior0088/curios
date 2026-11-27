@@ -113,7 +113,7 @@ fn top_let_group_mixed_pub() {
 
 #[test]
 fn a_test_declaration_parses_and_round_trips() {
-    let source = "test the_answer_holds = Test/assert(42 == 42);";
+    let source = "test the_answer_holds => Test/assert(42 == 42);";
     let module = source.parse::<Module>().unwrap();
     let [TopItem::Test(test)] = module.items.as_slice() else {
         panic!("expected one test item, got {:?}", module.items);
@@ -122,7 +122,7 @@ fn a_test_declaration_parses_and_round_trips() {
     let printed = module.printed(&SYNTAX).to_string();
     assert_eq!(
         printed.trim(),
-        "test the_answer_holds =\n    Test/assert(42 == 42);"
+        "test the_answer_holds =>\n    Test/assert(42 == 42);"
     );
     assert_eq!(printed.parse::<Module>().unwrap().items, module.items);
 }
@@ -131,12 +131,12 @@ fn a_test_declaration_parses_and_round_trips() {
 fn a_test_takes_no_parameters() {
     // A name and a description, with nothing between them. A telescope would say the claim holds of every instantiation, which nothing but a proof decides — that is a `let` whose type states the claim — so parentheses are not part of this form, empty ones included.
     assert!(
-        "test add_commutes(n: Nat, m: Nat) = Test/assert(true);"
+        "test add_commutes(n: Nat, m: Nat) => Test/assert(true);"
             .parse::<Module>()
             .is_err()
     );
     assert!(
-        "test empty() = Test/assert(true);"
+        "test empty() => Test/assert(true);"
             .parse::<Module>()
             .is_err()
     );
@@ -147,9 +147,9 @@ fn a_test_takes_no_parameters() {
 fn a_malformed_test_in_a_program_reports_its_own_fault() {
     // The fall-through a contextual word needs ends at the label, so each of these commits and names what it wanted. Falling through instead, the report would land on `ok`, where the tail the item became ran out.
     for (source, expected) in [
-        ("test ok(n: Nat) = Test/assert(true);", "expected: `=`"),
-        ("test ok Test/assert(true);", "expected: `=`"),
-        ("test ok = Test/assert(true)", "expected: `;`"),
+        ("test ok(n: Nat) => Test/assert(true);", "expected: `=>`"),
+        ("test ok Test/assert(true);", "expected: `=>`"),
+        ("test ok => Test/assert(true)", "expected: `;`"),
     ] {
         let error = source.parse::<Entrypoint>().unwrap_err().format();
         assert!(error.contains(expected), "{source}\n{error}");
@@ -159,7 +159,7 @@ fn a_malformed_test_in_a_program_reports_its_own_fault() {
 /// A declaration's label is spanned over the word alone, whatever whitespace follows it: the span is what a report about the declaration underlines.
 #[test]
 fn every_declaration_label_spans_its_word_alone() {
-    let module = "pub let  x  : Type = Type;\nmod  Inner ;\ninduct  Foo  : Type | bar() end\nstruct  Pt  : Type { }\nconcept  Sh (A : Type) : Type { }\ntest  it  = Type;\nforeign  clock() -> Nat;"
+    let module = "pub let  x  : Type = Type;\nmod  Inner ;\ninduct  Foo  : Type | bar() end\nstruct  Pt  : Type { }\nconcept  Sh (A : Type) : Type { }\ntest  it  => Type;\nforeign  clock() -> Nat;"
         .parse::<Module>()
         .unwrap();
     let spelled = module
@@ -183,11 +183,11 @@ fn every_declaration_label_spans_its_word_alone() {
 #[test]
 fn a_chain_where_a_term_is_read_is_refused_naming_the_rule() {
     for source in [
-        "let f() -> Nat = let x = let y = 1; y; x;",
-        "let f() -> Nat = g(1, let y = 1; y);",
-        "let f() -> List(Nat) = [let y = 1; y];",
-        "let f() -> P = P { x = let y = 1; y };",
-        "let f() -> Nat = 1 + (let y = 1; y);",
+        "let f() -> Nat => let x = let y = 1; y; x;",
+        "let f() -> Nat => g(1, let y = 1; y);",
+        "let f() -> List(Nat) => [let y = 1; y];",
+        "let f() -> P => P { x = let y = 1; y };",
+        "let f() -> Nat => 1 + (let y = 1; y);",
     ] {
         let report = source.parse::<Module>().unwrap_err().format();
         assert!(
@@ -201,13 +201,13 @@ fn a_chain_where_a_term_is_read_is_refused_naming_the_rule() {
 #[test]
 fn a_chain_is_read_wherever_a_body_is() {
     for source in [
-        "let f() -> Nat = let y = 1; y;",
+        "let f() -> Nat => let y = 1; y;",
         "let v : Nat = let y = 1; y;",
-        "let f() -> (Nat) -> Nat = (n) => let y = n; y;",
-        "let f(b: Bool) -> Nat = match b | true => let y = 1; y | false => 0 end;",
-        "test t = let y = 1; Test/pass();",
-        "let f() -> P = P { g(n) = let y = n; y };",
-        "let f() -> Nat = let y = 1; let z = y; z;",
+        "let f() -> (Nat) -> Nat => (n) => let y = n; y;",
+        "let f(b: Bool) -> Nat => match b | true => let y = 1; y | false => 0 end;",
+        "test t => let y = 1; Test/pass();",
+        "let f() -> P => P { g(n) => let y = n; y };",
+        "let f() -> Nat => let y = 1; let z = y; z;",
     ] {
         if let Err(error) = source.parse::<Module>() {
             panic!("{source:?} refused: {}", error.format());
@@ -215,7 +215,7 @@ fn a_chain_is_read_wherever_a_body_is() {
     }
 }
 
-/// A `let` written `name(…) =` holds its value to the case `name`, its payloads binder patterns under their marks, and prints back as written; written with the `->` a function states its result with, it defines a local function. Mutation-checked: with the constructor pattern left out of the binder patterns, the first `let` is refused.
+/// A `let` written `name(…) =` holds its value to the case `name`, its payloads binder patterns under their marks, and prints back as written; written with `=>`, as a lambda's body is, it defines a local function, its types left out where a lambda's may be, and a result in parentheses is the result and never a lambda's parameters. Mutation-checked: with the constructor pattern left out of the binder patterns, the first `let` is refused; with the lambda form left out of a local `let`'s signatures, the untyped function is refused; and with the result read as any term, the parenthesized one takes the body as a lambda's.
 #[test]
 fn a_let_tells_a_constructor_pattern_from_a_local_function_at_its_arrow() {
     let first = |source: &str| {
@@ -243,13 +243,35 @@ fn a_let_tells_a_constructor_pattern_from_a_local_function_at_its_arrow() {
         Pattern::Variant { .. }
     ));
 
-    let defined = first("let one() -> Nat = 1; one()");
+    let defined = first("let one() -> Nat => 1; one()");
     assert!(matches!(defined.binder, Pattern::Binder(_)));
     assert!(matches!(defined.signature, LetSignature::Func { .. }));
+
+    let untyped = first("let increment(n) => n + 1; increment(1)");
+    assert!(matches!(untyped.binder, Pattern::Binder(_)));
+    assert!(matches!(
+        &untyped.signature,
+        LetSignature::Lambda { params, output: None, .. } if params.len() == 1
+    ));
+
+    let parenthesized = first("let wrap(n: Nat) -> (Nat) => n; wrap(1)");
+    let LetSignature::Func { output, body, .. } = &parenthesized.signature else {
+        panic!("expected a function, got {:?}", parenthesized.signature);
+    };
+    assert!(
+        !matches!(output.as_subterm(), Subterm::Func(_)),
+        "the result read as a lambda: {output:?}"
+    );
+    assert!(
+        matches!(body.as_subterm(), Subterm::Name(_)),
+        "the body is {body:?}"
+    );
 
     for source in [
         "let cons(head, @_, (a, b)) = whole; head",
         "let refl() = p; u",
+        "let increment(n) => n + 1; increment(1)",
+        "let wrap(n: Nat) -> (Nat) => n; wrap(1)",
     ] {
         let term = source.parse::<Term>().unwrap();
         assert_eq!(

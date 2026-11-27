@@ -2,7 +2,7 @@
 use /std/{Str, Char, Nat, Bool, Option, Show, Test};
 
 -- A position steps over one character of any width: `a€😀` is a 1-byte, a 3-byte and a 4-byte scalar, so `next` reads U+0061, U+20AC and U+1F600, lands at offset 8, and there is nothing past it. Each step's bound — that there is a character at the position — discharges by reduction at a literal.
-test next_steps_over_codepoints_of_every_width =
+test next_steps_over_codepoints_of_every_width =>
     let s = "a€😀";
     let first = Str/At/next(s, Str/At/start(s));
     let second = Str/At/next(s, first.past);
@@ -18,7 +18,7 @@ test next_steps_over_codepoints_of_every_width =
         "3,97,8364,128512,8,true");
 
 -- A position steps back over one character of any width: from the end of `a€😀`, `prev` reads the same three scalars in reverse and lands on each one's first byte, and there is nothing before the start.
-test prev_steps_back_over_codepoints_of_every_width =
+test prev_steps_back_over_codepoints_of_every_width =>
     let s = "a€😀";
     let third = Str/At/prev(s, Str/At/finish(s));
     let second = Str/At/prev(s, third.past);
@@ -35,7 +35,7 @@ test prev_steps_back_over_codepoints_of_every_width =
         "128512,4,8364,1,97,0,true");
 
 -- A braced escape names a scalar no keyboard types: `"e\u{301}"` is two scalars, the `e` and the combining acute accent, and reads back as the accented letter it composes. `\u` without a brace is the two characters it always was.
-test a_braced_escape_names_a_scalar =
+test a_braced_escape_names_a_scalar =>
     let s = "é";
     let accent = Str/At/next(s, Str/At/next(s, Str/At/start(s)).past);
     Test/equal(
@@ -47,7 +47,7 @@ test a_braced_escape_names_a_scalar =
         "2,769,e\\u,😀");
 
 -- A cut between two positions is whole characters, since a position is where one begins: offsets 1 and 4 of `a€😀` hold the whole 3-byte euro sign, and offset 2, inside it, is no position at all.
-test between_cuts_on_codepoint_boundaries =
+test between_cuts_on_codepoint_boundaries =>
     let s = "a€😀";
     Test/equal(
         Str/join(",", [
@@ -56,27 +56,27 @@ test between_cuts_on_codepoint_boundaries =
         "€,true");
 
 -- An interior cut over a mixed-width string: past the leading `a` and before the trailing `b`, the three scalars of widths 2, 3 and 4 are one piece.
-test between_spans_every_codepoint_width =
+test between_spans_every_codepoint_width =>
     let s = "aé€😀b";
     Test/equal(Str/between(s, Str/At/of_offset(s, 1), Str/At/of_offset(s, 10)), "é€😀");
 
 -- `Str/trim` strips leading and trailing whitespace, leaving an interior multibyte scalar intact.
-test trim_keeps_interior_multibyte =
+test trim_keeps_interior_multibyte =>
     Test/equal(Str/trim("  café  "), "café");
 
 -- Whitespace is Unicode's: a no-break space, an ideographic space and a line separator go at either end, one between two words stays, and ASCII whitespace goes as before.
-test trim_strips_unicode_whitespace_at_either_end_and_keeps_it_inside =
+test trim_strips_unicode_whitespace_at_either_end_and_keeps_it_inside =>
     Test/all([
         Test/equal(Str/trim("\u{A0}\u{3000}a\u{2028}b \t\u{2028}"), "a\u{2028}b"),
         Test/equal(Str/trim_start("\u{3000} a"), "a"),
         Test/equal(Str/trim_end("a\u{A0}\n"), "a")]);
 
 -- An all-whitespace string trims to empty: `trim_start` finds no character to keep, and what it answers then is the empty text.
-test trim_all_whitespace_is_empty =
+test trim_all_whitespace_is_empty =>
     Test/equal(Str/concat(Str/trim(" \t "), "!"), "!");
 
 -- Folding, searching and case-folding all travel in certified `Char`s: the fold rebuilds the string scalar by scalar, a search answers the position a scalar begins at — read here as its byte offset — and ASCII case folding leaves a non-ASCII scalar alone.
-test logical_operations_use_certified_chars =
+test logical_operations_use_certified_chars =>
     let s = "a€😀";
     Test/equal(
         Str/join("|", [
@@ -100,11 +100,11 @@ test logical_operations_use_certified_chars =
         "a€😀|€|1|4|😀|true|false|3|€");
 
 -- A text in upper case is each character's full mapping in order: a letter past ASCII is raised, `ß` and `ﬃ` lengthen the text, and what has no case stays.
-test to_upper_writes_each_character_s_full_mapping =
+test to_upper_writes_each_character_s_full_mapping =>
     Test/equal(Str/to_upper("straße ﬃ, année 1"), "STRASSE FFI, ANNÉE 1");
 
 -- A text in lower case is each character's full mapping in order, but a capital sigma that ends a word is `ς`: after a letter, past any case-ignorable character between, and before no letter past any after it. Alone, before a letter, or before a letter past an apostrophe it is `σ`.
-test to_lower_writes_a_word_s_final_sigma =
+test to_lower_writes_a_word_s_final_sigma =>
     Test/all([
         Test/equal(Str/to_lower("ΟΔΟΣ"), "οδος"),
         Test/equal(Str/to_lower("Σ"), "σ"),
@@ -117,7 +117,7 @@ test to_lower_writes_a_word_s_final_sigma =
         Test/equal(Str/to_lower("STRASSE İ"), "strasse i\u{307}")]);
 
 -- Caseless comparison is the equality of the full folds: `ß` matches `SS`, both sigmas match `Σ`, a letter past ASCII matches across case, and what differs past case still differs.
-test eql_ignoring_case_compares_the_full_folds =
+test eql_ignoring_case_compares_the_full_folds =>
     Test/all([
         Test/assert("Straße matches STRASSE", Str/eql_ignoring_case("Straße", "STRASSE")),
         Test/assert("the sigmas match", Str/eql_ignoring_case("ΣΟΦΟΣ", "σοφος")),
@@ -126,7 +126,7 @@ test eql_ignoring_case_compares_the_full_folds =
         Test/equal(Str/to_casefold("Straße ẞ"), "strasse ss")]);
 
 -- `repeat` writes its text `n` times, at no copy, at one, at an odd count, and at a count a tree of single copies would not fit a test in: a million copies of one letter have a million bytes, and each half was built once.
-test repeat_writes_its_text_n_times =
+test repeat_writes_its_text_n_times =>
     Test/equal(
         [
             Str/repeat("ab", 0),

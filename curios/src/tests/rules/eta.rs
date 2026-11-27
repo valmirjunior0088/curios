@@ -18,7 +18,7 @@ fn an_expansion_that_drops_its_binder_is_not_eta() {
         r#"
         use /std/{Eq, Nat};
 
-        let dropped(g : (Nat) -> Nat) -> Eq()((x : Nat) => g(x), g) = Eq/refl();
+        let dropped(g : (Nat) -> Nat) -> Eq()((x : Nat) => g(x), g) => Eq/refl();
 
         /std/print("ok")
         "#,
@@ -37,7 +37,7 @@ fn an_expansion_that_swaps_its_components_is_not_eta() {
         r#"
         use /std/{Eq, Nat};
 
-        let swapped(p : {Nat, Nat}) -> Eq()((p.0, p.1), p) = Eq/refl();
+        let swapped(p : {Nat, Nat}) -> Eq()((p.0, p.1), p) => Eq/refl();
 
         /std/print("ok")
         "#,
@@ -67,7 +67,7 @@ fn an_expansion_that_drops_its_binder_is_not_eta_in_an_arm() {
         let dropped(b : Bool, g : (Nat) -> Nat)
             -> Eq()(match b | true => (x : Nat) => g(x + 0) | false => g end,
                     match b | true => g | false => g end)
-            = Eq/refl();
+            => Eq/refl();
 
         /std/print("ok")
         "#,
@@ -89,7 +89,7 @@ fn an_expansion_that_swaps_its_components_is_not_eta_in_an_arm() {
         let swapped(b : Bool, p : {Nat, Nat})
             -> Eq()(match b | true => (p.0, p.1) | false => p end,
                     match b | true => p | false => p end)
-            = Eq/refl();
+            => Eq/refl();
 
         /std/print("ok")
         "#,
@@ -130,7 +130,7 @@ fn a_tuple_that_swaps_a_stuck_eliminations_components_is_not_its_eta() {
                 | true => match c | true => p | false => q end
                 | false => p
                 end)
-            = Eq/refl();
+            => Eq/refl();
 
         /std/print("ok")
         "#,
@@ -156,7 +156,7 @@ fn a_struct_that_swaps_a_stuck_eliminations_fields_is_not_its_eta() {
                 Record { a = (match c | true => s | false => r end).a,
                          b = (match c | true => s | false => r end).b },
                 match c | true => s | false => r end)
-            = Eq/refl();
+            => Eq/refl();
 
         /std/print("ok")
         "#,
@@ -207,12 +207,12 @@ fn two_distinct_recursions_do_not_convert() {
     control(
         r#"
         use /std/{Nat, Eq};
-        let f(n : Nat) -> Nat =
+        let f(n : Nat) -> Nat =>
             match n
             | 0 => 0
             | k + 1 => f(k)
             end;
-        let g(n : Nat) -> Nat =
+        let g(n : Nat) -> Nat =>
             match n
             | 0 => 0
             | k + 1 => g(k)
@@ -239,9 +239,9 @@ fn a_hidden_field_keeps_a_struct_literal_apart_from_a_neutral() {
 
         struct S: pub Type { @k: Nat, u: {} }
 
-        let F(t: S) -> Prop = Holds(match t.k | 1 => true | _ => false end);
+        let F(t: S) -> Prop => Holds(match t.k | 1 => true | _ => false end);
 
-        let cast(s: S, G: (S) -> Prop, y: G(s)) -> G(S { @k = s.k, u = () }) = y;
+        let cast(s: S, G: (S) -> Prop, y: G(s)) -> G(S { @k = s.k, u = () }) => y;
 
         let _held: F(S { @k = 1, u = () }) = cast(S { @k = 1, u = () }, F, True/qed());
 

@@ -16,7 +16,7 @@ let serve: Cli =
         Option/some("0.1.0"));
 
 -- The layout the declaration fixes, to the space: one description, a usage line naming every option and positional, then the sections, each padded to its own widest left column. A default and a variable are said beside the option's help; a hidden option is in neither; `-h` and `--version` are rows because every command answers them.
-test help_renders_the_layout_the_declaration_fixes =
+test help_renders_the_layout_the_declaration_fixes =>
     Test/equal(
         Cli/help(serve, ["serve"]),
         Str/flatten(["Serve a directory over HTTP\n\n",
@@ -27,7 +27,7 @@ test help_renders_the_layout_the_declaration_fixes =
             "  -h, --help      Print help\n", "      --version   Print version\n\n"]));
 
 -- A refusal names what went wrong, the nearest name where there is one, repeats the usage line, and points at `--help`; it never prints the whole help, which is what separates a mistake from a request.
-test a_refusal_names_the_offender_and_points_at_help =
+test a_refusal_names_the_offender_and_points_at_help =>
     Test/equal(
         Cli/report(serve, ["serve"], Cli/Failure/unknown_option("--prot", Option/some("--port"))),
         Str/flatten(["error: unexpected argument '--prot'\n\n",
@@ -36,7 +36,7 @@ test a_refusal_names_the_offender_and_points_at_help =
             "For more information, try '--help'.\n"]));
 
 -- A command that declares no options says none, and each kind of positional says how many it takes.
-test the_usage_line_says_only_what_the_declaration_declares =
+test the_usage_line_says_only_what_the_declaration_declares =>
     let cat: Cli =
         Cli/declare(
             Cli/leaf(
@@ -51,7 +51,7 @@ test the_usage_line_says_only_what_the_declaration_declares =
     Test/equal(Cli/usage(cat, ["cat"]), "Usage: cat [FIRST] [FILES]...");
 
 -- A positional's name is shouted as Unicode writes it in upper case, in any script: a letter past ASCII is raised, and `ß` becomes `SS`.
-test a_positional_is_shouted_in_any_script =
+test a_positional_is_shouted_in_any_script =>
     let cat: Cli =
         Cli/declare(
             Cli/leaf(

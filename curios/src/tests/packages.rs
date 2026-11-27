@@ -327,7 +327,7 @@ fn a_package_may_not_witness_anothers_concept_at_anothers_type() {
 
     let orphan = package(
         "e2e-orphan",
-        "use /base/{Tag, Thing};\n\nsatisfy Tag(Thing) {\n    tag(_) = 1,\n}\n",
+        "use /base/{Tag, Thing};\n\nsatisfy Tag(Thing) {\n    tag(_) => 1,\n}\n",
         "/std/print(\"unreached\")\n",
     );
     let (entry, units) = resolved(&orphan.join("app"), None);
@@ -344,7 +344,7 @@ fn a_package_may_not_witness_anothers_concept_at_anothers_type() {
 
     let owned = package(
         "e2e-orphan-control",
-        "use /base/{Tag};\n\npub induct Mine: pub Type\n| mk()\nend\n\nsatisfy Tag(Mine) {\n    tag(_) = 7,\n}\n\npub let seven: /std/Nat = Tag/tag(Mine/mk());\n",
+        "use /base/{Tag};\n\npub induct Mine: pub Type\n| mk()\nend\n\nsatisfy Tag(Mine) {\n    tag(_) => 7,\n}\n\npub let seven: /std/Nat = Tag/tag(Mine/mk());\n",
         "/std/print(/std/Nat/to_str(/app/seven))\n",
     );
     assert_eq!(run(&owned.join("app"), None), b"7");
@@ -425,7 +425,7 @@ fn a_library_test_declaration_rides_through_the_cabinet() {
             ("base/curios.toml", "name = \"base\"\n"),
             (
                 "base/lib.crs",
-                "use /std/{Nat, Test};\npub let answer: Nat = 42;\ntest answer_holds =\n    Test/assert(\"the answer is forty-two\", answer == 42);\n",
+                "use /std/{Nat, Test};\npub let answer: Nat = 42;\ntest answer_holds =>\n    Test/assert(\"the answer is forty-two\", answer == 42);\n",
             ),
             (
                 "app/curios.toml",
@@ -592,7 +592,7 @@ fn a_test_subject_is_laid_out_as_a_page_for_a_browser() {
             ("curios.toml", &manifest),
             (
                 "lib.crs",
-                "use /std/{Nat, Test};\n\npub foreign double(Nat) -> Nat;\n\ntest doubling = Test/equal(double(21)!, 42);\n",
+                "use /std/{Nat, Test};\n\npub foreign double(Nat) -> Nat;\n\ntest doubling => Test/equal(double(21)!, 42);\n",
             ),
             ("web/dom.js", gateway),
         ],
@@ -641,7 +641,7 @@ fn a_test_subject_reaching_a_row_with_no_browser_table_is_refused_naming_the_tab
             ("curios.toml", &manifest),
             (
                 "lib.crs",
-                "use /std/{Nat, Test};\n\npub foreign double(Nat) -> Nat;\n\ntest doubling = Test/equal(double(21)!, 42);\n",
+                "use /std/{Nat, Test};\n\npub foreign double(Nat) -> Nat;\n\ntest doubling => Test/equal(double(21)!, 42);\n",
             ),
             ("plugin.wasm", ""),
         ],

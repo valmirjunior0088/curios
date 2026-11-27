@@ -9,9 +9,9 @@ use {crate::test_support::*, curios_common::fill};
 fn a_tuple_argument_no_caller_pins_settles_to_its_product() {
     let source = r#"
         use /std/{Nat, Io};
-        let swallow(@A : Type, a : A) -> Nat = 0;
+        let swallow(@A : Type, a : A) -> Nat => 0;
         let n : Nat = swallow((1, 2));
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let _ = /std/print(Nat/to_str(n))!;
             /std/Io/pure(());
         entry()
@@ -75,7 +75,7 @@ fn a_settled_tuple_reports_the_obligation_it_unblocked() {
 fn a_written_tuple_type_still_checks_the_literal_against_itself() {
     let source = r#"
         use /std/{Nat, Bool, Io};
-        let id(@A : Type, a : A) -> A = a;
+        let id(@A : Type, a : A) -> A => a;
         let z : {Nat, Bool} = id((1, true));
         /std/print(Nat/to_str(z.0))
         "#;
@@ -89,7 +89,7 @@ fn a_tuple_payload_waits_for_the_index_that_types_it() {
     let source = r#"
         use /std/{Nat, Str, Io};
         induct Labels : pub Type | nil() | cons(Str, Labels) end
-        let Count(L : Labels) -> Type =
+        let Count(L : Labels) -> Type =>
             match L
             | nil() => {}
             | cons(l, rest) => {Nat, Count(rest)}
@@ -108,12 +108,12 @@ fn a_payload_stuck_on_a_rigid_index_is_refused_at_the_literal() {
     let source = r#"
         use /std/{Nat, Str, Io};
         induct Labels : pub Type | nil() | cons(Str, Labels) end
-        let Count(L : Labels) -> Type =
+        let Count(L : Labels) -> Type =>
             match L
             | nil() => {}
             | cons(l, rest) => {Nat, Count(rest)}
             end;
-        let f(L : Labels) -> Nat =
+        let f(L : Labels) -> Nat =>
             let x : Count(L) = (1, ());
             0;
         /std/print("unreachable")
@@ -132,7 +132,7 @@ fn a_settled_index_measures_the_literal_against_the_type_it_computes() {
     let source = r#"
         use /std/{Nat, Str, Io};
         induct Labels : pub Type | nil() | cons(Str, Labels) end
-        let Count(L : Labels) -> Type =
+        let Count(L : Labels) -> Type =>
             match L
             | nil() => {}
             | cons(l, rest) => {Nat, Count(rest)}
@@ -182,7 +182,7 @@ fn a_synthesized_labeled_product_reports_its_labels() {
 fn a_tuple_argument_settles_inside_an_inferred_call() {
     let source = r#"
         use /std/{Nat, Bool, Io};
-        let id(@A : Type, a : A) -> A = a;
+        let id(@A : Type, a : A) -> A => a;
         let z = id((1, true));
         /std/print(Nat/to_str(z.0))
         "#;
@@ -195,7 +195,7 @@ fn a_tuple_argument_settles_inside_an_inferred_call() {
 fn an_inferred_call_commits_to_the_product_as_a_bare_literal_does() {
     let source = r#"
         use /std/{Nat, Bool};
-        let id(@A : Type, a : A) -> A = a;
+        let id(@A : Type, a : A) -> A => a;
         let z = id((1, true));
         let w : {a: Nat, b: Bool} = z;
         /std/print("unreachable")
@@ -215,16 +215,16 @@ fn program(body: &str) -> String {
         r#"
         use /std/{Nat, Int, Byte, Bool, List, Str, Show, print};
         use /std/Bool/{True, Holds};
-        let id(@A: Type, a: A) -> A = a;
-        let g(@A: Type, x: A, pin: A) -> Nat = 0;
-        let first(@A: Type, x: A, pin: A) -> A = x;
-        let second(@A: Type, pin: A, x: A) -> A = x;
+        let id(@A: Type, a: A) -> A => a;
+        let g(@A: Type, x: A, pin: A) -> Nat => 0;
+        let first(@A: Type, x: A, pin: A) -> A => x;
+        let second(@A: Type, pin: A, x: A) -> A => x;
         struct Pair(T: Type): pub Type { a: T, z: T }
         let b: Byte = 7;
         let c: Bool = true;
         let p: Holds(true) = True/qed();
-        let and(s: Str, t: Str) -> Str = Str/concat(s, Str/concat(" ", t));
-        let pair(q: {Byte, Byte}) -> Str = and(Show/show(q.0), Show/show(q.1));
+        let and(s: Str, t: Str) -> Str => Str/concat(s, Str/concat(" ", t));
+        let pair(q: {Byte, Byte}) -> Str => and(Show/show(q.0), Show/show(q.1));
         ${body}
         "#,
         body
@@ -238,7 +238,7 @@ fn two_literals_at_one_type_fill_each_other_whichever_is_read_first() {
         r#"
         let call = and(pair(first((5, 1), (b, b))), pair(second((b, b), (5, 1))));
         let through = and(pair(first(id((5, 1)), (b, b))), pair(second((b, b), id((5, 1)))));
-        let mixed(q: {Int, Byte}) -> Str = and(Int/to_str(q.0), Show/show(q.1));
+        let mixed(q: {Int, Byte}) -> Str => and(Int/to_str(q.0), Show/show(q.1));
         let signed = and(mixed(first((5, 1), (-3, b))), mixed(second((-3, b), (5, 1))));
         print(and(call, and(through, signed)))
         "#,
@@ -252,7 +252,7 @@ fn two_literals_at_one_type_fill_each_other_whichever_is_read_first() {
 fn literals_in_a_list_a_structure_and_a_match_share_one_shape() {
     let source = program(
         r#"
-        let head(ys: List({Byte, Byte})) -> Str = match ys | [] => "none" | [h, ..t] => pair(h) end;
+        let head(ys: List({Byte, Byte})) -> Str => match ys | [] => "none" | [h, ..t] => pair(h) end;
         let literal_first = [(5, 1), (b, b)];
         let literal_last = [(b, b), (5, 1)];
         let leading = Pair { a = (5, 1), z = (b, b) };
@@ -274,7 +274,7 @@ fn literals_in_a_list_a_structure_and_a_match_share_one_shape() {
 fn a_literal_inside_a_literal_is_shaped_with_it() {
     let source = program(
         r#"
-        let lone(ys: List(Byte)) -> Str = match ys | [] => "none" | [h, ..t] => Show/show(h) end;
+        let lone(ys: List(Byte)) -> Str => match ys | [] => "none" | [h, ..t] => Show/show(h) end;
         let nested = and(pair(first(((5, 1), c), ((b, b), c)).0), pair(second(((b, b), c), ((5, 1), c)).0));
         let lists = and(lone(first([5], [b])), lone(second([b], [5])));
         print(and(nested, lists))
@@ -315,8 +315,8 @@ fn a_lambda_inside_a_literal_is_typed_by_the_literal_beside_it() {
 fn a_tuple_of_proofs_is_a_proposition_where_it_takes_its_shape() {
     let source = program(
         r#"
-        let idp(@P: Prop, q: P) -> P = q;
-        let gp(@P: Prop, x: P, pin: P) -> Nat = 0;
+        let idp(@P: Prop, q: P) -> P => q;
+        let gp(@P: Prop, x: P, pin: P) -> Nat => 0;
         let alone = idp((p, p));
         let nested = idp(((p, p), (p, p)));
         let listed = [(p, p)];

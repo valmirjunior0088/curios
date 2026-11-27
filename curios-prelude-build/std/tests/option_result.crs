@@ -1,7 +1,7 @@
 -- The `Option` and `Result` surface beyond `bind` and `map`: fallbacks, filtering, the conversions between them, and the proof-carrying `Option/get`.
 use /std/{Option, Result, Nat, Str, Eq, Test};
 
-test option_fallbacks_filter_and_flatten =
+test option_fallbacks_filter_and_flatten =>
     let a: Option(Nat) = Option/some(1);
     let b: Option(Nat) = Option/none();
     Test/all([
@@ -11,7 +11,7 @@ test option_fallbacks_filter_and_flatten =
         Test/equal(Option/flatten(Option/some(a)), Option/some(1)),
         Test/equal(Option/unwrap_or_else(b, () => 7), 7)]);
 
-test option_and_result_convert_into_each_other =
+test option_and_result_convert_into_each_other =>
     let a: Option(Nat) = Option/some(1);
     let b: Option(Nat) = Option/none();
     let ok: Result(Str, Nat) = Result/success(2);
@@ -24,7 +24,7 @@ test option_and_result_convert_into_each_other =
         Test/equal(Result/unwrap_or_else(bad, (e: Str) => Str/length(e)), 2)]);
 
 -- `map` reaches the value a `some` and a `success` hold and leaves the others as they are, and `unwrap_or` falls back only where no value is held.
-test map_reaches_a_held_value_and_unwrap_or_falls_back_where_none_is =
+test map_reaches_a_held_value_and_unwrap_or_falls_back_where_none_is =>
     let held: Result(Nat, Nat) = Result/success(5);
     let refused: Result(Nat, Nat) = Result/failure(1);
     Test/all([
@@ -35,7 +35,7 @@ test map_reaches_a_held_value_and_unwrap_or_falls_back_where_none_is =
         Test/equal(Result/unwrap_or(Result/map(refused, (x: Nat) => x * 2), 0), 0)]);
 
 -- `IsSome` is decided by a match, so `get` on a literal `some` fills its bound by reduction with nothing written.
-test get_on_a_literal_some_discharges_its_bound =
+test get_on_a_literal_some_discharges_its_bound =>
     Test/equal(Option/get(Option/some(3)), 3);
 
 -- `some` is injective: a claim about every pair of values, so it is stated in a type and discharged on every build.
@@ -43,5 +43,5 @@ let _two_equal_options_hold_one_value(
     a: Nat,
     b: Nat,
     same: Eq()(Option/some(a), Option/some(b)),
-) -> Eq()(a, b) =
+) -> Eq()(a, b) =>
     Option/some_inj(same);

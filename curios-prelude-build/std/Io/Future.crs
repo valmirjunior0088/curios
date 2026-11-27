@@ -9,17 +9,17 @@ pub struct Future(A: Type): Type {
 }
 
 --- A future nothing has filled yet.
-pub let new(@A: Type) -> Io(Future(A)) =
+pub let new(@A: Type) -> Io(Future(A)) =>
     let value = Box/new(@Option(A), Option/none())!;
     let filled = Latch/new()!;
     Io/pure(Future { value = value, filled = filled });
 
 --- The value, once there is one.
-pub let poll(@A: Type, f: Future(A)) -> Io(Option(A)) =
+pub let poll(@A: Type, f: Future(A)) -> Io(Option(A)) =>
     Box/get(f.value);
 
 --- Fill `f` with `a`, and wake whatever waits on it. A second filling is dropped, so the first value stands.
-pub let fill(@A: Type, f: Future(A), a: A) -> Io({}) =
+pub let fill(@A: Type, f: Future(A), a: A) -> Io({}) =>
     let first =
         Box/change(f.value, (held: Option(A)) =>
             match held
@@ -29,5 +29,5 @@ pub let fill(@A: Type, f: Future(A), a: A) -> Io({}) =
     match first | true => Latch/trip(f.filled) | false => Io/pure(()) end;
 
 --- The value, waiting until there is one.
-pub let wait(@A: Type, f: Future(A)) -> Io(A) =
+pub let wait(@A: Type, f: Future(A)) -> Io(A) =>
     until(poll(f), Io/pure(on_tripped([f.filled])));

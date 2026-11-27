@@ -26,22 +26,22 @@ satisfy Hash/Key(Instant) {
 --- The monotonic clock: seconds since a fixed origin, signed, and the nanoseconds past them.
 foreign clock_mono() -> {secs: Int, nanos: Nat};
 
-pub let now() -> Io(Instant) =
+pub let now() -> Io(Instant) =>
     let r = clock_mono()!;
     Io/pure(Instant { nanos = r.secs * 1000000000 + Nat/to_int(r.nanos) });
 
 --- The nanoseconds since the clock's origin: what a deadline is handed to the host as.
-pub let to_nanos(i: Instant) -> Int =
+pub let to_nanos(i: Instant) -> Int =>
     i.nanos;
 
 --- The instant `d` after `t`.
-pub let add(t: Instant, d: Duration) -> Instant =
+pub let add(t: Instant, d: Duration) -> Instant =>
     Instant { nanos = t.nanos + Duration/to_nanos(d) };
 
 --- The instant `d` before `t`.
-pub let sub(t: Instant, d: Duration) -> Instant =
+pub let sub(t: Instant, d: Duration) -> Instant =>
     Instant { nanos = t.nanos - Duration/to_nanos(d) };
 
 --- How long after `b` the reading `a` was taken: below zero where `a` is the earlier.
-pub let diff(a: Instant, b: Instant) -> Duration =
+pub let diff(a: Instant, b: Instant) -> Duration =>
     Duration/of_nanos(a.nanos - b.nanos);

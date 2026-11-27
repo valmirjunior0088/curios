@@ -504,7 +504,7 @@
 #                    ^ source.curios
 #                     ^^^^^ source.curios variable.other.curios
 #                          ^ source.curios punctuation.separator.curios
->let keep(@A: Sort, a: A) -> A = a;
+>let keep(@A: Sort, a: A) -> A => a;
 #^^^ source.curios keyword.control.curios
 #   ^ source.curios
 #    ^^^^ source.curios entity.name.function.curios
@@ -526,8 +526,8 @@
 #                           ^ source.curios
 #                            ^ source.curios entity.name.type.curios
 #                             ^ source.curios
-#                              ^ source.curios keyword.operator.assignment.curios
-#                               ^ source.curios
-#                                ^ source.curios variable.other.curios
-#                                 ^ source.curios punctuation.separator.curios
+#                              ^^ source.curios keyword.operator.arrow.curios
+#                                ^ source.curios
+#                                 ^ source.curios variable.other.curios
+#                                  ^ source.curios punctuation.separator.curios
 >

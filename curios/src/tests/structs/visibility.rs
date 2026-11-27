@@ -30,7 +30,7 @@ fn struct_private_projection_rejected() {
         mod Celsius
             use /std/{Nat};
             pub struct Celsius : Type { Nat }
-            pub let of_nat(n : Nat) -> Celsius = Celsius { n };
+            pub let of_nat(n : Nat) -> Celsius => Celsius { n };
         end
         let c : Celsius/Celsius = Celsius/of_nat(42);
         /std/print(Nat/to_str(c.0))
@@ -51,7 +51,7 @@ fn pub_signature_exposing_private_sibling_is_rejected() {
         mod M
             use /std/{Nat};
             struct Secret : Type { Nat }
-            pub let f(s : Secret) -> Nat = 1;
+            pub let f(s : Secret) -> Nat => 1;
         end
         /std/print("no")
         "#;
@@ -74,7 +74,7 @@ fn pub_signature_exposing_private_child_module_is_rejected() {
                 pub struct T : pub Type { n : Nat }
             end
             use Inner/{T};
-            pub let g(t : T) -> T = t;
+            pub let g(t : T) -> T => t;
         end
         /std/print("no")
         "#;
@@ -166,7 +166,7 @@ fn hidden_struct_fields_are_not_interface_but_exposed_fields_are() {
             use /std/{Nat};
             struct Secret : pub Type { n : Nat }
             pub struct Opaque : Type { Secret }
-            pub let mk() -> Opaque = Opaque { Secret { n = 1 } };
+            pub let mk() -> Opaque => Opaque { Secret { n = 1 } };
         end
         let o = M/mk();
         /std/print("ok")
@@ -200,8 +200,8 @@ fn struct_private_representation_open_in_descendant() {
             pub mod Build
                 use /std/{Nat};
                 use /Celsius/{Celsius};
-                pub let of_nat(n : Nat) -> Celsius = Celsius { n };
-                pub let to_nat(c : Celsius) -> Nat = c.0;
+                pub let of_nat(n : Nat) -> Celsius => Celsius { n };
+                pub let to_nat(c : Celsius) -> Nat => c.0;
             end
         end
         /std/print(Nat/to_str(Celsius/Build/to_nat(Celsius/Build/of_nat(42))))
@@ -223,7 +223,7 @@ fn struct_private_representation_closed_to_siblings() {
             pub mod Other
                 use /std/{Nat};
                 use /Owner/Celsius/{Celsius};
-                pub let of_nat(n : Nat) -> Celsius = Celsius { n };
+                pub let of_nat(n : Nat) -> Celsius => Celsius { n };
             end
         end
         /std/print("no")
@@ -251,7 +251,7 @@ fn opaque_inductive_is_eliminable_in_a_descendant() {
             pub mod Read
                 use /std/{Nat};
                 use /Flag/{Flag};
-                pub let to_nat(f : Flag) -> Nat =
+                pub let to_nat(f : Flag) -> Nat =>
                     match f
                     | on() => 42
                     | off() => 0
@@ -270,7 +270,7 @@ fn async_future_plumbing_is_not_reachable_from_user_code() {
     let source = r#"
         use /std/{Nat, Box, Option};
         use /std/Io/{Future};
-        let _held(f: Future(Nat)) -> Box(Option(Nat)) = f.0;
+        let _held(f: Future(Nat)) -> Box(Option(Nat)) => f.0;
         /std/print("no")
         "#;
 

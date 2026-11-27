@@ -34,23 +34,23 @@ pub struct Of(I: Type, P: (Bytes, Nat) -> Prop, A: Type): Type {
 }
 
 --- A parser reading an `I` into an `A` — `Parse(Bytes, A)` over bytes, `Parse(Str, A)` over text. The combinators below are written once for both.
-pub let Parse(I: Type, use Input(I), A: Type) -> Type =
+pub let Parse(I: Type, use Input(I), A: Type) -> Type =>
     Of(I, (input: Bytes, offset: Nat) => Input/Admits(@I, input, offset), A);
 
 --- A position a parser reading an `I` may stand at in `input`.
-pub let Pos(I: Type, use Input(I), input: Bytes) -> Type =
+pub let Pos(I: Type, use Input(I), input: Bytes) -> Type =>
     At((input: Bytes, offset: Nat) => Input/Admits(@I, input, offset), input);
 
 --- `p` from the start of `input`: its value, or the refusal that stopped it, at a byte offset into the input's bytes. A parser that stops early still succeeds, so a parser that must consume everything ends with `eof()`.
-pub let run(@I: Type, use Input(I), @A: Type, p: Parse(I, A), input: I) -> Result(Error, A) =
+pub let run(@I: Type, use Input(I), @A: Type, p: Parse(I, A), input: I) -> Result(Error, A) =>
     match p.run(Input/bytes(input), At { offset = 0, holds = Input/start(input) })
     | success((_, a)) => Result/success(a)
     | failure(refusal) => Result/failure(refusal)
     end;
 
 --- `a`, consuming nothing, at any carrier's positions: what `pure` and the `Monad` witness share.
-let unit(@I: Type, @P: (Bytes, Nat) -> Prop, @A: Type, a: A) -> Of(I, P, A) =
-    Of { run(_, at) = Result/success((at, a)) };
+let unit(@I: Type, @P: (Bytes, Nat) -> Prop, @A: Type, a: A) -> Of(I, P, A) =>
+    Of { run(_, at) => Result/success((at, a)) };
 
 --- `p`, then `f` on its value from where it stopped, at any carrier's positions: what `bind` and the `Monad` witness share.
 let chain(
@@ -60,21 +60,21 @@ let chain(
     @B: Type,
     p: Of(I, P, A),
     f: (A) -> Of(I, P, B),
-) -> Of(I, P, B) =
+) -> Of(I, P, B) =>
     Of {
-        run(input, at) =
+        run(input, at) =>
             match p.run(input, at)
             | success((next, a)) => f(a).run(input, next)
             | failure(refusal) => Result/failure(refusal)
             end };
 
 --- `a`, consuming nothing.
-pub let pure(@I: Type, use Input(I), @A: Type, a: A) -> Parse(I, A) =
+pub let pure(@I: Type, use Input(I), @A: Type, a: A) -> Parse(I, A) =>
     unit(a);
 
 --- Decline with `msg`, consuming nothing.
-pub let fail(@I: Type, use Input(I), @A: Type, msg: Str) -> Parse(I, A) =
-    Of { run(_, at) = Result/failure(Error/declined(msg, at.offset)) };
+pub let fail(@I: Type, use Input(I), @A: Type, msg: Str) -> Parse(I, A) =>
+    Of { run(_, at) => Result/failure(Error/declined(msg, at.offset)) };
 
 --- `f` on the value.
 pub let map(
@@ -84,9 +84,9 @@ pub let map(
     @B: Type,
     p: Parse(I, A),
     f: (A) -> B,
-) -> Parse(I, B) =
+) -> Parse(I, B) =>
     Of {
-        run(input, at) =
+        run(input, at) =>
             match p.run(input, at)
             | success((next, a)) => Result/success((next, f(a)))
             | failure(refusal) => Result/failure(refusal)
@@ -100,13 +100,13 @@ pub let bind(
     @B: Type,
     p: Parse(I, A),
     f: (A) -> Parse(I, B),
-) -> Parse(I, B) =
+) -> Parse(I, B) =>
     chain(p, f);
 
 --- `p`, or else `q` from the same position when `p` declines. A committed refusal is reported as it is; when both decline, the one that got further is reported, since that alternative matched more of the input, and `p`'s on a tie.
-pub let or(@I: Type, use Input(I), @A: Type, p: Parse(I, A), q: Parse(I, A)) -> Parse(I, A) =
+pub let or(@I: Type, use Input(I), @A: Type, p: Parse(I, A), q: Parse(I, A)) -> Parse(I, A) =>
     Of {
-        run(input, at) =
+        run(input, at) =>
             match p.run(input, at)
             | success(pair) => Result/success(pair)
             | failure(e) =>
@@ -125,18 +125,18 @@ pub let or(@I: Type, use Input(I), @A: Type, p: Parse(I, A), q: Parse(I, A)) -> 
             end };
 
 --- `p` as the shape the input has been recognized to have: a refusal inside it is committed, so an enclosing `or` reports it rather than trying an alternative.
-pub let commit(@I: Type, use Input(I), @A: Type, p: Parse(I, A)) -> Parse(I, A) =
+pub let commit(@I: Type, use Input(I), @A: Type, p: Parse(I, A)) -> Parse(I, A) =>
     Of {
-        run(input, at) =
+        run(input, at) =>
             match p.run(input, at)
             | success(pair) => Result/success(pair)
             | failure(refusal) => Result/failure(Error/commit(refusal))
             end };
 
 --- `p`, declining with `msg` where it started in place of its own reason. A committed refusal is reported as it is.
-pub let label(@I: Type, use Input(I), @A: Type, p: Parse(I, A), msg: Str) -> Parse(I, A) =
+pub let label(@I: Type, use Input(I), @A: Type, p: Parse(I, A), msg: Str) -> Parse(I, A) =>
     Of {
-        run(input, at) =
+        run(input, at) =>
             match p.run(input, at)
             | success(pair) => Result/success(pair)
             | failure(e) =>
@@ -147,7 +147,7 @@ pub let label(@I: Type, use Input(I), @A: Type, p: Parse(I, A), msg: Str) -> Par
             end };
 
 --- `p`'s value, or `none` when it declines, consuming nothing then.
-pub let optional(@I: Type, use Input(I), @A: Type, p: Parse(I, A)) -> Parse(I, Option(A)) =
+pub let optional(@I: Type, use Input(I), @A: Type, p: Parse(I, A)) -> Parse(I, Option(A)) =>
     or(map(p, (a) => Option/some(a)), pure(Option/none()));
 
 --- `p` then `q`, their values paired.
@@ -158,9 +158,9 @@ pub let and(
     @B: Type,
     p: Parse(I, A),
     q: Parse(I, B),
-) -> Parse(I, {A, B}) =
+) -> Parse(I, {A, B}) =>
     Of {
-        run(input, at) =
+        run(input, at) =>
             match p.run(input, at)
             | success((mid, a)) =>
                 match q.run(input, mid)
@@ -171,28 +171,28 @@ pub let and(
             end };
 
 --- `p` for its value alone: the position is left where `p` started.
-pub let lookahead(@I: Type, use Input(I), @A: Type, p: Parse(I, A)) -> Parse(I, A) =
+pub let lookahead(@I: Type, use Input(I), @A: Type, p: Parse(I, A)) -> Parse(I, A) =>
     Of {
-        run(input, at) =
+        run(input, at) =>
             match p.run(input, at)
             | success((_, a)) => Result/success((at, a))
             | failure(refusal) => Result/failure(refusal)
             end };
 
 --- The end of the input; declines while anything remains.
-pub let eof(@I: Type, use Input(I)) -> Parse(I, {}) =
+pub let eof(@I: Type, use Input(I)) -> Parse(I, {}) =>
     Of {
-        run(input, at) =
+        run(input, at) =>
             match at.offset < Bytes/length(input)
             | true => Result/failure(Error/declined("expected end of input", at.offset))
             | false => Result/success((at, ()))
             end };
 
 --- `p` repeated until it declines or consumes nothing, the values collected.
-pub let many0(@I: Type, use Input(I), @A: Type, p: Parse(I, A)) -> Parse(I, List(A)) =
+pub let many0(@I: Type, use Input(I), @A: Type, p: Parse(I, A)) -> Parse(I, List(A)) =>
     Of {
-        run(input, at) =
-            let go(acc: List(A), cur: Pos(I, input)) -> Result(Error, {Pos(I, input), List(A)}) =
+        run(input, at) =>
+            let go(acc: List(A), cur: Pos(I, input)) -> Result(Error, {Pos(I, input), List(A)}) =>
                 match p.run(input, cur)
                 | failure(e) =>
                     match e.committed
@@ -208,7 +208,7 @@ pub let many0(@I: Type, use Input(I), @A: Type, p: Parse(I, A)) -> Parse(I, List
             go([], at) };
 
 --- `many0` with a first value owed: where `p` declines at the start, its refusal is the parser's rather than an empty list.
-pub let many1(@I: Type, use Input(I), @A: Type, p: Parse(I, A)) -> Parse(I, List(A)) =
+pub let many1(@I: Type, use Input(I), @A: Type, p: Parse(I, A)) -> Parse(I, List(A)) =>
     bind(p, (first) => map(many0(p), (rest) => [first, ..rest]));
 
 --- The loop behind the four `sep_by` parsers. `owed` says whether a first element that declines is the list's refusal or an empty list, and `trailing` whether a separator with no element after it closes the list, consumed, or leaves the element owed.
@@ -221,9 +221,9 @@ let separated(
     sep: Parse(I, S),
     owed: Bool,
     trailing: Bool,
-) -> Parse(I, List(A)) =
+) -> Parse(I, List(A)) =>
     Of {
-        run(input, at) =
+        run(input, at) =>
             match elem.run(input, at)
             | failure(e) =>
                 match e.committed
@@ -238,7 +238,7 @@ let separated(
                 let go(
                     acc: List(A),
                     cur: Pos(I, input),
-                ) -> Result(Error, {Pos(I, input), List(A)}) =
+                ) -> Result(Error, {Pos(I, input), List(A)}) =>
                     match sep.run(input, cur)
                     | failure(e) =>
                         match e.committed
@@ -274,7 +274,7 @@ pub let sep_by0(
     @S: Type,
     elem: Parse(I, A),
     sep: Parse(I, S),
-) -> Parse(I, List(A)) =
+) -> Parse(I, List(A)) =>
     separated(elem, sep, false, false);
 
 --- `sep_by0` with a first element owed: where `elem` declines at the start, its refusal is the list's rather than an empty list.
@@ -285,7 +285,7 @@ pub let sep_by1(
     @S: Type,
     elem: Parse(I, A),
     sep: Parse(I, S),
-) -> Parse(I, List(A)) =
+) -> Parse(I, List(A)) =>
     separated(elem, sep, true, false);
 
 --- `sep_by0` where a separator may close the list: one with no element after it is consumed, and ends it.
@@ -296,7 +296,7 @@ pub let sep_by0_trailing(
     @S: Type,
     elem: Parse(I, A),
     sep: Parse(I, S),
-) -> Parse(I, List(A)) =
+) -> Parse(I, List(A)) =>
     separated(elem, sep, false, true);
 
 --- `sep_by1` where a separator may close the list.
@@ -307,10 +307,10 @@ pub let sep_by1_trailing(
     @S: Type,
     elem: Parse(I, A),
     sep: Parse(I, S),
-) -> Parse(I, List(A)) =
+) -> Parse(I, List(A)) =>
     separated(elem, sep, true, true);
 
-satisfy (@I: Type, @P: (Bytes, Nat) -> Prop) => Monad((A: Type) => Of(I, P, A)) {
-    pure(a) = unit(a),
-    bind(p, f) = chain(p, f),
+satisfy (@I: Type, @P: (Bytes, Nat) -> Prop) -> Monad((A: Type) => Of(I, P, A)) {
+    pure(a) => unit(a),
+    bind(p, f) => chain(p, f),
 }

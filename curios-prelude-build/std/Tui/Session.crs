@@ -54,8 +54,8 @@ let asked: Bytes =
         ..ansi/attributes_ask];
 
 -- What a session sets once the terminal has answered: the alternate screen, the hidden cursor, bracketed paste and focus events, and the keyboard protocol, grapheme clusters and in-band resize where the terminal confirmed them.
-let entering(support: Support) -> Bytes =
-    let where(confirmed: Bool, b: Bytes) -> Bytes =
+let entering(support: Support) -> Bytes =>
+    let where(confirmed: Bool, b: Bytes) -> Bytes =>
         match confirmed | true => b | false => 0x[] end;
     0x[
         ..ansi/on(Mode/alternate_screen()),
@@ -74,7 +74,7 @@ let patience: Duration =
 let arrival(
     arrived: Bool,
     held: Bytes,
-) -> Reader/Step(Bool, {}, {inputs: List(Input), replies: List(Reply)}) =
+) -> Reader/Step(Bool, {}, {inputs: List(Input), replies: List(Reply)}) =>
     match arrived
     | false => Reader/Step/more(true, held)
     | true =>
@@ -87,7 +87,7 @@ let answered(
     input: Reader(Tty),
     inputs: List(Input),
     replies: List(Reply),
-) -> Try(Io, Io/Error, {inputs: List(Input), replies: List(Reply)}) =
+) -> Try(Io, Io/Error, {inputs: List(Input), replies: List(Reply)}) =>
     let so_far = (inputs = inputs, replies = replies);
     let next = Io/timeout(patience, Reader/take(input, arrival, false))!;
     match next
@@ -106,8 +106,8 @@ let answered(
     end;
 
 -- What `replies` confirm: a keyboard protocol that answered with its flags, and each mode the terminal reported supported.
-let supported(replies: List(Reply)) -> Support =
-    let mode(m: Mode) -> Bool = List/contains(replies, Reply/mode(m, true));
+let supported(replies: List(Reply)) -> Support =>
+    let mode(m: Mode) -> Bool => List/contains(replies, Reply/mode(m, true));
     Support {
         keyboard = List/any(replies, (r: Reply) =>
             match r | keyboard(_) => true | _ => false end),
@@ -116,7 +116,7 @@ let supported(replies: List(Reply)) -> Support =
         resize = mode(Mode/in_band_resize()) };
 
 --- The controlling terminal taken for the rest of `s`, asked what it supports and set up with it: raw mode, the alternate screen, the hidden cursor, bracketed paste and focus events, and the kitty keyboard protocol, grapheme clusters and in-band resize where the terminal confirmed them, each undone when `s` ends, however it ends. A terminal that answers nothing of what it was asked is set up without them once it has kept the session waiting a second. What it sent beside its answers is the first read's.
-pub let open(s: Io/Scope) -> Try(Io, Io/Error, Session) =
+pub let open(s: Io/Scope) -> Try(Io, Io/Error, Session) =>
     let t = Tty/open(s)!;
     let () = Tty/raw(s, t, leaving)!;
     let input = Reader/new(t)!;
@@ -129,30 +129,30 @@ pub let open(s: Io/Scope) -> Try(Io, Io/Error, Session) =
     Try/pure(Session { tty = t, input = input, support = support, kept = kept });
 
 --- The size the session last knew the terminal at: the one it was opened at, asked since, or reported in the terminal's input.
-pub let size(s: Session) -> Try(Io, Io/Error, Tty/Size) =
+pub let size(s: Session) -> Try(Io, Io/Error, Tty/Size) =>
     let kept = Box/get(s.kept)!;
     Try/pure(kept.size);
 
 --- The terminal's size now, asked of it and kept.
-pub let measure(s: Session) -> Try(Io, Io/Error, Tty/Size) =
+pub let measure(s: Session) -> Try(Io, Io/Error, Tty/Size) =>
     let now = Tty/size(s.tty)!;
     let () = Box/update(s.kept, (kept: Kept) => Kept { ..kept, size = now })!;
     Try/pure(now);
 
 --- Keep `now` as the terminal's size, as a resize the terminal reported states it.
-pub let resized(s: Session, now: Tty/Size) -> Try(Io, Io/Error, {}) =
+pub let resized(s: Session, now: Tty/Size) -> Try(Io, Io/Error, {}) =>
     Box/update(s.kept, (kept: Kept) => Kept { ..kept, size = now });
 
 --- Whether the terminal reports its size in its input as it changes, so nothing need ask it.
-pub let reports_size(s: Session) -> Bool =
+pub let reports_size(s: Session) -> Bool =>
     s.support.resize;
 
 --- Take the terminal's screen as unknown, so the next draw writes it whole.
-pub let forget(s: Session) -> Try(Io, Io/Error, {}) =
+pub let forget(s: Session) -> Try(Io, Io/Error, {}) =>
     Box/update(s.kept, (kept: Kept) => Kept { ..kept, shown = Option/none() });
 
 -- The frame `shown` holds, where it was drawn at `w` by `h`.
-let drawn_at(w: Nat, h: Nat, shown: Option(Shown)) -> Option(Frame(w, h)) =
+let drawn_at(w: Nat, h: Nat, shown: Option(Shown)) -> Option(Frame(w, h)) =>
     match shown
     | some(p), p.w == w && p.h == h =>
         let as_wide = Eq/subst((n: Nat) => Frame(n, p.h), proved(), p.frame);
@@ -161,7 +161,7 @@ let drawn_at(w: Nat, h: Nat, shown: Option(Shown)) -> Option(Frame(w, h)) =
     end;
 
 --- `v` written as the difference from the frame the terminal shows where the size is unchanged, and whole where it is not or no frame is known to be shown, the terminal's cursor where `v` asks for it or hidden. A write that fails is raised, and leaves the terminal's screen unknown, so the next draw is whole.
-pub let draw(@w: Nat, @h: Nat, s: Session, v: View/Sized(w, h)) -> Try(Io, Io/Error, {}) =
+pub let draw(@w: Nat, @h: Nat, s: Session, v: View/Sized(w, h)) -> Try(Io, Io/Error, {}) =>
     let frame = Frame/of_view(v);
     let before: Option(Frame(w, h)) =
         Box/change(s.kept, (kept: Kept) =>
@@ -181,7 +181,7 @@ pub let draw(@w: Nat, @h: Nat, s: Session, v: View/Sized(w, h)) -> Try(Io, Io/Er
     end;
 
 -- One arrival of input and the inputs it completes, what it leaves undecoded staying held: the state is whether the arrival has come.
-let burst(arrived: Bool, held: Bytes) -> Reader/Step(Bool, {}, List(Input)) =
+let burst(arrived: Bool, held: Bytes) -> Reader/Step(Bool, {}, List(Input)) =>
     match arrived
     | false => Reader/Step/more(true, held)
     | true =>
@@ -190,7 +190,7 @@ let burst(arrived: Bool, held: Bytes) -> Reader/Step(Bool, {}, List(Input)) =
     end;
 
 --- The next burst of input, waiting until one arrives; `none` once the terminal's input has ended. What arrived where the session opened is the first burst. A read that fails is raised, the one a burst opens with and the one it waits on for the rest of a key alike. Where the terminal speaks the kitty keyboard protocol its Escape key is a sequence of its own, so bytes a burst leaves held are always the start of one and wait for the next; elsewhere a lone Escape is the key once nothing more comes.
-pub let read(s: Session) -> Try(Io, Io/Error, Option(List(Input))) =
+pub let read(s: Session) -> Try(Io, Io/Error, Option(List(Input))) =>
     let pending = taken_pending(s)!;
     match pending
     | [_, .._] => Try/pure(Option/some(pending))
@@ -198,15 +198,15 @@ pub let read(s: Session) -> Try(Io, Io/Error, Option(List(Input))) =
     end;
 
 -- The inputs `s` keeps for its next read, taken.
-let taken_pending(s: Session) -> Io(List(Input)) =
+let taken_pending(s: Session) -> Io(List(Input)) =>
     Box/change(s.kept, (kept: Kept) => (Kept { ..kept, pending = [] }, kept.pending));
 
 -- `inputs` kept after what `s` keeps for its next read.
-let kept_pending(s: Session, inputs: List(Input)) -> Io({}) =
+let kept_pending(s: Session, inputs: List(Input)) -> Io({}) =>
     Box/update(s.kept, (kept: Kept) => Kept { ..kept, pending = [..kept.pending, ..inputs] });
 
 -- The next burst read from the terminal itself.
-let arrived(s: Session) -> Try(Io, Io/Error, Option(List(Input))) =
+let arrived(s: Session) -> Try(Io, Io/Error, Option(List(Input))) =>
     -- A take of the reader is an `Io` action by its declaration, which is what a `Try` region embeds it by.
     let arrival: Io(Result(Reader/Stop(Bool, {}), List(Input))) =
         Reader/take(s.input, burst, false);
@@ -248,7 +248,7 @@ let arrived(s: Session) -> Try(Io, Io/Error, Option(List(Input))) =
     end;
 
 --- `action` run with the terminal given back — its modes undone and its settings restored — and taken again once it answers, set up as it was where the session opened; the next draw is whole, and the size is asked again.
-pub let release(@A: Type, s: Session, action: Io(A)) -> Try(Io, Io/Error, A) =
+pub let release(@A: Type, s: Session, action: Io(A)) -> Try(Io, Io/Error, A) =>
     let answer = Tty/released(s.tty, leaving, action)!;
     let () = Io/write(s.tty, entering(s.support))!;
     let now = Tty/size(s.tty)!;

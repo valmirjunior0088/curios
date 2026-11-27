@@ -15,10 +15,10 @@ fn a_colliding_key_witness_is_rejected() {
         satisfy Eql(Side) { .. }
         satisfy Ord(Side) { .. }
         satisfy Hash(Side) {
-            hash(s) = 0x[],
+            hash(s) => 0x[],
         }
         satisfy Hash/Key(Side) {
-            mono(a, b) =
+            mono(a, b) =>
                 match a
                 | left() => match b | left() => Eq/refl() | right() => Eq/refl() end
                 | right() => match b | left() => Eq/refl() | right() => Eq/refl() end
@@ -48,10 +48,10 @@ fn a_key_witness_out_of_its_order_is_rejected() {
         satisfy Eql(Side) { .. }
         satisfy Ord(Side) { .. }
         satisfy Hash(Side) {
-            hash(s) = match s | left() => 0x[0x1] | right() => 0x[0x0] end,
+            hash(s) => match s | left() => 0x[0x1] | right() => 0x[0x0] end,
         }
         satisfy Hash/Key(Side) {
-            mono(a, b) =
+            mono(a, b) =>
                 match a
                 | left() => match b | left() => Eq/refl() | right() => Eq/refl() end
                 | right() => match b | left() => Eq/refl() | right() => Eq/refl() end
@@ -74,13 +74,13 @@ fn a_function_under_a_key_alone_sorts_its_keys_and_states_their_order() {
     let source = r#"
         use /std/{Nat, Int, Bool, Str, List, Map, Hash}; use /std/ops/{Ord};
         use /std/Bool/{Holds};
-        let sorted(@K: Type, use Hash/Key(K), keys: List(K)) -> List(K) =
+        let sorted(@K: Type, use Hash/Key(K), keys: List(K)) -> List(K) =>
             List/sort(keys);
         let in_order(
             @K: Type,
             use Hash/Key(K),
             keys: List(K),
-        ) -> Holds(List/ordered(sorted(keys), Ord/le_by((a: K, b: K) => Ord/ord(a, b)))) =
+        ) -> Holds(List/ordered(sorted(keys), Ord/le_by((a: K, b: K) => Ord/ord(a, b)))) =>
             List/sort/sorted(keys);
         /std/print(
             Str/join(

@@ -2,14 +2,14 @@ use /std/{Nat, Bool, Char, Option, List, Str};
 use /std/Str/{Form};
 
 -- What `c` decomposes to, fully, under compatibility equivalence where `compatible` and under canonical equivalence otherwise.
-let decomposed(c: Char, compatible: Bool) -> Str =
+let decomposed(c: Char, compatible: Bool) -> Str =>
     match compatible
     | true => Char/compatibility_decomposition(c)
     | false => Char/canonical_decomposition(c)
     end;
 
 -- `c` put into `reversed`, the characters before it latest first, as the canonical ordering puts it: a mark moved back past each mark before it of a greater class, and never past a starter.
-let ordered_into(reversed: List({Char, Nat}), c: Char, class: Nat) -> List({Char, Nat}) =
+let ordered_into(reversed: List({Char, Nat}), c: Char, class: Nat) -> List({Char, Nat}) =>
     match class
     | 0 => [(c, 0), ..reversed]
     | _ =>
@@ -32,7 +32,7 @@ struct Composing: Type {
 }
 
 -- What a composition holds once `c`, of class `class`, is kept as it is: a starter, the one later characters compose with from then on, and any other after the starter.
-let kept(state: Composing, c: Char, class: Nat) -> Composing =
+let kept(state: Composing, c: Char, class: Nat) -> Composing =>
     match state.starter
     | none() =>
         match class
@@ -67,7 +67,7 @@ let kept(state: Composing, c: Char, class: Nat) -> Composing =
     end;
 
 -- One step of the canonical composition: `c`, of class `class`, composed with the last starter where nothing between them blocks it — no character of class `0` or of a class no smaller than its own — and the two have a primary composite, and kept as it is otherwise.
-let step(state: Composing, c: Char, class: Nat) -> Composing =
+let step(state: Composing, c: Char, class: Nat) -> Composing =>
     match state.starter
     | none() => kept(state, c, class)
     | some(starter) =>
@@ -92,12 +92,12 @@ let step(state: Composing, c: Char, class: Nat) -> Composing =
     end;
 
 -- The characters a composition holds, in order.
-let composition(state: Composing) -> List(Char) =
+let composition(state: Composing) -> List(Char) =>
     let starter = match state.starter | some(c) => [c] | none() => [] end;
     List/reverse([..state.after, ..starter, ..state.settled]);
 
 --- `s` in `form`: every character decomposed, canonically or by compatibility as `form` asks, the marks put in canonical order, and composed again where `form` is a composed one.
-pub let normalized(s: Str, form: Form) -> Str =
+pub let normalized(s: Str, form: Form) -> Str =>
     let compatible =
         match form | nfkc() | nfkd() => true | nfc() | nfd() => false end;
     let reversed =

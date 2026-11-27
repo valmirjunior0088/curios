@@ -9,17 +9,17 @@ pub concept Spell(A: Type): pub Type {
 pub use Spell/*;
 
 --- How a constructor application spells: the head, then its arguments in parentheses.
-pub let call(head: Str, args: List(Str)) -> Str =
+pub let call(head: Str, args: List(Str)) -> Str =>
     Fmt/render("%(%)")(head)(Str/join(", ", args));
 
 --- How a hidden member spells: under its mark, as a call or a literal writes it where it writes it at all.
-pub let hidden(value: Str) -> Str =
+pub let hidden(value: Str) -> Str =>
     Str/concat("@", value);
 
 --- How a record spells: the head, then its fields in braces.
 ---
 --- A field whose label is empty spells as its value alone, which is the positional field of a newtype-like structure.
-pub let record(head: Str, fields: List({Str, Str})) -> Str =
+pub let record(head: Str, fields: List({Str, Str})) -> Str =>
     let entries =
         List/map(fields, ((label, value)) =>
             match Str/length(label)

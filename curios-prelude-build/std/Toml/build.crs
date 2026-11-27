@@ -33,10 +33,10 @@ pub let build_empty: Build =
     Build { root = Map/empty(), side = Map/empty(), scope = [] };
 
 --- The document a build has put together so far.
-pub let root(b: Build) -> Map(Str, Toml) =
+pub let root(b: Build) -> Map(Str, Toml) =>
     b.root;
 
-let seg_key(pre: Bytes, seg: Seg) -> Bytes =
+let seg_key(pre: Bytes, seg: Seg) -> Bytes =>
     match seg
     | plain(name) =>
         let nb = Str/to_bytes(name);
@@ -54,7 +54,7 @@ let seg_key(pre: Bytes, seg: Seg) -> Bytes =
             ';']
     end;
 
-let seg_name(seg: Seg) -> Str =
+let seg_name(seg: Seg) -> Str =>
     match seg | plain(name) | at(name, _) => name end;
 
 let replace_at(
@@ -62,10 +62,10 @@ let replace_at(
     index: Nat,
     ok: Holds(index < List/length(items)),
     value: Toml,
-) -> List(Toml) =
+) -> List(Toml) =>
     [..List/slice(items, 0, index), value, ..List/drop(@Toml, items, index + 1, @ok)];
 
-let may_extend(side: Map(Bytes, Origin), kp: Bytes, act: Act) -> Result(Rule, {}) =
+let may_extend(side: Map(Bytes, Origin), kp: Bytes, act: Act) -> Result(Rule, {}) =>
     match Map/try_get(side, kp)
     | some(st) =>
         match act
@@ -90,7 +90,7 @@ let walk_final(
     pre: Bytes,
     name: Str,
     act: Act,
-) -> Result(Rule, {Map(Str, Toml), Map(Bytes, Origin), List(Seg)}) =
+) -> Result(Rule, {Map(Str, Toml), Map(Bytes, Origin), List(Seg)}) =>
     let kf = seg_key(pre, Seg/plain(name));
     match act
     | act_table() =>
@@ -156,7 +156,7 @@ let walk(
     segs: List(Seg),
     unchecked: Nat,
     act: Act,
-) -> Result(Rule, {Map(Str, Toml), Map(Bytes, Origin), List(Seg)}) =
+) -> Result(Rule, {Map(Str, Toml), Map(Bytes, Origin), List(Seg)}) =>
     match segs
     | [] => Result/failure(Rule/empty_key_path())
     | [seg] => walk_final(m, side, pre, seg_name(seg), act)
@@ -283,11 +283,11 @@ let walk(
         end
     end;
 
-let plains(names: List(Str)) -> List(Seg) =
+let plains(names: List(Str)) -> List(Seg) =>
     List/map(names, (n) => Seg/plain(n));
 
 --- A key-value pair written under the header in scope, or the rule its path broke.
-pub let apply_assign(b: Build, path: List(Str), v: Toml) -> Result(Error, Build) =
+pub let apply_assign(b: Build, path: List(Str), v: Toml) -> Result(Error, Build) =>
     match walk(
         b.root,
         b.side,
@@ -301,7 +301,7 @@ pub let apply_assign(b: Build, path: List(Str), v: Toml) -> Result(Error, Build)
     end;
 
 --- A `[table]` header: its path becomes the scope later pairs are written under, or the rule it broke.
-pub let apply_header(b: Build, path: List(Str)) -> Result(Error, Build) =
+pub let apply_header(b: Build, path: List(Str)) -> Result(Error, Build) =>
     match walk(b.root, b.side, 0x[], plains(path), 0, Act/act_table())
     | success((root2, side2, resolved)) =>
         Result/success(Build { root = root2, side = side2, scope = resolved })
@@ -309,7 +309,7 @@ pub let apply_header(b: Build, path: List(Str)) -> Result(Error, Build) =
     end;
 
 --- A `[[table]]` header: one element is appended to the array at its path, which becomes the scope, or the rule it broke.
-pub let apply_aot(b: Build, path: List(Str)) -> Result(Error, Build) =
+pub let apply_aot(b: Build, path: List(Str)) -> Result(Error, Build) =>
     match walk(b.root, b.side, 0x[], plains(path), 0, Act/act_many())
     | success((root2, side2, resolved)) =>
         Result/success(Build { root = root2, side = side2, scope = resolved })
@@ -317,7 +317,7 @@ pub let apply_aot(b: Build, path: List(Str)) -> Result(Error, Build) =
     end;
 
 --- An inline table's pairs as a map, each applied in turn, or the first rule one of them broke.
-pub let inline_fold(pairs: List({List(Str), Toml})) -> Result(Error, Map(Str, Toml)) =
+pub let inline_fold(pairs: List({List(Str), Toml})) -> Result(Error, Map(Str, Toml)) =>
     let start: Result(Error, Build) = Result/success(build_empty);
     let built =
         List/fold(pairs, start, (pair, acc) =>

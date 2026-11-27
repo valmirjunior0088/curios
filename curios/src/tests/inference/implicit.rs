@@ -8,15 +8,15 @@ fn an_implicit_solves_against_a_reduction_through_a_let() {
     let source = r#"
         use /std/{Nat, Eq, Str, Io};
 
-        let through(x : Nat) -> Nat =
+        let through(x : Nat) -> Nat =>
             let y = x + 1;
             match 0 < x
             | true => y
             | false => y + 1
             end;
 
-        let probe(x : Nat) -> Eq()(through(x), through(x)) = Eq/refl();
-        let entry() -> /std/Io({}) =
+        let probe(x : Nat) -> Eq()(through(x), through(x)) => Eq/refl();
+        let entry() -> /std/Io({}) =>
             let _ = /std/print("ok")!;
             /std/Io/pure(());
         entry()
@@ -33,14 +33,14 @@ fn implicit_inductive_type_param_executes() {
         induct Eq2(@A : Type) : (x : A, y : A) -> Type
         | refl(@z : A) : (z, z)
         end
-        let sym2(@A : Type, @x : A, @y : A, p : Eq2()(x, y)) -> Eq2()(y, x) =
+        let sym2(@A : Type, @x : A, @y : A, p : Eq2()(x, y)) -> Eq2()(y, x) =>
             match p
             | refl(@z) => Eq2/refl()
             end;
         let pinned : Eq2(@Nat)(3, 3) = Eq2/refl();
         let proof : Eq2()(2, 2) = Eq2/refl();
         let inferred : Eq2()(2, 2) = sym2(proof);
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             match inferred
             | refl(@z) => let _ = /std/print(Nat/to_str(z))!; /std/Io/pure(())
             end;
@@ -59,7 +59,7 @@ fn implicit_inductive_type_param_rejects_explicit_spelling() {
         | refl(@z : A) : (z, z)
         end
         let bad : Eq2(Nat)(2, 2) = Eq2/refl();
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let _ = /std/print("no")!;
             /std/Io/pure(());
         entry()
@@ -73,8 +73,8 @@ fn implicit_inductive_type_param_rejects_explicit_spelling() {
 fn subst_family_inserts_implicit_in_eq() {
     let source = r#"
         use /std/{Eq, Nat, Io};
-        let g(n : Nat) -> Nat = n;
-        let lemma(@a : Nat, @b : Nat, p : Eq()(a, b)) -> Eq()(g(a), g(b)) =
+        let g(n : Nat) -> Nat => n;
+        let lemma(@a : Nat, @b : Nat, p : Eq()(a, b)) -> Eq()(g(a), g(b)) =>
             Eq/subst((x) => Eq()(g(a), g(x)), p, Eq/refl());
         let _ = lemma;
         /std/print("ok")
@@ -88,7 +88,7 @@ fn subst_family_inserts_implicit_in_eq() {
 fn higher_kinded_implicit_infers_by_imitation() {
     let source = r#"
         use /std/{Nat, List, Str, Io};
-        pub let apply_m(@M : (Type) -> Type, @A : Type, x : M(A)) -> M(A) = x;
+        pub let apply_m(@M : (Type) -> Type, @A : Type, x : M(A)) -> M(A) => x;
         let l : List(Nat) = [1, 2];
         let k : List(Nat) = apply_m(l);
         /std/print(Nat/to_str(List/length(k)))
@@ -102,16 +102,16 @@ fn higher_kinded_implicit_infers_by_imitation() {
 fn an_implicit_solves_by_spine_agreement_before_the_head_unfolds() {
     let source = r#"
         use /std/{Nat, Bool, List, Eq, Str, Io};
-        let combine(head : Bool, t : List(Bool)) -> List(Bool) =
+        let combine(head : Bool, t : List(Bool)) -> List(Bool) =>
             match t
             | [] => match head | true => [head] | false => [] end
             | [_, .._] => [head, ..t]
             end;
-        let trim(bits : List(Bool)) -> List(Bool) =
+        let trim(bits : List(Bool)) -> List(Bool) =>
             List/fold(bits, [], (head, acc) => combine(head, acc));
-        let through(@t : List(Bool), q : Eq()(trim(t), [])) -> Eq()(trim(t), []) = q;
-        let probe(x : List(Bool), q : Eq()(trim([false, ..x]), [])) -> Eq()(trim([false, ..x]), []) = through(q);
-        let entry() -> /std/Io({}) =
+        let through(@t : List(Bool), q : Eq()(trim(t), [])) -> Eq()(trim(t), []) => q;
+        let probe(x : List(Bool), q : Eq()(trim([false, ..x]), [])) -> Eq()(trim([false, ..x]), []) => through(q);
+        let entry() -> /std/Io({}) =>
             let _ = /std/print("ok")!;
             /std/Io/pure(());
         entry()
@@ -126,9 +126,9 @@ fn a_spine_mismatch_falls_through_to_unfolding() {
     let source = r#"
         use /std/{Nat, Eq, Str, Io};
         use /std/Bool/{Holds};
-        let constant(n : Nat) -> Nat = 0;
+        let constant(n : Nat) -> Nat => 0;
         let same : Eq()(constant(2), constant(1)) = Eq/refl();
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let _ = /std/print("ok")!;
             /std/Io/pure(());
         entry()
@@ -142,7 +142,7 @@ fn an_undetermined_value_implicit_is_reported_as_undetermined_not_undischarged()
     // `n` is a `Nat`, not a proposition: nothing about it was ever an obligation, so the report says nothing determined it and shows its type, rather than claiming nothing discharged `Nat` — which is the wording a *bound* gets, and names a fault a reader cannot find here.
     let source = r#"
         use /std/{Nat};
-        let pad(@n: Nat, x: Nat) -> Nat = x;
+        let pad(@n: Nat, x: Nat) -> Nat => x;
         /std/print(Nat/to_str(pad(1)))
         "#;
 
@@ -181,17 +181,17 @@ fn a_solution_whose_reduct_does_not_recheck_is_committed_as_written() {
         use /std/{Bytes, Nat, Eq, print, proved};
         use /std/Bool/{True, Holds};
 
-        let hop(@b: Bytes, some: Holds(0 < Bytes/length(b))) -> Nat =
+        let hop(@b: Bytes, some: Holds(0 < Bytes/length(b))) -> Nat =>
             match b
             | 0x[] => match some end
             | 0x[_, .._] => 1
             end;
 
-        let reach(b: Bytes, k: Nat, @within: Holds(k <= Bytes/length(b)), @here: Holds(k < Bytes/length(b))) -> Nat =
+        let reach(b: Bytes, k: Nat, @within: Holds(k <= Bytes/length(b)), @here: Holds(k < Bytes/length(b))) -> Nat =>
             k + hop(@Bytes/drop(b, k, @within), proved());
 
         pub let same(b: Bytes, k: Nat, @within: Holds(k <= Bytes/length(b)), @here: Holds(k < Bytes/length(b)))
-            -> Eq()(reach(b, k, @within, @here), reach(b, k, @within, @here)) =
+            -> Eq()(reach(b, k, @within, @here), reach(b, k, @within, @here)) =>
             Eq/refl();
 
         print(Nat/to_str(reach(0x[1, 2], 0, @True/qed(), @True/qed())))
@@ -207,15 +207,15 @@ fn a_solution_met_at_a_stuck_operand_is_the_call_as_written() {
         use /std/{Nat, Io};
         use /std/Bool/{Holds};
 
-        let f(k: Nat) -> Nat =
+        let f(k: Nat) -> Nat =>
             match k
             | 0 => 7
             | n + 1 => n
             end;
 
-        let pick(@a: Nat, h: Holds(a != 3)) -> Nat = a;
+        let pick(@a: Nat, h: Holds(a != 3)) -> Nat => a;
 
-        pub let row(k: Nat, h: Holds(f(k) != 3)) -> Nat = pick(h);
+        pub let row(k: Nat, h: Holds(f(k) != 3)) -> Nat => pick(h);
 
         Io/pure(())
         "#;
@@ -240,7 +240,7 @@ fn a_solution_holding_a_call_of_a_recursive_function_names_the_function() {
             count: Nat,
         }
 
-        let f(n: Nat) -> Q(n) =
+        let f(n: Nat) -> Q(n) =>
             match 0 < n
             | true =>
                 let inner = f(n / 2);
@@ -248,7 +248,7 @@ fn a_solution_holding_a_call_of_a_recursive_function_names_the_function() {
             | false => Q { count = 0 }
             end;
 
-        pub let row(n: Nat) -> Eq()(f(n).count, f(n).count) = Eq/refl();
+        pub let row(n: Nat) -> Eq()(f(n).count, f(n).count) => Eq/refl();
 
         Io/pure(())
         "#,
@@ -278,13 +278,13 @@ fn a_solution_met_against_a_projection_off_a_local_definition_is_that_projection
             a: Nat,
         }
 
-        let make(n: Nat) -> P =
+        let make(n: Nat) -> P =>
             match n
             | 0 => P { a = 0 }
             | m + 1 => P { a = m }
             end;
 
-        pub let row(n: Nat) -> {} =
+        pub let row(n: Nat) -> {} =>
             let p = make(n);
             let _: Eq()(p.a, p.a) = Eq/refl();
             ();
@@ -321,7 +321,7 @@ fn a_solution_holding_a_call_whose_body_holds_a_proof_the_elaborator_wrote_is_th
             joined: Eq()(n, Nat/shl(2 * half + 1, count)),
         }
 
-        let of(n: Nat, @ok: Holds(0 < n)) -> Scale(n) =
+        let of(n: Nat, @ok: Holds(0 < n)) -> Scale(n) =>
             match 0 < n
             | true =>
                 match 0 < n % 2
@@ -344,11 +344,11 @@ fn a_solution_holding_a_call_whose_body_holds_a_proof_the_elaborator_wrote_is_th
             | false => match ok end
             end;
 
-        pub let same(n: Nat, ok: Holds(0 < n)) -> Eq()(of(n, @ok).count + 1, 1 + of(n, @ok).count) =
+        pub let same(n: Nat, ok: Holds(0 < n)) -> Eq()(of(n, @ok).count + 1, 1 + of(n, @ok).count) =>
             Eq/refl();
 
         pub let rebuilt(n: Nat, ok: Holds(0 < n), m: Nat, e: Eq()(m, n))
-            -> Eq()(m, Nat/shl(2 * of(n, @ok).half + 1, of(n, @ok).count)) =
+            -> Eq()(m, Nat/shl(2 * of(n, @ok).half + 1, of(n, @ok).count)) =>
             Eq/trans(e, of(n, @ok).joined);
 
         Io/pure(())
@@ -374,8 +374,8 @@ fn a_local_recursive_function_elaborated_again_is_itself() {
             joined: Eq()(n, Nat/shl(2 * half + 1, count)),
         }
 
-        pub let same(n: Nat, ok: Holds(0 < n)) -> Nat =
-            let of(n: Nat, @ok: Holds(0 < n)) -> Scale(n) =
+        pub let same(n: Nat, ok: Holds(0 < n)) -> Nat =>
+            let of(n: Nat, @ok: Holds(0 < n)) -> Scale(n) =>
                 match 0 < n
                 | true =>
                     match 0 < n % 2
@@ -417,16 +417,16 @@ fn a_lists_unknown_tail_is_solved_to_what_the_other_side_has_left() {
         | swap(@x : T, @y : T, @l : List(T)) : ([y, x, ..l], [x, y, ..l])
         end
 
-        let tail_of(@T : Type, @h : T, @l : List(T), p : Eq()([h, ..l], [h, ..l])) -> List(T) =
+        let tail_of(@T : Type, @h : T, @l : List(T), p : Eq()([h, ..l], [h, ..l])) -> List(T) =>
             l;
 
-        let longer_prefix(x : Nat, y : Nat, t : List(Nat)) -> List(Nat) =
+        let longer_prefix(x : Nat, y : Nat, t : List(Nat)) -> List(Nat) =>
             tail_of(Eq/refl(@_, @[y, x, ..t]));
 
-        let two_tails(x : Nat, a : List(Nat), b : List(Nat)) -> List(Nat) =
+        let two_tails(x : Nat, a : List(Nat), b : List(Nat)) -> List(Nat) =>
             tail_of(Eq/refl(@_, @[x, ..a, ..b]));
 
-        let literal(x : Nat, y : Nat) -> List(Nat) =
+        let literal(x : Nat, y : Nat) -> List(Nat) =>
             tail_of(Eq/refl(@List(Nat), @[y, x]));
 
         let _past_a_concatenation(
@@ -434,13 +434,13 @@ fn a_lists_unknown_tail_is_solved_to_what_the_other_side_has_left() {
             b : Nat,
             c : List(Nat),
             d : List(Nat),
-        ) -> Swapped()([a, b, ..c, ..d], [b, a, ..c, ..d]) =
+        ) -> Swapped()([a, b, ..c, ..d], [b, a, ..c, ..d]) =>
             Swapped/swap();
 
         let _of_a_closed_list : Swapped()([2, 1, 3], [1, 2, 3]) =
             Swapped/swap();
 
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let lengths =
                 List/map(
                     [longer_prefix(1, 2, [3]), two_tails(1, [2], [3]), literal(1, 2)],
@@ -487,9 +487,9 @@ fn a_candidate_rejected_where_its_implicit_was_born_is_reported_as_one() {
             @ok: Holds(low <= z),
         }
 
-        let both(@A: Type, @v: A, a: Eq(@A)(v, v), b: Eq(@A)(v, v)) -> Nat = 0;
+        let both(@A: Type, @v: A, a: Eq(@A)(v, v), b: Eq(@A)(v, v)) -> Nat => 0;
 
-        let f(y: Nat, z: Nat) -> Nat =
+        let f(y: Nat, z: Nat) -> Nat =>
             let g = Eq/refl();
             match y <= z
             | true => let r: Eq(@Le(z))(Le { low = y }, Le { low = y }) = Eq/refl(); both(g, r)
@@ -516,9 +516,9 @@ fn a_candidate_rejected_where_its_implicit_was_born_is_reported_as_one() {
             @ok: Holds(low <= z),
         }
 
-        let both(@A: Type, @v: A, a: Eq(@A)(v, v), b: Eq(@A)(v, v)) -> Nat = 0;
+        let both(@A: Type, @v: A, a: Eq(@A)(v, v), b: Eq(@A)(v, v)) -> Nat => 0;
 
-        let f(y: Nat, z: Nat) -> Nat =
+        let f(y: Nat, z: Nat) -> Nat =>
             match y <= z
             | true => let g = Eq/refl(); let r: Eq(@Le(z))(Le { low = y }, Le { low = y }) = Eq/refl(); both(g, r)
             | false => 0

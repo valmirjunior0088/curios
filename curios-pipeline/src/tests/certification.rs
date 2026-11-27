@@ -15,9 +15,9 @@ use {
 /// A total function, one that recurses without descending — a single-member `rec` group, since its body names itself — and a value reaching the first.
 const SOURCE: &str = "use /std/{Nat};
 
-pub let double(n: Nat) -> Nat = n + n;
+pub let double(n: Nat) -> Nat => n + n;
 
-pub let spin(n: Nat) -> Nat = spin(n);
+pub let spin(n: Nat) -> Nat => spin(n);
 
 pub let twice: Nat = double(2);
 ";
@@ -25,18 +25,18 @@ pub let twice: Nat = double(2);
 /// Each way an item's recursion fails to descend, and each way a definition is partial with its own recursion descending: a group of two whose calls come back to where they started, a definition enclosing a group that calls itself unchanged, a definition reaching one that loops, and one calling a host row that never returns.
 const VERDICTS: &str = "use /std/{Nat, Byte, Io};
 
-pub let looping(n: Nat) -> Nat = sibling(n + 1)
-pub and sibling(n: Nat) -> Nat = match n | 0 => 0 | k + 1 => looping(k) end;
+pub let looping(n: Nat) -> Nat => sibling(n + 1)
+pub and sibling(n: Nat) -> Nat => match n | 0 => 0 | k + 1 => looping(k) end;
 
-pub let encloses(n: Nat) -> Nat =
-    let again(k: Nat) -> Nat = again(k);
+pub let encloses(n: Nat) -> Nat =>
+    let again(k: Nat) -> Nat => again(k);
     again(n);
 
-pub let reaches(n: Nat) -> Nat = looping(n);
+pub let reaches(n: Nat) -> Nat => looping(n);
 
 foreign abort(Byte) -> Never;
 
-pub let quits(b: Byte) -> Io(Nat) = abort(b);
+pub let quits(b: Byte) -> Io(Nat) => abort(b);
 ";
 
 /// A type named by a value typed at it, a value that names neither, and a family whose one constructor takes it.
@@ -292,17 +292,17 @@ fn the_restored_prelude_carries_a_record_covering_every_definition() {
 fn a_sealed_program_marks_its_functions_from_the_certifiers_records() {
     let source = "use /std/{Nat, List, Proc};
 
-let double(n: Nat) -> Nat =
-    let halve(k: Nat, acc: Nat) -> Nat = match k | 0 => acc | j + 1 => halve(j, acc + 2) end;
+let double(n: Nat) -> Nat =>
+    let halve(k: Nat, acc: Nat) -> Nat => match k | 0 => acc | j + 1 => halve(j, acc + 2) end;
     halve(n, 0);
 
-let spin(n: Nat) -> Nat =
-    let whirl(k: Nat) -> Nat = whirl(k);
+let spin(n: Nat) -> Nat =>
+    let whirl(k: Nat) -> Nat => whirl(k);
     whirl(n);
 
 let subject : /std/Nat = double(2) + spin(0);
 
-let entry() -> /std/Io({}) =
+let entry() -> /std/Io({}) =>
     let _ = List/length(Proc/args()!);
     /std/print(Nat/to_str(subject));
 
@@ -386,7 +386,7 @@ end
 #[test]
 fn a_refused_declaration_stops_the_compile_with_the_prelude() {
     for declarations in [
-        "pub let f(X: Type, c: Code(X), x: X) -> X =
+        "pub let f(X: Type, c: Code(X), x: X) -> X =>
     match c
     | big() => x + 0
     end;",
@@ -395,10 +395,10 @@ fn a_refused_declaration_stops_the_compile_with_the_prelude() {
 }
 
 satisfy Pick(/std/Nat) {
-    pick(X, c, x) = match c | big() => x + 0 end,
+    pick(X, c, x) => match c | big() => x + 0 end,
 }
 
-pub let chosen(c: Code(/std/Nat)) -> /std/Nat = Pick/pick(@/std/Nat, /std/Nat, c, 1);",
+pub let chosen(c: Code(/std/Nat)) -> /std/Nat => Pick/pick(@/std/Nat, /std/Nat, c, 1);",
     ] {
         let source = format!("{CODE}{declarations}\n\n/std/print(\"\")\n");
 
@@ -415,14 +415,14 @@ pub let chosen(c: Code(/std/Nat)) -> /std/Nat = Pick/pick(@/std/Nat, /std/Nat, c
 #[test]
 fn a_refused_test_stops_its_test_program_whatever_is_selected() {
     let source = format!(
-        "{CODE}test refused =
+        "{CODE}test refused =>
     let _g = (X: Type, c: Code(X), x: X) =>
         match c
         | big() => x + 0
         end;
     /std/Test/assert(\"it holds\", true);
 
-test held = /std/Test/assert(\"it holds\", true);
+test held => /std/Test/assert(\"it holds\", true);
 
 /std/print(\"\")
 "

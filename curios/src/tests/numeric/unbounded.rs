@@ -339,10 +339,10 @@ fn a_reassociated_product_agrees_with_the_written_one() {
     let program = |combine: &str| {
         fill!(
             "use /std/{Nat, Bool, Fmt, List, Proc};\n\
-             let k(n: Nat) -> Nat = match n == 1 | true => 0 | false => 65536 end;\n\
-             let prod(n: Nat) -> Nat =\n\
+             let k(n: Nat) -> Nat => match n == 1 | true => 0 | false => 65536 end;\n\
+             let prod(n: Nat) -> Nat =>\n\
              match n | 0 => 1 | p + 1 => ${combine} end;\n\
-             let main() -> /std/Io({}) = Fmt/print(\"%\")(Nat/to_str(prod(List/length(/std/Proc/args()!))));\nmain()\n",
+             let main() -> /std/Io({}) => Fmt/print(\"%\")(Nat/to_str(prod(List/length(/std/Proc/args()!))));\nmain()\n",
             combine
         )
     };
@@ -494,7 +494,7 @@ fn nat_to_byte_inverts_to_nat_and_refuses_the_bound() {
     run_text(
         r#"
         use /std/{Byte, Bytes, Nat, Str, Option, Io, Try, Proc};
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let bytes = match Try/run(Io/read(Proc/stdin, 16))!
                 | success(bytes(b, @_)) => b
                 | success(ended()) => 0x[]
@@ -526,7 +526,7 @@ fn nat_to_byte_inverts_to_nat_and_refuses_the_bound() {
 fn bytes_of_nat_is_minimal_least_significant_first() {
     let output = run(r#"
         use /std/{Bytes, Byte, Nat, Str, List};
-        let probe(n: Nat) -> Str =
+        let probe(n: Nat) -> Str =>
             let b = Bytes/of_nat(n);
             Str/concat(
                 Nat/to_str(Bytes/length(b)),

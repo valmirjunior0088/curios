@@ -11,7 +11,7 @@ fn a_difference_does_not_convert_with_its_operands_swapped() {
         r#"
         use /std/{Nat, Eq};
 
-        let swapped(a: Nat, b: Nat) -> Eq()(a + b, b + a) = Eq/refl();
+        let swapped(a: Nat, b: Nat) -> Eq()(a + b, b + a) => Eq/refl();
         /std/print("ok")
         "#,
         b"ok",
@@ -32,7 +32,7 @@ fn a_conjunction_does_not_convert_with_the_disjunction_of_its_operands() {
         r#"
         use /std/{Bool, Eq};
 
-        let swapped(a: Bool, b: Bool) -> Eq()(a && b, b && a) = Eq/refl();
+        let swapped(a: Bool, b: Bool) -> Eq()(a && b, b && a) => Eq/refl();
         /std/print("ok")
         "#,
         b"ok",

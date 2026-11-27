@@ -30,7 +30,7 @@ fn rows_of(text: &str, path: &str) -> Option<Vec<Row>> {
 fn a_module_has_no_footprint() {
     let refused = footprint(
         DEFAULT_BUDGET,
-        loose("let helper(x : /std/Nat) -> /std/Nat = x + 1;\n"),
+        loose("let helper(x : /std/Nat) -> /std/Nat => x + 1;\n"),
         &Global::Authored(Qualifier::from(["helper"])),
         &Overlay::default(),
         None,
@@ -44,7 +44,7 @@ fn a_module_has_no_footprint() {
 #[test]
 fn a_declaration_the_program_never_reaches_is_not_linked() {
     let rows = rows_of(
-        "let helper(x : /std/Nat) -> /std/Nat = x + 1;\n/std/print(\"hello\\n\")",
+        "let helper(x : /std/Nat) -> /std/Nat => x + 1;\n/std/print(\"hello\\n\")",
         "helper",
     );
 
@@ -67,17 +67,17 @@ fn a_path_naming_nothing_in_scope_has_no_footprint() {
 /// A program reading `n` from its arguments, so nothing folds away: `count` a tail recursion adding `sum_squares` of each number below `n`, `sum_squares` folding `square` over a range, and `fib` a recursion of two calls, which no pass makes a loop of.
 const RECURSIONS: &str = "use /std/{Str, Nat, List, Option, Result, Try, Io, Proc, Fmt};
 
-let square(n: Nat) -> Nat = n * n;
+let square(n: Nat) -> Nat => n * n;
 
-let sum_squares(n: Nat) -> Nat = List/fold(List/range(0, n), 0, (k, acc) => acc + square(k));
+let sum_squares(n: Nat) -> Nat => List/fold(List/range(0, n), 0, (k, acc) => acc + square(k));
 
-let count(k: Nat, acc: Nat) -> Nat =
+let count(k: Nat, acc: Nat) -> Nat =>
     match k | 0 => acc | p + 1 => count(p, acc + sum_squares(p)) end;
 
-let fib(n: Nat) -> Nat =
+let fib(n: Nat) -> Nat =>
     match n | 0 => 0 | p + 1 => match p | 0 => 1 | q + 1 => fib(p) + fib(q) end end;
 
-let execute() -> Try(Io, Str, {}) =
+let execute() -> Try(Io, Str, {}) =>
     let arguments = Proc/args()!;
     let bytes = Option/to_result(List/try_get(arguments, 1), \"no input\")!;
     let s = Result/map_failure(Str/of_bytes(bytes), (_) => \"invalid utf-8\")!;

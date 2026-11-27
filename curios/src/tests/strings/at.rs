@@ -24,7 +24,7 @@ fn a_position_is_where_rust_places_a_char_boundary() {
             use /std/{Str, Nat, List, Option};
 
             let text: Str = "${text}";
-            let bit(k: Nat) -> Str =
+            let bit(k: Nat) -> Str =>
                 match Str/At/try_of_offset(text, k) | some(_) => "1" | none() => "0" end;
 
             /std/print(Str/flatten(List/map(List/range(0, ${end}), bit)))
@@ -56,7 +56,7 @@ fn text_divides_at_a_position_as_rust_splits_it() {
             use /std/{Str, Nat, List, Option};
 
             let text: Str = "${text}";
-            let cut(k: Nat) -> Str =
+            let cut(k: Nat) -> Str =>
                 match Str/At/try_of_offset(text, k)
                 | some(at) => Str/flatten([Str/before(text, at), "|", Str/after(text, at), ";"])
                 | none() => ""
@@ -92,14 +92,14 @@ fn stepping_reads_each_character_where_rust_does() {
             use /std/{Str, Nat, Option, Char};
 
             let text: Str = "${text}";
-            let mark(at: Str/At(text), char: Char) -> Str =
+            let mark(at: Str/At(text), char: Char) -> Str =>
                 Str/flatten([Nat/to_str(Str/At/to_offset(at)), ":", Str/of_char(char), " "]);
-            let forward(at: Str/At(text)) -> Str =
+            let forward(at: Str/At(text)) -> Str =>
                 match Str/At/try_next(text, at)
                 | some(n) => Str/concat(mark(at, n.char), forward(n.past))
                 | none() => Str/concat(Nat/to_str(Str/At/to_offset(at)), ";")
                 end;
-            let backward(at: Str/At(text)) -> Str =
+            let backward(at: Str/At(text)) -> Str =>
                 match Str/At/try_prev(text, at)
                 | some(p) => Str/concat(mark(p.past, p.char), backward(p.past))
                 | none() => Str/concat(Nat/to_str(Str/At/to_offset(at)), ";")
@@ -140,7 +140,7 @@ fn text_between_two_positions_is_rusts_slice() {
             let text: Str = "${text}";
             let positions: List(Str/At(text)) =
                 List/filter_map(List/range(0, ${end}), (k) => Str/At/try_of_offset(text, k));
-            let cut(from: Str/At(text), to: Str/At(text)) -> Str =
+            let cut(from: Str/At(text), to: Str/At(text)) -> Str =>
                 match from <= to
                 | true => Str/concat(Str/between(text, from, to), ";")
                 | false => ""
@@ -185,14 +185,14 @@ fn a_position_keeps_its_place_across_a_concatenation() {
         use /std/{Str, Nat, List, Option, Bytes};
 
         let texts: List(Str) = [${texts}];
-        let offsets(s: Str) -> List(Nat) = List/range(0, Bytes/length(s.bytes) + 1);
-        let pair(left: Str, right: Str) -> Str =
+        let offsets(s: Str) -> List(Nat) => List/range(0, Bytes/length(s.bytes) + 1);
+        let pair(left: Str, right: Str) -> Str =>
             let whole = Str/concat(left, right);
-            let rest(at: Str/At(whole)) -> Str =
+            let rest(at: Str/At(whole)) -> Str =>
                 Str/flatten([Nat/to_str(Str/At/to_offset(at)), ":", Str/after(whole, at), ";"]);
-            let of_left(k: Nat) -> Str =
+            let of_left(k: Nat) -> Str =>
                 match Str/At/try_of_offset(left, k) | some(at) => rest(Str/At/of_left(left, right, at)) | none() => "" end;
-            let of_right(k: Nat) -> Str =
+            let of_right(k: Nat) -> Str =>
                 match Str/At/try_of_offset(right, k) | some(at) => rest(Str/At/of_right(left, right, at)) | none() => "" end;
             Str/flatten([
                 Str/flatten(List/map(offsets(left), of_left)),

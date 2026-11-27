@@ -31,7 +31,7 @@ fn a_proposition_may_not_carry_informative_fields() {
 
         struct Hid : pub Type { @n : Nat, Holds(n == n) }
 
-        let read(h : Hid) -> Nat = h.n;
+        let read(h : Hid) -> Nat => h.n;
 
         /std/print("ok")
         "#,
@@ -127,7 +127,7 @@ fn a_list_of_proofs_is_not_a_proposition() {
 
         induct Same(@P: Prop): (P, P) -> pub Prop | same(@p: P): (p, p) end
 
-        let all_equal(@X : Prop, x : X, y : X) -> Same()(x, y) =
+        let all_equal(@X : Prop, x : X, y : X) -> Same()(x, y) =>
             Same/same();
 
         let one : List(Option(True)) = [Option/some(True/qed())];
@@ -228,13 +228,13 @@ fn a_declaration_into_prop_may_not_hand_a_relevant_value_back() {
         use /std/{Nat, Bool, Eq};
         use /std/Bool/{True};
 
-        pub let P(b : Bool) -> Prop =
+        pub let P(b : Bool) -> Prop =>
             match b
             | true => True
             | false => True
             end;
 
-        pub let one(p : P(false), q : P(false)) -> Eq()(p, q) = Eq/refl();
+        pub let one(p : P(false), q : P(false)) -> Eq()(p, q) => Eq/refl();
 
         /std/print(Nat/to_str(1))
         "#,
@@ -243,7 +243,7 @@ fn a_declaration_into_prop_may_not_hand_a_relevant_value_back() {
     .refused(&[
         ("| false => True", "| false => Nat"),
         (
-            "        pub let one(p : P(false), q : P(false)) -> Eq()(p, q) = Eq/refl();\n\n",
+            "        pub let one(p : P(false), q : P(false)) -> Eq()(p, q) => Eq/refl();\n\n",
             "",
         ),
     ])
@@ -264,15 +264,15 @@ fn a_payload_quantifying_over_its_own_propositions_sort_is_refused() {
         | c(f: (A: Prop) -> (A) -> A)
         end
 
-        let bad(b: Bad, p: True) -> True = match b | c(f) => f(True)(p) end;
+        let bad(b: Bad, p: True) -> True => match b | c(f) => f(True)(p) end;
 
         /std/print("ok")
         "#,
         b"ok",
     )
     .refused(&[(
-        "let bad(b: Bad, p: True) -> True = match b | c(f) => f(True)(p) end;",
-        "let bad(b: Bad) -> False = match b | c(f) => bad(f(Bad)(b)) end;",
+        "let bad(b: Bad, p: True) -> True => match b | c(f) => f(True)(p) end;",
+        "let bad(b: Bad) -> False => match b | c(f) => bad(f(Bad)(b)) end;",
     )])
     .by_elaborator_in("/bad", |error| {
         matches!(error, Error::UniverseInconsistency { .. })
@@ -291,7 +291,7 @@ fn a_large_payload_pinned_by_an_index_is_refused() {
         | c(@f: (A: Type) -> (A) -> A): (f)
         end
 
-        let bad(f: (A: Type) -> (A) -> A, b: I(f)) -> Nat =
+        let bad(f: (A: Type) -> (A) -> A, b: I(f)) -> Nat =>
             match b | c(@g) => g(Nat)(0) end;
 
         /std/print("ok")
@@ -299,8 +299,8 @@ fn a_large_payload_pinned_by_an_index_is_refused() {
         b"ok",
     )
     .refused(&[(
-        "-> Nat =\n            match b | c(@g) => g(Nat)(0) end;",
-        "-> False =\n            match b | c(@g) => bad(g, g(I(g))(b)) end;",
+        "-> Nat =>\n            match b | c(@g) => g(Nat)(0) end;",
+        "-> False =>\n            match b | c(@g) => bad(g, g(I(g))(b)) end;",
     )])
     .by_elaborator_in("/bad", |error| {
         matches!(error, Error::UniverseInconsistency { .. })
@@ -322,7 +322,7 @@ fn a_proof_payload_of_a_data_family_counts_at_its_level() {
         | sq(a: A)
         end
 
-        let bad(t: T, p: True) -> True =
+        let bad(t: T, p: True) -> True =>
             match t | c(f) => f(True)(p) end;
 
         /std/print("ok")
@@ -330,7 +330,7 @@ fn a_proof_payload_of_a_data_family_counts_at_its_level() {
         b"ok",
     )
     .refused(&[
-        ("let bad(t: T, p: True) -> True =\n            match t | c(f) => f(True)(p) end;", "let bad(t: T) -> False =\n            match t | c(f) => match f(Sq(T))(Sq/sq(t)) | sq(u) => bad(u) end end;"),
+        ("let bad(t: T, p: True) -> True =>\n            match t | c(f) => f(True)(p) end;", "let bad(t: T) -> False =>\n            match t | c(f) => match f(Sq(T))(Sq/sq(t)) | sq(u) => bad(u) end end;"),
     ])
     .by_elaborator_in("/bad", |error| {
         matches!(error, Error::UniverseInconsistency { .. })
@@ -357,15 +357,15 @@ fn a_struct_proposition_quantifying_over_its_own_sort_is_refused() {
         struct Bad: Prop
         { f: (A: Prop) -> (A) -> A }
 
-        let through(b: Bad, p: True) -> True = b.0(True)(p);
+        let through(b: Bad, p: True) -> True => b.0(True)(p);
 
         /std/print(Nat/to_str(1))
         "#,
         b"1",
     )
     .refused(&[(
-        "let through(b: Bad, p: True) -> True = b.0(True)(p);",
-        "let bad(b: Bad) -> False = bad(b.0(Bad)(b));",
+        "let through(b: Bad, p: True) -> True => b.0(True)(p);",
+        "let bad(b: Bad) -> False => bad(b.0(Bad)(b));",
     )])
     .by_elaborator_in("/bad", |error| {
         matches!(error, Error::UniverseInconsistency { .. })

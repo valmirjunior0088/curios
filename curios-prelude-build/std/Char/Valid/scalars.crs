@@ -2,7 +2,7 @@ use /std/{Nat, Bool};
 use /std/Bool/{True, Holds};
 
 --- Whether every code from `min` to `max` is a scalar value: the range lies wholly below the surrogates, or wholly above them and at most `U+10FFFF`. For a single code it is `Char/Valid`.
-pub let scalars(min: Nat, max: Nat) -> Bool =
+pub let scalars(min: Nat, max: Nat) -> Bool =>
     max < 0xD800 || min >= 0xE000 && max <= 0x10FFFF;
 
 --- A range of scalar values narrowed stays one.
@@ -14,7 +14,7 @@ pub let within(
     s: Holds(scalars(min, max)),
     low: Holds(min <= min2),
     high: Holds(max2 <= max),
-) -> Holds(scalars(min2, max2)) =
+) -> Holds(scalars(min2, max2)) =>
     match max < 0xD800
     | true => match max2 < 0xD800 | true => True/qed() end
     | false =>

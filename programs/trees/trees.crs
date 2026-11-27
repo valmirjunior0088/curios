@@ -9,19 +9,19 @@ induct Tree: Type
 | node(Nat, Tree, Tree)
 end
 
-let build(d: Nat, v: Nat) -> Tree =
+let build(d: Nat, v: Nat) -> Tree =>
     match d
     | 0 => Tree/leaf(v)
     | dp + 1 => Tree/node(v, build(dp, v * 2), build(dp, v * 2 + 1))
     end;
 
-let sum(t: Tree) -> Nat =
+let sum(t: Tree) -> Nat =>
     match t
     | leaf(n) => n % 1000003
     | node(n, l, r) => (n + sum(l) + sum(r)) % 1000003
     end;
 
-let execute() -> Try(Io, Str, {}) =
+let execute() -> Try(Io, Str, {}) =>
     let arguments = Proc/args()!;
     let bytes = Option/to_result(List/try_get(arguments, 1), "no input")!;
     let s = Result/map_failure(Str/of_bytes(bytes), (_) => "invalid utf-8")!;

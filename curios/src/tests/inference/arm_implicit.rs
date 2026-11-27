@@ -15,13 +15,13 @@ fn an_implicit_solves_through_a_binding_whose_value_discharges_a_bound_in_an_arm
         | cons(@n: Nat, head: T, tail: Vec(T)(n)): (n + 1)
         end
 
-        let of_list(@T: Type, l: List(T)) -> {n: Nat, Vec(T)(n)} =
+        let of_list(@T: Type, l: List(T)) -> {n: Nat, Vec(T)(n)} =>
             match l | [] => (0, Vec/nil()) | [x, ..t] => let (m, v) = of_list(t); (m + 1, Vec/cons(x, v)) end;
 
-        let to_list(@T: Type, @n: Nat, v: Vec(T)(n)) -> List(T) =
+        let to_list(@T: Type, @n: Nat, v: Vec(T)(n)) -> List(T) =>
             match v | nil() => [] | cons(@_, x, xs) => [x, ..to_list(xs)] end;
 
-        let resize(w: Nat, @w0: Nat, v: Vec(Char)(w0)) -> Vec(Char)(w) =
+        let resize(w: Nat, @w0: Nat, v: Vec(Char)(w0)) -> Vec(Char)(w) =>
             match w
             | 0 => Vec/nil()
             | p + 1 =>
@@ -31,8 +31,8 @@ fn an_implicit_solves_through_a_binding_whose_value_discharges_a_bound_in_an_arm
                 end
             end;
 
-        let codes(s: Str) -> List(Char) =
-            let go(b: Bytes, acc: List(Char)) -> List(Char) =
+        let codes(s: Str) -> List(Char) =>
+            let go(b: Bytes, acc: List(Char)) -> List(Char) =>
                 match b
                 | 0x[] => acc
                 | 0x[_, ..t] =>
@@ -41,7 +41,7 @@ fn an_implicit_solves_through_a_binding_whose_value_discharges_a_bound_in_an_arm
                 end;
             go(Str/to_bytes(s), []);
 
-        let padded(s: Str, w: Nat) -> Vec(Char)(w) =
+        let padded(s: Str, w: Nat) -> Vec(Char)(w) =>
             let t = of_list(codes(s));
             resize(w, t.1);
 
@@ -62,13 +62,13 @@ fn an_implicit_solves_in_an_arm_that_specializes_the_hypothesis_it_names() {
         | leaf() | node(a: Shape, b: Shape)
         end
 
-        let Sizes(s: Shape) -> Type =
+        let Sizes(s: Shape) -> Type =>
             match s | leaf() => Nat | node(a, b) => {Sizes(a), Sizes(b)} end;
 
-        let Total(s: Shape, z: Sizes(s)) -> Nat =
+        let Total(s: Shape, z: Sizes(s)) -> Nat =>
             match s | leaf() => z | node(a, b) => Total(a, z.0) + Total(b, z.1) end;
 
-        let build(s: Shape, z: Sizes(s)) -> Vec(Nat, Total(s, z)) =
+        let build(s: Shape, z: Sizes(s)) -> Vec(Nat, Total(s, z)) =>
             match s
             | leaf() => Vec/replicate(z, 0)
             | node(a, b) => Vec/append(build(a, z.0), build(b, z.1))
@@ -90,13 +90,13 @@ const SIZES: &str = r#"
     | leaf() | node(a: Shape, b: Shape)
     end
 
-    let Sizes(s: Shape) -> Type =
+    let Sizes(s: Shape) -> Type =>
         match s | leaf() => Nat | node(a, b) => {Sizes(a), Sizes(b)} end;
 
-    let Total(s: Shape, z: Sizes(s)) -> Nat =
+    let Total(s: Shape, z: Sizes(s)) -> Nat =>
         match s | leaf() => z | node(a, b) => Total(a, z.0) + Total(b, z.1) end;
 
-    let build(s: Shape, z: Sizes(s)) -> Vec(Nat, Total(s, z)) =
+    let build(s: Shape, z: Sizes(s)) -> Vec(Nat, Total(s, z)) =>
         match s
         | leaf() => Vec/replicate(z, 0)
         | node(a, b) => Vec/append(build(a, z.0), build(b, z.1))
@@ -114,7 +114,7 @@ fn an_implicit_solves_in_an_arm_that_learns_the_hypothesis_from_inside_an_index(
         | w(a : Shape, b : Shape) : (Shape/node(Shape/node(a, b), Shape/leaf()))
         end
 
-        let built(s : Shape, z : Sizes(s), x : W(Shape/node(s, Shape/leaf()))) -> Vec(Nat, Total(s, z)) =
+        let built(s : Shape, z : Sizes(s), x : W(Shape/node(s, Shape/leaf()))) -> Vec(Nat, Total(s, z)) =>
             match x | w(a, b) => Vec/append(build(a, z.0), build(b, z.1)) end;
 
         let pair: Shape = Shape/node(Shape/leaf(), Shape/leaf());
@@ -149,7 +149,7 @@ fn an_implicit_solves_in_an_arm_over_a_let_bound_scrutinee() {
     ] {
         let source = format!(
             r#"{SIZES}
-            let built(s: Shape, z: Sizes(s)) -> Vec(Nat, Total(s, z)) =
+            let built(s: Shape, z: Sizes(s)) -> Vec(Nat, Total(s, z)) =>
                 {arms};
 
             /std/print(Nat/to_str(Vec/length(built(tree, (2, (3, 4))))))
@@ -172,16 +172,16 @@ fn an_implicit_solves_through_an_arm_whose_guard_it_meets_respelled() {
         | bad()
         end
 
-        let step(h: Nat, s: S) -> S =
+        let step(h: Nat, s: S) -> S =>
             let n = h + 1;
             match s | bad() => S/bad() | ok() => match | Bool/not(n < 10) => S/bad() | _ => S/ok() end end;
-        let run_from(s: S, l: List(Nat)) -> S = match l | [] => s | [h, ..t] => run_from(step(h, s), t) end;
-        let fine(s: S) -> Bool = match s | ok() => true | bad() => false end;
-        let from_bad(@l: List(Nat), v: Holds(fine(run_from(S/bad(), l)))) -> False =
+        let run_from(s: S, l: List(Nat)) -> S => match l | [] => s | [h, ..t] => run_from(step(h, s), t) end;
+        let fine(s: S) -> Bool => match s | ok() => true | bad() => false end;
+        let from_bad(@l: List(Nat), v: Holds(fine(run_from(S/bad(), l)))) -> False =>
             match l | [] => match v end | [_, ..t] => from_bad(@t, v) end;
 
-        let total(l: List(Nat), v: Holds(fine(run_from(S/ok(), l)))) -> Nat =
-            let go(s: S, l: List(Nat), acc: Nat, v: Holds(fine(run_from(s, l)))) -> Nat =
+        let total(l: List(Nat), v: Holds(fine(run_from(S/ok(), l)))) -> Nat =>
+            let go(s: S, l: List(Nat), acc: Nat, v: Holds(fine(run_from(s, l)))) -> Nat =>
                 match l
                 | [] => acc
                 | [h, ..t] =>
@@ -196,11 +196,11 @@ fn an_implicit_solves_through_an_arm_whose_guard_it_meets_respelled() {
                 end;
             go(S/ok(), l, 0, v);
 
-        let counted(l: List(Nat), v: Holds(fine(run_from(S/ok(), l)))) -> {w: Nat, v: Vec(Nat, w)} =
+        let counted(l: List(Nat), v: Holds(fine(run_from(S/ok(), l)))) -> {w: Nat, v: Vec(Nat, w)} =>
             let n = total(l, v);
             (w = n, v = Vec/replicate(n, 0));
-        let width(@w: Nat, _v: Vec(Nat, w)) -> Nat = w;
-        let use_it(l: List(Nat), v: Holds(fine(run_from(S/ok(), l)))) -> Nat = width(counted(l, v).v);
+        let width(@w: Nat, _v: Vec(Nat, w)) -> Nat => w;
+        let use_it(l: List(Nat), v: Holds(fine(run_from(S/ok(), l)))) -> Nat => width(counted(l, v).v);
 
         /std/print(Nat/to_str(use_it([1, 2, 3], True/qed())))
         "#),
@@ -216,7 +216,7 @@ fn an_implicit_born_in_an_arm_is_solved_under_the_arms_guard() {
         use /std/Bool/{True};
         use /std/ops/{Eql};
 
-        let probe(b: Bytes, k: Nat, f: Byte, P: (Byte) -> Type, lead: P(f), fallback: Nat, consume: (x: Byte, P(x)) -> Nat) -> Nat =
+        let probe(b: Bytes, k: Nat, f: Byte, P: (Byte) -> Type, lead: P(f), fallback: Nat, consume: (x: Byte, P(x)) -> Nat) -> Nat =>
             match k < Bytes/length(b)
             | true =>
                 match Bytes/get(b, k) == f
@@ -245,15 +245,15 @@ fn an_implicit_born_outside_an_arm_is_solved_without_its_guard() {
         | mk(b: Bool): (b)
         end
 
-        let pick(@b: Bool, _: W(b)) -> Bool = b;
+        let pick(@b: Bool, _: W(b)) -> Bool => b;
 
-        let stuck(k: Nat, n: Nat) -> Bool =
+        let stuck(k: Nat, n: Nat) -> Bool =>
             pick(match k < n | true => W/mk(k < n) | false => W/mk(k < n) end);
 
-        let unstuck(c: Bool) -> Bool =
+        let unstuck(c: Bool) -> Bool =>
             pick(match c | true => W/mk(c) | false => W/mk(c) end);
 
-        let spelled(b: Bool) -> Str = match b | true => "t" | false => "f" end;
+        let spelled(b: Bool) -> Str => match b | true => "t" | false => "f" end;
 
         print(Str/flatten([spelled(stuck(1, 2)), spelled(stuck(2, 1)), spelled(unstuck(true))]))
         "#);
@@ -267,7 +267,7 @@ fn an_implicit_born_under_an_arms_binder_is_re_expressed_over_the_match_to_type_
     let output = run(r#"
         use /std/{Str, Bytes, Option, Result, Show, Try, Io};
 
-        let program(r: Result(Io/Error, Bytes)) -> Try(Io, Io/Error, Str) =
+        let program(r: Result(Io/Error, Bytes)) -> Try(Io, Io/Error, Str) =>
             let read =
                 match r
                 | success(v) => Io/pure(Result/success(v))
@@ -277,7 +277,7 @@ fn an_implicit_born_under_an_arms_binder_is_re_expressed_over_the_match_to_type_
             let bytes = out!;
             Try/pure(Result/unwrap_or(Str/of_bytes(bytes), "?"));
 
-        let main() -> Io({}) =
+        let main() -> Io({}) =>
             let r = Try/run(program(Result/success(Str/to_bytes("read"))))!;
             match r
             | failure(e) => /std/print(Show/show(e))
@@ -295,7 +295,7 @@ fn an_elided_element_type_is_restricted_like_an_implicit_to_type_the_match() {
     let output = run(r#"
         use /std/{Str, List, print};
 
-        let first(raw: List(Str)) -> Str =
+        let first(raw: List(Str)) -> Str =>
             let xs = match raw | [] => [] | [_, .._] => [] end;
             match xs | [] => "none" | [s, .._] => s end;
 

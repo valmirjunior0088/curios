@@ -3,21 +3,21 @@ use /std/{Json, Str, Flt, Bool, List, Int, Option, Test};
 use /std/Bool/{True, Holds};
 
 -- The document decoded and re-encoded, or the refusal that stopped it.
-let decoded(input: Str) -> Str =
+let decoded(input: Str) -> Str =>
     match Json/decode(input)
     | success(value) => Json/encode(value)
     | failure(e) => e.message
     end;
 
 -- The string a document carries, for the escape rows below, or the refusal that stopped it.
-let decoded_str(input: Str) -> Str =
+let decoded_str(input: Str) -> Str =>
     match Json/decode(input)
     | success(value) => match value | str(s) => s | _ => "wrong" end
     | failure(e) => e.message
     end;
 
 -- Each rejection is pinned to its reason. The backslash commits the escape parser, so a malformed escape reports itself rather than ending the string segment and failing on a closing quote that is not there — `many0(or(escape, segment))` once reported every one of these as `unexpected byte`.
-test unicode_escapes_require_well_formed_surrogate_pairs =
+test unicode_escapes_require_well_formed_surrogate_pairs =>
     Test/equal(
         Str/join("|", [
             decoded_str("\"\\uD83D\\uDE00\""),
@@ -28,7 +28,7 @@ test unicode_escapes_require_well_formed_surrogate_pairs =
         "😀|expected low surrogate|invalid low surrogate|invalid Unicode scalar|unknown escape");
 
 -- A string is read as the text it is: characters of two, three and four bytes stand between the quotes as written, and the pieces on either side of an escape join with the character it names.
-test a_string_holds_multi_byte_characters_as_written =
+test a_string_holds_multi_byte_characters_as_written =>
     Test/equal(
         Str/join("|", [
             decoded_str("\"é→𝄞\""),
@@ -37,7 +37,7 @@ test a_string_holds_multi_byte_characters_as_written =
         "é→𝄞|é\n→é𝄞|[\"ü\",{\"é\":\"→\"}]");
 
 -- Each refusal is the reason at the point the input stopped being JSON, not the bracket an outer parser failed on afterwards. A comma commits to the element after it and a key to its colon, the byte after an opening bracket decides between the close and the elements, and the primitives name what they expected — `sep_by0`'s backtracking once reported every malformed input as `unexpected byte`, and a bad literal as `unexpected literal`.
-test structural_refusals_name_what_was_expected =
+test structural_refusals_name_what_was_expected =>
     Test/equal(
         Str/join("|", [
             decoded("[]"),
@@ -57,7 +57,7 @@ test structural_refusals_name_what_was_expected =
             "expected \"true\"|unexpected end of input|unexpected end of input"]));
 
 -- A control character stands in a string only escaped: raw, it is refused where it stands rather than at the closing quote the string never reached, and its escape reads. U+007F is no control character to the grammar.
-test a_raw_control_character_in_a_string_is_refused =
+test a_raw_control_character_in_a_string_is_refused =>
     Test/equal(
         Str/join("|", [
             decoded("\"a\tb\""),
@@ -68,7 +68,7 @@ test a_raw_control_character_in_a_string_is_refused =
         "unescaped control character|unescaped control character|unescaped control character|\"a\\tb\"|a\u{7F}b");
 
 -- A document is the whole input: a value followed by anything is refused, not read as its prefix. The last two rows are the control — trivia on either side of a document is still trivia, since the value parsers consume only what precedes them.
-test a_document_is_refused_when_anything_follows_the_value =
+test a_document_is_refused_when_anything_follows_the_value =>
     Test/equal(
         Str/join("|", [
             decoded("nulll"),
@@ -83,15 +83,15 @@ test a_document_is_refused_when_anything_follows_the_value =
             "expected end of input|expected end of input|expected end of input|", "{\"a\":1}|[]"]));
 
 -- Whether a document reads.
-let reads(input: Str) -> Bool =
+let reads(input: Str) -> Bool =>
     match Json/decode(input)
     | success(_) => true
     | failure(_) => false
     end;
 
 -- A float is a number by the shortest digits that read back as it, `-0.0` being zero, and an infinity or a NaN is no number.
-test a_float_is_a_number_by_its_shortest_digits =
-    let of_flt(f: Flt) -> Str =
+test a_float_is_a_number_by_its_shortest_digits =>
+    let of_flt(f: Flt) -> Str =>
         match Json/Number/of_flt(f)
         | some(n) => Json/encode(Json/num(n))
         | none() => "no number"
@@ -108,8 +108,8 @@ test a_float_is_a_number_by_its_shortest_digits =
         "1.5|0|0.1|-1e21|no number|no number|no number");
 
 -- A number is written as JavaScript lays its digits out: positional from `1e-6` up to below `1e21`, and past those one digit, a point before the rest and the exponent.
-test a_number_is_written_as_javascript_writes_it =
-    let written(m: Int, e: Int) -> Str = Json/encode(Json/num(Json/Number/of(m, e)));
+test a_number_is_written_as_javascript_writes_it =>
+    let written(m: Int, e: Int) -> Str => Json/encode(Json/num(Json/Number/of(m, e)));
     Test/equal(
         [
             written(+15, -1),
@@ -125,7 +125,7 @@ test a_number_is_written_as_javascript_writes_it =
             "0"]);
 
 -- A number is read exactly at any size: an integer past `2^53` and one past 64 bits are themselves, `0.1` is the decimal and not the float nearest it, `1e400` is read past binary64's range, and `1.0`, `10e-1` and `1` are one number.
-test a_number_is_read_exactly_at_any_size =
+test a_number_is_read_exactly_at_any_size =>
     Test/equal(
         Str/join("|", [
             decoded("[9007199254740993, 12345678901234567891]"),
@@ -135,8 +135,8 @@ test a_number_is_read_exactly_at_any_size =
         "[9007199254740993,12345678901234567891]|0.1|1e400|[1,1,1]");
 
 -- Two documents that write one number two ways are one value.
-test a_number_written_two_ways_is_one_value =
-    let parsed(input: Str) -> Json =
+test a_number_written_two_ways_is_one_value =>
+    let parsed(input: Str) -> Json =>
         match Json/decode(input)
         | success(v) => v
         | failure(_) => Json/null()
@@ -144,8 +144,8 @@ test a_number_written_two_ways_is_one_value =
     Test/equal(parsed("[1.0, {\"a\": 2.50}]"), parsed("[1, {\"a\": 25e-1}]"));
 
 -- `to_int` answers an integer exactly and refuses a fraction and one too long to multiply out, and `to_flt` answers the float nearest the number.
-test a_number_converts_to_an_integer_and_a_float =
-    let number(input: Str) -> Json/Number =
+test a_number_converts_to_an_integer_and_a_float =>
+    let number(input: Str) -> Json/Number =>
         match Json/decode(input)
         | success(num(n)) => n
         | _ => Json/Number/of_int(+0)
@@ -162,7 +162,7 @@ test a_number_converts_to_an_integer_and_a_float =
             Flt/identical(Json/Number/to_flt(number("0.1")), +0.1))]);
 
 -- RFC 8259 §6's number rule at its edges: an integer part is `0` or opens with another digit, a point owes a digit and so does an exponent, and no sign but a minus opens a number.
-test a_number_is_read_by_the_grammars_own_rule =
+test a_number_is_read_by_the_grammars_own_rule =>
     Test/equal(
         Str/join("|", [
             decoded("0"),
@@ -185,7 +185,7 @@ test a_number_is_read_by_the_grammars_own_rule =
             "expected digit|expected number"]));
 
 -- JSONTestSuite's `n_number_*` cases, the documents a parser must refuse, each under the name its file bears. Four more are not UTF-8, so they are no `Str`, and are refused where bytes become text.
-test every_number_the_grammar_does_not_spell_is_refused =
+test every_number_the_grammar_does_not_spell_is_refused =>
     let cases: List({Str, Str}) =
         [
             ("++", "[++1234]"),
@@ -238,7 +238,7 @@ test every_number_the_grammar_does_not_spell_is_refused =
     Test/equal(List/map(List/filter(cases, (c) => reads(c.1)), (c) => c.0), []);
 
 -- JSONTestSuite's `y_number*` cases, the documents a parser must accept.
-test every_number_the_grammar_spells_is_read =
+test every_number_the_grammar_spells_is_read =>
     let cases: List({Str, Str}) =
         [
             ("number", "[123e65]"),
@@ -265,7 +265,7 @@ test every_number_the_grammar_spells_is_read =
     Test/equal(List/map(List/filter(cases, (c) => Bool/not(reads(c.1))), (c) => c.0), []);
 
 -- JSONTestSuite's `i_number_*` cases, which a parser is free to decide: every one is read exactly, past binary64's range or below it, and an integer past `2^53` as itself.
-test every_number_a_parser_may_decide_is_read_exactly =
+test every_number_a_parser_may_decide_is_read_exactly =>
     Test/equal(
         Str/join("|", [
             decoded("[123.456e-789]"),

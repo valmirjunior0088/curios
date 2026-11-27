@@ -248,7 +248,7 @@ pub struct TopConcept<D: Dialect = Program> {
     pub fields: Vec<ConceptField<D>>,
 }
 
-/// One implementation field of a `witness` declaration: `label = value`, or the definition sugar `label(params) = value` — the [`TupleField`](crate::TupleField) grammar with the label mandatory. The sugar is kept verbatim (the printer round-trips it); `into_core` undoes it when it builds the desugared struct literal.
+/// One implementation field of a `witness` declaration: `label = value`, or the definition sugar `label(params) => value` — the [`TupleField`](crate::TupleField) grammar with the label mandatory. The sugar is kept verbatim (the printer round-trips it); `into_core` undoes it when it builds the desugared struct literal.
 #[derive(Debug, Clone, PartialEq)]
 pub struct WitnessField {
     pub label: Label,
@@ -256,7 +256,7 @@ pub struct WitnessField {
     pub value: Term,
 }
 
-/// A `witness` declaration: a registered inhabitant of a concept. Witnesses are anonymous — they are only ever reached through resolution (or an explicit `use <term>` carrying an ordinary value), so there is no name and no `pub`. The declaration desugars to a compiler-named top-level definition `let witness~N(tele) -> C(args) = C { … }` registered in the program-wide witness table; diagnostics identify it by concept, key, and declaring module. Surface syntax writes a nonempty telescope as `satisfy (tele) => C(args) { … }`; the telescope admits only `@` and `use` parameters (explicit binders are rejected at lowering). `concept`/`args` are the witnessed concept application — an application like any other, so its arguments take the marks a call's do — which is the witness's declared type and what its body is checked against. The body is written, or `..` alone as `satisfy C(args) { .. }` — the derived form, whose body the compiler writes.
+/// A `witness` declaration: a registered inhabitant of a concept. Witnesses are anonymous — they are only ever reached through resolution (or an explicit `use <term>` carrying an ordinary value), so there is no name and no `pub`. The declaration desugars to a compiler-named top-level definition `let witness~N(tele) -> C(args) => C { … }` registered in the program-wide witness table; diagnostics identify it by concept, key, and declaring module. Surface syntax writes a nonempty telescope as `satisfy (tele) -> C(args) { … }`; the telescope admits only `@` and `use` parameters (explicit binders are rejected at lowering). `concept`/`args` are the witnessed concept application — an application like any other, so its arguments take the marks a call's do — which is the witness's declared type and what its body is checked against. The body is written, or `..` alone as `satisfy C(args) { .. }` — the derived form, whose body the compiler writes.
 #[derive(Debug, Clone)]
 pub struct TopWitness {
     /// Where the `satisfy` heading the item, or the `and` before a later member, was read.
@@ -282,7 +282,7 @@ impl PartialEq for TopWitness {
     }
 }
 
-/// A `test` declaration: `test name = body;` — a named description of type `/std/Test`, taking no parameters. It is not function sugar, though it lowers to a `() -> Test({})` thunk: only the selected test's body is forced.
+/// A `test` declaration: `test name => body;` — a named description of type `/std/Test`, taking no parameters. It is not function sugar, though it lowers to a `() -> Test({})` thunk: only the selected test's body is forced.
 #[derive(Debug, Clone, PartialEq)]
 pub struct TopTest<D: Dialect = Program> {
     /// Where the `test` heading the item was read.

@@ -9,18 +9,18 @@ fn program(body: &str) -> String {
     fill!(
         r#"
         use /std/{Nat, Int, Byte, Bool, Flt, Char, Option, List, Eq, Str, Show, print};
-        let id(@A: Type, a: A) -> A = a;
-        let first(@A: Type, x: A, pin: A) -> A = x;
-        let second(@A: Type, pin: A, x: A) -> A = x;
-        let pick(@A: Type, x: Option(A), pin: Option(A)) -> Option(A) = x;
-        let shown(o: Option(Byte)) -> Str = match o | some(v) => Show/show(v) | none() => "none" end;
+        let id(@A: Type, a: A) -> A => a;
+        let first(@A: Type, x: A, pin: A) -> A => x;
+        let second(@A: Type, pin: A, x: A) -> A => x;
+        let pick(@A: Type, x: Option(A), pin: Option(A)) -> Option(A) => x;
+        let shown(o: Option(Byte)) -> Str => match o | some(v) => Show/show(v) | none() => "none" end;
         struct Pair(T: Type): pub Type { a: T, z: T }
         let b: Byte = 7;
         let i: Int = -2;
         let c: Bool = true;
         let ob: Option(Byte) = Option/some(b);
         let xs: List(Int) = [i];
-        let and(s: Str, t: Str) -> Str = Str/concat(s, Str/concat(" ", t));
+        let and(s: Str, t: Str) -> Str => Str/concat(s, Str/concat(" ", t));
         ${body}
         "#,
         body
@@ -50,7 +50,7 @@ fn a_numeral_takes_the_type_its_calls_expectation_gives() {
         let wrapped: Option(Int) = Option/some(5);
         let through: Byte = id(5);
         let twice: Option(Int) = id(Option/some(5));
-        let int(o: Option(Int)) -> Str = match o | some(v) => Int/to_str(v) | none() => "none" end;
+        let int(o: Option(Int)) -> Str => match o | some(v) => Int/to_str(v) | none() => "none" end;
         print(and(int(wrapped), and(Show/show(through), int(twice))))
         "#,
     );
@@ -76,7 +76,7 @@ fn numerals_that_wait_on_one_type_take_one_default() {
 fn a_numeral_in_a_literal_takes_the_type_a_sibling_gives() {
     let source = program(
         r#"
-        let head(ys: List(Byte)) -> Str = match ys | [] => "none" | [h, ..t] => Show/show(h) end;
+        let head(ys: List(Byte)) -> Str => match ys | [] => "none" | [h, ..t] => Show/show(h) end;
         let numeral_first = [5, b];
         let numeral_last = [b, 5];
         let list = and(head(numeral_first), head(numeral_last));
@@ -116,8 +116,8 @@ fn a_numeral_waits_for_the_witness_its_type_is_read_through() {
         r#"
         pub concept Sized(A: Type): pub Type { Carrier: Type, zero: Carrier }
         satisfy Sized(Bool) { Carrier = Int, zero = 0 }
-        let before(@A: Type, use Sized(A), x: Sized/Carrier(@A), pin: A) -> Sized/Carrier(@A) = x;
-        let after(@A: Type, use Sized(A), pin: A, x: Sized/Carrier(@A)) -> Sized/Carrier(@A) = x;
+        let before(@A: Type, use Sized(A), x: Sized/Carrier(@A), pin: A) -> Sized/Carrier(@A) => x;
+        let after(@A: Type, use Sized(A), pin: A, x: Sized/Carrier(@A)) -> Sized/Carrier(@A) => x;
         print(and(Int/to_str(before(5, true)), Int/to_str(after(true, 5))))
         "#,
     );

@@ -7,7 +7,7 @@ struct Box: Type {
     p: False,
 }
 
-let spin(n: Nat) -> Env(Box) =
+let spin(n: Nat) -> Env(Box) =>
     Env/bind(Env/pure(n), (x) => spin(x));
 
 Env/run(spin(0)).0.p

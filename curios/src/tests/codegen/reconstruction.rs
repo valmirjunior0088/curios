@@ -15,21 +15,21 @@ use {
 
 const HEADER: &str = "use /std/{Nat, Io, Box, Option, List, Proc, proved}; use /std/Bool/{Holds};";
 const EXACT: &str = r#"
-let walk(n: Nat, seed: Nat) -> {Nat, Nat} =
+let walk(n: Nat, seed: Nat) -> {Nat, Nat} =>
     match n
     | 0 => (seed, seed + 13)
     | k + 1 => let r = walk(k, (seed + 1) % 16777213); (r.0, r.1)
     end;
 "#;
 const PROOF: &str = r#"
-let walk(n: Nat, seed: Nat) -> {at: Nat, low: Holds(0 <= at)} =
+let walk(n: Nat, seed: Nat) -> {at: Nat, low: Holds(0 <= at)} =>
     match n
     | 0 => (at = seed, low = proved())
     | k + 1 => let r = walk(k, (seed + 1) % 16777213); (at = r.at, low = proved())
     end;
 "#;
 const OPTIONAL: &str = r#"
-let walk(n: Nat, seed: Nat) -> Option({at: Nat, seen: Nat, low: Holds(0 <= at)}) =
+let walk(n: Nat, seed: Nat) -> Option({at: Nat, seen: Nat, low: Holds(0 <= at)}) =>
     match n
     | 0 => Option/some((at = seed, seen = seed + 13, low = proved()))
     | k + 1 => match k
@@ -185,7 +185,7 @@ fn run_both(fixture: &Fixture, cases: &[(&[&str], &str)]) {
 #[test]
 fn exact_products_recur_as_loops_before_downstream_optimization() {
     let fixture = compile(&fill!(
-        "${HEADER}${EXACT} let main() -> Io({}) = let n = 100000 + List/length(/std/Proc/args()!); let r = walk(n, 7); /std/print(Nat/to_str(r.0 + r.1)); main()",
+        "${HEADER}${EXACT} let main() -> Io({}) => let n = 100000 + List/length(/std/Proc/args()!); let r = walk(n, 7); /std/print(Nat/to_str(r.0 + r.1)); main()",
         HEADER,
         EXACT
     ));
@@ -197,7 +197,7 @@ fn exact_products_recur_as_loops_before_downstream_optimization() {
 #[test]
 fn retained_proof_slots_do_not_cost_a_frame_per_step() {
     let fixture = compile(&fill!(
-        "${HEADER}${PROOF} let main() -> Io({}) = let n = 100000 + List/length(/std/Proc/args()!); let r = walk(n, 7); /std/print(Nat/to_str(r.at)); main()",
+        "${HEADER}${PROOF} let main() -> Io({}) => let n = 100000 + List/length(/std/Proc/args()!); let r = walk(n, 7); /std/print(Nat/to_str(r.at)); main()",
         HEADER,
         PROOF
     ));
@@ -210,7 +210,7 @@ fn retained_proof_slots_do_not_cost_a_frame_per_step() {
 fn nested_proof_reconstruction_preserves_both_constructor_outcomes() {
     let fixture = compile(&fill!(
         r#"${HEADER}${OPTIONAL}
-        let main() -> Io({}) =
+        let main() -> Io({}) =>
         let n = 100000 + List/length(/std/Proc/args()!);
         match walk(n, 7)
         | some(hit) => let _ = /std/print(Nat/to_str(hit.at))!; let _ = /std/print("/")!; /std/print(Nat/to_str(hit.seen))
@@ -230,7 +230,7 @@ fn nested_proof_reconstruction_preserves_both_constructor_outcomes() {
 fn an_escaping_walk_with_multiple_callers_keeps_a_tail_recursive_function() {
     let fixture = compile(&fill!(
         r#"${HEADER}${PROOF}
-        let main() -> Io({}) =
+        let main() -> Io({}) =>
         let holder = Box/new(walk)!;
         let indirect = Box/get(holder)!;
         let n = List/length(/std/Proc/args()!);
@@ -286,11 +286,11 @@ fn an_escaping_walk_with_multiple_callers_keeps_a_tail_recursive_function() {
 fn overwriting_an_ordinary_numeric_field_changes_the_answer() {
     let fixture = compile(&fill!(
         r#"${HEADER}
-        let walk(n: Nat) -> {at: Nat, real: Nat} = match n
+        let walk(n: Nat) -> {at: Nat, real: Nat} => match n
             | 0 => (at = 7, real = 9)
             | k + 1 => let r = walk(k); (at = r.at, real = 0)
             end;
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let n = List/length(/std/Proc/args()!);
             let r = walk(n);
             /std/print(Nat/to_str(r.real));

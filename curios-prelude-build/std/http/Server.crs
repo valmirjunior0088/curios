@@ -24,7 +24,7 @@ pub let Handler: Type =
     (Request) -> Try(Io, Io/Error, Response);
 
 -- Whether the request `head` expects `100 Continue` before it sends its content (RFC 9110 §10.1.1): an HTTP/1.1 request whose `Expect` lists it.
-let expects_continue(head: Request/Head) -> Bool =
+let expects_continue(head: Request/Head) -> Bool =>
     Version/is_1_1(head.version)
         && List/any(
             Field/members(head.headers, "Expect"),
@@ -52,13 +52,13 @@ struct Opened: Type {
 let decided(
     scheme: Url/Scheme,
     lines: Bytes,
-) -> Result(Refusal, {Request/Head, Framing, Request/Address}) =
+) -> Result(Refusal, {Request/Head, Framing, Request/Address}) =>
     let head = Request/head_of(lines)!;
     let framing = Request/framing(head)!;
     let address = Request/address_of(scheme, head)!;
     Result/success((head, framing, address));
 
-let opened(scheme: Url/Scheme, lines: Bytes) -> Result(Unread, Opened) =
+let opened(scheme: Url/Scheme, lines: Bytes) -> Result(Unread, Opened) =>
     match decided(scheme, lines)
     | failure(why) => Result/failure(Unread/refused(why))
     | success((head, framing, address)) =>
@@ -69,7 +69,7 @@ let opened(scheme: Url/Scheme, lines: Bytes) -> Result(Unread, Opened) =
     end;
 
 -- `100 Continue` written to `c` where the request expects it and its body is still to arrive: one whose head already refuses it, or whose content came with its head, is not invited to send it.
-let invite(limits: Limits, c: Socket, r: Reader(Socket), o: Opened) -> Io(Result(Io/Error, {})) =
+let invite(limits: Limits, c: Socket, r: Reader(Socket), o: Opened) -> Io(Result(Io/Error, {})) =>
     match expects_continue(o.head)
     | false => Io/pure(Result/success(()))
     | true =>
@@ -86,7 +86,7 @@ let request(
     scheme: Url/Scheme,
     c: Socket,
     r: Reader(Socket),
-) -> Io(Result(Unread, Request)) =
+) -> Io(Result(Unread, Request)) =>
     let first =
         Reader/take(
             r,
@@ -137,7 +137,7 @@ let request(
     end;
 
 -- What `c`'s peer still sends, read and dropped until the peer closes, sends nothing for `quiet`, or has sent `left` octets.
-let drain(c: Socket, quiet: Duration, left: Nat) -> Io({}) =
+let drain(c: Socket, quiet: Duration, left: Nat) -> Io({}) =>
     match left
     | 0 => Io/pure(())
     | _ =>
@@ -153,7 +153,7 @@ let drain(c: Socket, quiet: Duration, left: Nat) -> Io({}) =
     end;
 
 -- `reply` with the `Date` of the moment it is sent, which an origin server with a clock owes (RFC 9110 §6.6.1), unless its handler dated it.
-let dated(reply: Response) -> Io(Response) =
+let dated(reply: Response) -> Io(Response) =>
     match Response/header(reply, "Date")
     | some(_) => Io/pure(reply)
     | none() =>
@@ -162,7 +162,7 @@ let dated(reply: Response) -> Io(Response) =
     end;
 
 -- `reply` with `date` as its `Date`. A clock reading no year of four digits names is no reasonable approximation of the time, for which RFC 9110 §6.6.1 asks no `Date`.
-let stamped(reply: Response, date: Option(Field/Value)) -> Response =
+let stamped(reply: Response, date: Option(Field/Value)) -> Response =>
     match date
     | some(value) =>
         let field = Field { name = Field/Name { text = "date" }, value = value };
@@ -171,7 +171,7 @@ let stamped(reply: Response, date: Option(Field/Value)) -> Response =
     end;
 
 -- `reply` written to `c` in answer to a request of `method` — its head alone where the method is `HEAD`, stating the length its body has — and the connection ended as RFC 9112 §9.6 asks: the sending half first, then what the peer still sends read on, since a close over unread bytes would reset the connection under the reply.
-let send(s: Server, c: Socket, method: Method, reply: Response) -> Io({}) =
+let send(s: Server, c: Socket, method: Method, reply: Response) -> Io({}) =>
     let stamped = dated(reply)!;
     let bytes =
         match method
@@ -195,7 +195,7 @@ let allowed: Response =
         body = 0x[] };
 
 --- What a server does with one connection of `scheme`: read a request as its framing delimits it, hand it to `handler`, write the reply, and end the connection as HTTP asks — the sending half ended, what the peer still sends read until it closes or falls quiet, and the close left to whoever opened the connection. A request the reader refuses is answered with the status its refusal names, one that has not arrived whole within `s.timeout` 408, and a handler that fails 500; `OPTIONS *`, which asks about the server and no resource, is answered by the server with the methods it reads, and no handler sees it; a peer that sends nothing is told nothing. Every reply carries the `Date` it is sent at, unless its handler dated it. `serve` and `serve_tls` run it over a listener of their own, and a program with a listener of its own hands it each socket it accepts.
-pub let answer(s: Server, scheme: Url/Scheme, handler: Handler) -> (Socket) -> Io({}) =
+pub let answer(s: Server, scheme: Url/Scheme, handler: Handler) -> (Socket) -> Io({}) =>
     (c) =>
         let r = Reader/new(c)!;
         let arrived = Io/timeout(s.timeout, request(s.limits, scheme, c, r))!;
@@ -220,7 +220,7 @@ pub let answer(s: Server, scheme: Url/Scheme, handler: Handler) -> (Socket) -> I
         end;
 
 --- Every connection to `host` at `port` answered by `handler` as `answer` answers one, in the clear: one request per connection in a branch of its own, until an accept fails. A slow request holds up no other connection.
-pub let serve(s: Server, host: Str, port: Nat, handler: Handler) -> Try(Io, Io/Error, {}) =
+pub let serve(s: Server, host: Str, port: Nat, handler: Handler) -> Try(Io, Io/Error, {}) =>
     Listener/serve(host, port, answer(s, Url/Scheme/http(), handler));
 
 --- `serve` under TLS: every connection is upgraded with the certificate chain `cert` and the private key `key` before a request is read from it.
@@ -231,5 +231,5 @@ pub let serve_tls(
     cert: Bytes,
     key: Bytes,
     handler: Handler,
-) -> Try(Io, Io/Error, {}) =
+) -> Try(Io, Io/Error, {}) =>
     Listener/serve_tls(host, port, cert, key, answer(s, Url/Scheme/https(), handler));

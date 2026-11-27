@@ -32,7 +32,7 @@ fn package(root: &Path) {
     fs::write(root.join("lib.crs"), "pub foreign double(Nat) -> Nat;\n").unwrap();
     fs::write(
         root.join("exe.crs"),
-        "let main() -> /std/Io({}) = let doubled = /clock/double(3)!;\n/std/print(/std/Nat/to_str(doubled));\nmain()\n",
+        "let main() -> /std/Io({}) => let doubled = /clock/double(3)!;\n/std/print(/std/Nat/to_str(doubled));\nmain()\n",
     )
     .unwrap();
 }
@@ -231,12 +231,12 @@ fn tested(root: &Path) {
     .unwrap();
     fs::write(
         root.join("lib.crs"),
-        "use /std/{Test};\n\ntest holds =\n    Test/assert(\"it holds\", true);\n\ntest fails =\n    Test/equal(1, 2);\n\ntest exits =\n    let _ = /std/Proc/exit(@{}, 7)!; Test/assert(\"it holds\", true);\n",
+        "use /std/{Test};\n\ntest holds =>\n    Test/assert(\"it holds\", true);\n\ntest fails =>\n    Test/equal(1, 2);\n\ntest exits =>\n    let _ = /std/Proc/exit(@{}, 7)!; Test/assert(\"it holds\", true);\n",
     )
     .unwrap();
     fs::write(
         root.join("app.crs"),
-        "use /std/{Test};\n\ntest own =\n    Test/assert(\"it holds\", true);\n\n/std/print(\"ran\\n\")\n",
+        "use /std/{Test};\n\ntest own =>\n    Test/assert(\"it holds\", true);\n\n/std/print(\"ran\\n\")\n",
     )
     .unwrap();
     fs::write(root.join("quiet.crs"), "/std/print(\"quiet\\n\")\n").unwrap();

@@ -43,25 +43,25 @@ pub fn reads_in_every_shape(carrier: &Carrier) -> String {
     r#"
     use /std/{Nat, Byte, Bytes, Bool, List, Option, Str, Io, print, Try, Proc};
 
-    let at(run: %RUN%, i: Nat) -> Nat =
+    let at(run: %RUN%, i: Nat) -> Nat =>
         %AT%;
 
-    let settled(run: %RUN%) -> %RUN% =
+    let settled(run: %RUN%) -> %RUN% =>
         %SETTLED%;
 
-    let alike_up(a: %RUN%, b: %RUN%, i: Nat) -> Bool =
+    let alike_up(a: %RUN%, b: %RUN%, i: Nat) -> Bool =>
         match Bool/holds(i < %LEN%(b))
         | none() => true
         | some(_) => at(a, i) == at(b, i) && alike_up(a, b, i + 1)
         end;
 
-    let alike_down(a: %RUN%, b: %RUN%, left: Nat) -> Bool =
+    let alike_down(a: %RUN%, b: %RUN%, left: Nat) -> Bool =>
         match left | 0 => true | k + 1 => at(a, k) == at(b, k) && alike_down(a, b, k) end;
 
-    let window(run: %RUN%) -> %RUN% =
+    let window(run: %RUN%) -> %RUN% =>
         match Bool/holds(25 <= %LEN%(run)) | some(fits) => %SLICE%(run, 5, 20) | none() => run end;
 
-    let shape(which: Nat, leaf: %RUN%, forced: %RUN%, view: %RUN%) -> %RUN% =
+    let shape(which: Nat, leaf: %RUN%, forced: %RUN%, view: %RUN%) -> %RUN% =>
         match which
         | 0 => leaf
         | 1 => %OPEN%..leaf, ..leaf]
@@ -73,22 +73,22 @@ pub fn reads_in_every_shape(carrier: &Carrier) -> String {
         | _ => %OPEN%..%OPEN%..%OPEN%..leaf, ..view], ..leaf], ..forced]
         end;
 
-    let holds(which: Nat, leaf: %RUN%, forced: %RUN%, view: %RUN%) -> Bool =
+    let holds(which: Nat, leaf: %RUN%, forced: %RUN%, view: %RUN%) -> Bool =>
         let flat = settled(shape(which, leaf, forced, view));
         %LEN%(flat) == %LEN%(shape(which, leaf, forced, view))
             && alike_up(shape(which, leaf, forced, view), flat, 0)
             && alike_down(shape(which, leaf, forced, view), flat, %LEN%(flat));
 
-    let mark(held: Bool) -> Str =
+    let mark(held: Bool) -> Str =>
         match held | true => "1" | false => "0" end;
 
-    let report(which: Nat, leaf: %RUN%, forced: %RUN%, view: %RUN%) -> Str =
+    let report(which: Nat, leaf: %RUN%, forced: %RUN%, view: %RUN%) -> Str =>
         match which
         | 0 => mark(holds(0, leaf, forced, view))
         | k + 1 => Str/concat(report(k, leaf, forced, view), mark(holds(k + 1, leaf, forced, view)))
         end;
 
-    let main() -> Io({}) =
+    let main() -> Io({}) =>
     let arrived = Try/run(Io/read(Proc/stdin, 64))!;
     match arrived
     | success(bytes(l)) =>
@@ -127,32 +127,32 @@ pub fn extends_in_place(carrier: &Carrier) -> String {
         r#"
     use /std/{Nat, Byte, Bytes, Bool, List, Option, Str, Io, print, Try, Proc};
 
-    let at(run: ${run}, i: Nat) -> Nat =
+    let at(run: ${run}, i: Nat) -> Nat =>
         ${at};
 
-    let settled(run: ${run}) -> ${run} =
+    let settled(run: ${run}) -> ${run} =>
         ${settled};
 
-    let repeats_from(run: ${run}, leaf: ${run}, i: Nat) -> Bool =
+    let repeats_from(run: ${run}, leaf: ${run}, i: Nat) -> Bool =>
         match (Bool/holds(i < ${len}(run)), Bool/holds(0 < ${len}(leaf)))
         | (some(_), some(_)) =>
             at(run, i) == at(leaf, i % ${len}(leaf)) && repeats_from(run, leaf, i + 1)
         | _ => true
         end;
 
-    let repeats(run: ${run}, leaf: ${run}, times: Nat) -> Bool =
+    let repeats(run: ${run}, leaf: ${run}, times: Nat) -> Bool =>
         ${len}(run) == times * ${len}(leaf) && repeats_from(run, leaf, 0);
 
-    let window(run: ${run}, leaf: ${run}) -> ${run} =
+    let window(run: ${run}, leaf: ${run}) -> ${run} =>
         match Bool/holds(${len}(leaf) <= ${len}(run))
         | some(fits) => ${slice}(run, 0, ${len}(leaf))
         | none() => run
         end;
 
-    let mark(held: Bool) -> Str =
+    let mark(held: Bool) -> Str =>
         match held | true => "1" | false => "0" end;
 
-    let main() -> Io({}) =
+    let main() -> Io({}) =>
     let arrived = Try/run(Io/read(Proc/stdin, 64))!;
     match arrived
     | success(bytes(l)) =>

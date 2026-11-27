@@ -3,7 +3,7 @@ use /std/ops/{Eql};
 use /std/Bool/{True, Holds};
 
 --- Whether `mantissa · 10^exponent` is written the one way `Number` holds a number: a nonzero mantissa that ends in no zero, or zero with exponent zero.
-pub let canonical(mantissa: Int, exponent: Int) -> Bool =
+pub let canonical(mantissa: Int, exponent: Int) -> Bool =>
     match mantissa == +0
     | true => exponent == +0
     | false => Int/rem(mantissa, +10) != +0
@@ -25,7 +25,7 @@ satisfy Spell(Number) {
 }
 
 --- `mantissa · 10^exponent`, the mantissa's trailing zeros moved into the exponent.
-pub let of(mantissa: Int, exponent: Int) -> Number =
+pub let of(mantissa: Int, exponent: Int) -> Number =>
     match
     | mantissa == +0 => Number { mantissa = +0, exponent = +0, @canonical = True/qed() }
     | Int/rem(mantissa, +10) == +0 => of(Int/div(mantissa, +10), exponent + +1)
@@ -33,12 +33,12 @@ pub let of(mantissa: Int, exponent: Int) -> Number =
     end;
 
 --- `i` as a number.
-pub let of_int(i: Int) -> Number =
+pub let of_int(i: Int) -> Number =>
     of(i, +0);
 
 -- `Flt/to_str` writes the shortest digits positionally, `+2.5`, `-0.001`, a large float with every zero written out, so its text is read back as a mantissa and the count of its fraction's digits.
 --- The number of the shortest decimal that reads back as `f`, as `Flt/to_str` writes it, `-0.0` being zero; `none` for an infinity or a NaN, which no number is.
-pub let of_flt(f: Flt) -> Option(Number) =
+pub let of_flt(f: Flt) -> Option(Number) =>
     match Flt/is_finite(f)
     | false => Option/none()
     | true =>
@@ -56,12 +56,12 @@ pub let of_flt(f: Flt) -> Option(Number) =
     end;
 
 --- The float nearest `n`, correctly rounded as `Flt/of_decimal` rounds: an infinity past binary64's range and a zero of its sign below it.
-pub let to_flt(n: Number) -> Flt =
+pub let to_flt(n: Number) -> Flt =>
     let magnitude = Int/abs(n.mantissa);
     Flt/of_decimal(n.mantissa < +0, magnitude, n.exponent, Str/length(Nat/to_str(magnitude)));
 
 --- `n` as an integer: `none` where it has a fraction, and where it would have more than 4,300 digits, the bound Python 3.11 puts on converting a decimal to an integer (CVE-2020-10735), since `1e1000000000` is small to hold and enormous to multiply out.
-pub let to_int(n: Number) -> Option(Int) =
+pub let to_int(n: Number) -> Option(Int) =>
     match n.exponent >= +0
     | false => Option/none()
     | true =>

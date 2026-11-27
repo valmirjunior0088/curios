@@ -132,8 +132,8 @@ fn the_orphan_rule_fires_across_units_and_not_across_modules() {
 #[test]
 fn a_unit_that_reads_another_units_self_reading_value_is_refused_where_it_is_compiled() {
     let knot = mounted("knot", "pub let xs : /std/Nat = /std/Nat/add(xs, 1);");
-    let reader = mounted("reader", "pub let read() -> /std/Nat = /knot/xs;");
-    let idle = mounted("reader", "pub let read() -> /std/Nat = 0;");
+    let reader = mounted("reader", "pub let read() -> /std/Nat => /knot/xs;");
+    let idle = mounted("reader", "pub let read() -> /std/Nat => 0;");
 
     let refusal = compile_each(&[&knot, &reader])
         .err()
@@ -143,7 +143,7 @@ fn a_unit_that_reads_another_units_self_reading_value_is_refused_where_it_is_com
         "expected the recursion rule's refusal, got: {refusal}"
     );
     assert!(
-        refusal.contains("pub let read() -> /std/Nat = /knot/xs;"),
+        refusal.contains("pub let read() -> /std/Nat => /knot/xs;"),
         "expected the refusal framed at the read, got: {refusal}"
     );
     assert!(
@@ -161,11 +161,11 @@ fn a_unit_that_reads_another_units_self_reading_value_is_refused_where_it_is_com
 fn a_units_stored_bytes_do_not_depend_on_what_was_compiled_before_it() {
     let pre = mounted(
         "pre",
-        "pub let pick(@A: Type, a: A) -> A = a;\npub let one: /std/Nat = pick(1);",
+        "pub let pick(@A: Type, a: A) -> A => a;\npub let one: /std/Nat = pick(1);",
     );
     let lib = mounted(
         "lib",
-        "pub let same(@A: Type, a: A) -> A = a;\npub let three: /std/Nat = same(3);",
+        "pub let same(@A: Type, a: A) -> A => a;\npub let three: /std/Nat = same(3);",
     );
     let last = |sources: &[&RootSource]| {
         compile_in_order(sources)
@@ -220,7 +220,7 @@ fn a_units_stored_bytes_do_not_depend_on_what_was_compiled_before_it() {
 fn an_index_names_every_blob_its_unit_stores() {
     let lib = mounted(
         "lib",
-        "pub let same(@A: Type, a: A) -> A = a;\npub let three: /std/Nat = same(3);",
+        "pub let same(@A: Type, a: A) -> A => a;\npub let three: /std/Nat = same(3);",
     );
     let unit = compile_in_order(&[&lib])
         .pop()
@@ -348,7 +348,7 @@ fn a_name_exported_along_several_paths_is_listed_the_same_every_time() {
 /// A unit compiled after another restores none of the other's records. What its elaboration reads of an earlier unit's is what was concluded of each definition, which the earlier unit stores with what it is for its successors ([`Unit::classifications`]): so one whose every record is unreadable stands before another as one whose records read does, the later unit's definition total because the one it calls is, where a definition nothing is concluded of passes on a partial verdict.
 #[test]
 fn a_unit_compiled_after_another_restores_none_of_its_records() {
-    let earlier = unit_of("pub let twice(n: /std/Nat) -> /std/Nat = /std/Nat/add(n, n);");
+    let earlier = unit_of("pub let twice(n: /std/Nat) -> /std/Nat => /std/Nat/add(n, n);");
     let unreadable = restored_with_unreadable_records(&earlier);
     let totality = |after: &Unit| {
         unit_after("after", "pub let four: /std/Nat = /lib/twice(2);", &[after])

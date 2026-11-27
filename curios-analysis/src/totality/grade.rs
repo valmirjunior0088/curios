@@ -99,7 +99,7 @@ pub struct SizeContext {
     refined: BTreeMap<Free, Shape>,
     /// The binders an enclosing arm has established are not zero.
     ///
-    /// This is what makes an arithmetic decrease sound rather than merely plausible: `n / k` is below `n` only when `n` is nonzero, and without the guard `let loop(n: Nat) -> Nat = loop(n / 10);` would be accepted while looping forever at zero.
+    /// This is what makes an arithmetic decrease sound rather than merely plausible: `n / k` is below `n` only when `n` is nonzero, and without the guard `let loop(n: Nat) -> Nat => loop(n / 10);` would be accepted while looping forever at zero.
     nonzero: BTreeSet<Free>,
     /// The binders the enclosing inductive arms bound as constructor payloads.
     ///

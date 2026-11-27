@@ -133,7 +133,7 @@ pub fn grown(growth: Growth, size: usize) -> String {
         Growth::Statements => {
             let statements = "    let _ = /std/print(\"x\")!;\n".repeat(size);
             fill!(
-                "let entry() -> /std/Io({}) =\n${statements}    /std/print(\"\\n\");\n\nentry()\n",
+                "let entry() -> /std/Io({}) =>\n${statements}    /std/print(\"\\n\");\n\nentry()\n",
                 statements,
             )
         }
@@ -146,11 +146,11 @@ pub fn grown(growth: Growth, size: usize) -> String {
             program(&definitions, &format!("c{last} + a"))
         }
         Growth::Functions => {
-            let mut definitions = "let g0(x: Nat) -> Nat = x;\n".to_string();
+            let mut definitions = "let g0(x: Nat) -> Nat => x;\n".to_string();
             for index in 1..size {
                 writeln!(
                     definitions,
-                    "let g{index}(x: Nat) -> Nat = g{}(x) + 1;",
+                    "let g{index}(x: Nat) -> Nat => g{}(x) + 1;",
                     index - 1
                 )
                 .expect("a string takes a line");
@@ -179,7 +179,7 @@ pub fn grown(growth: Growth, size: usize) -> String {
                 ", ",
             );
             program(
-                &format!("let f(a: Nat) -> /std/List(Nat) = [{elements}];\n"),
+                &format!("let f(a: Nat) -> /std/List(Nat) => [{elements}];\n"),
                 "/std/List/length(f(a))",
             )
         }
@@ -188,17 +188,17 @@ pub fn grown(growth: Growth, size: usize) -> String {
                 .map(|index| format!("    | {index} => {}\n", index + 1))
                 .collect::<String>();
             program(
-                &format!("let f(k: Nat) -> Nat =\n    match k\n{arms}    | _ => 0\n    end;\n"),
+                &format!("let f(k: Nat) -> Nat =>\n    match k\n{arms}    | _ => 0\n    end;\n"),
                 "f(a)",
             )
         }
         Growth::Parameters => program(
-            &format!("let f({}) -> Nat = x0 + x{last};\n", parameters(size)),
+            &format!("let f({}) -> Nat => x0 + x{last};\n", parameters(size)),
             &format!("f({})", repeated("a", size, ", ")),
         ),
         Growth::ParametersSummed => program(
             &format!(
-                "let f({}) -> Nat = {};\n",
+                "let f({}) -> Nat => {};\n",
                 parameters(size),
                 joined((0..size).map(|index| format!("x{index}")), " + ")
             ),
@@ -208,14 +208,14 @@ pub fn grown(growth: Growth, size: usize) -> String {
             let sum = joined((0..size).map(|index| format!("x{index}")), " + ");
             program(
                 &format!(
-                    "let _claim({}) -> /std/Eq()({sum}, {sum}) = /std/Eq/refl();\n",
+                    "let _claim({}) -> /std/Eq()({sum}, {sum}) => /std/Eq/refl();\n",
                     parameters(size)
                 ),
                 "a",
             )
         }
         Growth::LetsSummed => {
-            let mut body = "let f(n: Nat) -> Nat =\n".to_string();
+            let mut body = "let f(n: Nat) -> Nat =>\n".to_string();
             for index in 0..size {
                 writeln!(body, "    let x{index} = n + {index};").expect("a string takes a line");
             }
@@ -237,7 +237,7 @@ pub fn grown(growth: Growth, size: usize) -> String {
             let (over_x0, over_u) = (spine("x0"), spine("u"));
             program(
                 &format!(
-                    "let f(g: (Nat) -> Nat, u: Nat, {}) -> Nat =\n    let _commuted: /std/Eq()({over_x0} * {over_u}, {over_u} * {over_x0}) = /std/Eq/refl();\n    x0;\n",
+                    "let f(g: (Nat) -> Nat, u: Nat, {}) -> Nat =>\n    let _commuted: /std/Eq()({over_x0} * {over_u}, {over_u} * {over_x0}) = /std/Eq/refl();\n    x0;\n",
                     parameters(size + 1)
                 ),
                 &format!("f((v: Nat) => v, a, {})", repeated("a", size + 1, ", ")),
@@ -245,7 +245,7 @@ pub fn grown(growth: Growth, size: usize) -> String {
         }
         Growth::Tuple => program(
             &format!(
-                "let f(a: Nat) -> Nat =\n    let t = ({});\n    a;\n",
+                "let f(a: Nat) -> Nat =>\n    let t = ({});\n    a;\n",
                 repeated("a", size, ", ")
             ),
             "f(a)",
@@ -255,7 +255,7 @@ pub fn grown(growth: Growth, size: usize) -> String {
             let values = joined((0..size).map(|index| format!("f{index} = a")), ", ");
             program(
                 &fill!(
-                    "struct S: Type { ${fields} }\n\nlet f(a: Nat) -> Nat =\n    let s = S { ${values} };\n    s.f${last};\n",
+                    "struct S: Type { ${fields} }\n\nlet f(a: Nat) -> Nat =>\n    let s = S { ${values} };\n    s.f${last};\n",
                     fields,
                     values,
                     last,
@@ -266,7 +266,7 @@ pub fn grown(growth: Growth, size: usize) -> String {
         Growth::StructReaders => {
             let fields = joined((0..size).map(|index| format!("f{index}: Nat")), ", ");
             let readers = (0..size)
-                .map(|index| format!("let g{index}(s: S) -> Nat = s.f{last};\n"))
+                .map(|index| format!("let g{index}(s: S) -> Nat => s.f{last};\n"))
                 .collect::<String>();
             program(
                 &fill!(
@@ -286,7 +286,7 @@ pub fn grown(growth: Growth, size: usize) -> String {
                 .collect::<String>();
             program(
                 &format!(
-                    "induct K: Type\n{constructors}end\n\nlet f(k: K) -> Nat =\n    match k\n{arms}    end;\n"
+                    "induct K: Type\n{constructors}end\n\nlet f(k: K) -> Nat =>\n    match k\n{arms}    end;\n"
                 ),
                 &format!("f(K/k{last}()) + a"),
             )
@@ -310,7 +310,7 @@ pub fn grown(growth: Growth, size: usize) -> String {
             let matches = (0..size)
                 .map(|index| {
                     format!(
-                        "let g{index}(k: K) -> Nat = match k | k{last}() => {index} | _ => 0 end;\n"
+                        "let g{index}(k: K) -> Nat => match k | k{last}() => {index} | _ => 0 end;\n"
                     )
                 })
                 .collect::<String>();
@@ -337,7 +337,7 @@ pub fn grown(growth: Growth, size: usize) -> String {
         }
         Growth::AliasReaders => {
             let readers = (0..size)
-                .map(|index| format!("let f{index}(x: T) -> Nat = x.0;\n"))
+                .map(|index| format!("let f{index}(x: T) -> Nat => x.0;\n"))
                 .collect::<String>();
             program(
                 &format!(
@@ -349,7 +349,7 @@ pub fn grown(growth: Growth, size: usize) -> String {
         }
         Growth::ArrowAliasReaders => {
             let readers = (0..size)
-                .map(|index| format!("let g{index}(_f: F) -> Nat = {index};\n"))
+                .map(|index| format!("let g{index}(_f: F) -> Nat => {index};\n"))
                 .collect::<String>();
             program(
                 &format!(
@@ -364,7 +364,7 @@ pub fn grown(growth: Growth, size: usize) -> String {
                 .map(|index| format!("    m{index}(A) -> A,\n"))
                 .collect::<String>();
             let fields = (0..size)
-                .map(|index| format!("    m{index}(x) = x,\n"))
+                .map(|index| format!("    m{index}(x) => x,\n"))
                 .collect::<String>();
             program(
                 &fill!(
@@ -376,7 +376,7 @@ pub fn grown(growth: Growth, size: usize) -> String {
             )
         }
         Growth::Calls => program(
-            "let f(n: Nat) -> Nat = n;\n",
+            "let f(n: Nat) -> Nat => n;\n",
             &format!("{}a{}", "f(".repeat(size), ")".repeat(size)),
         ),
         Growth::Parentheses => program("", &format!("{}a{}", "(".repeat(size), ")".repeat(size))),
@@ -389,14 +389,14 @@ pub fn grown(growth: Growth, size: usize) -> String {
             let term = (0..size).fold("a".to_string(), |inner, index| {
                 format!("match a | 0 => {index} | _ => {inner} end")
             });
-            program(&format!("let f(a: Nat) -> Nat = {term};\n"), "f(a)")
+            program(&format!("let f(a: Nat) -> Nat => {term};\n"), "f(a)")
         }
         Growth::Loops => {
             let mut definitions = String::new();
             for index in 0..size {
                 writeln!(
                     definitions,
-                    "let loop{index}(n: Nat, acc: Nat) -> Nat = match n | 0 => acc | p + 1 => loop{index}(p, acc + {}) end;",
+                    "let loop{index}(n: Nat, acc: Nat) -> Nat => match n | 0 => acc | p + 1 => loop{index}(p, acc + {}) end;",
                     index + 1
                 )
                 .expect("a string takes a line");
@@ -406,7 +406,7 @@ pub fn grown(growth: Growth, size: usize) -> String {
         }
         Growth::ChainedMatches => {
             let mut body =
-                "let f(a: Nat) -> Nat =\n    let o0: /std/Option(Nat) = /std/Option/some(a);\n"
+                "let f(a: Nat) -> Nat =>\n    let o0: /std/Option(Nat) = /std/Option/some(a);\n"
                     .to_string();
             for index in 1..size {
                 writeln!(
@@ -433,7 +433,7 @@ pub fn grown(growth: Growth, size: usize) -> String {
             let type_ = (0..size).fold("Nat".to_string(), |inner, _| format!("/std/List({inner})"));
             program(
                 &format!(
-                    "let f(a: Nat) -> {type_} = {}a{};\n",
+                    "let f(a: Nat) -> {type_} => {}a{};\n",
                     "[".repeat(size),
                     "]".repeat(size)
                 ),
@@ -448,7 +448,7 @@ pub fn grown(growth: Growth, size: usize) -> String {
                 };
                 format!("(() => let x{index} = {value}; {tail})()")
             });
-            program(&format!("let f(a: Nat) -> Nat = {term};\n"), "f(a)")
+            program(&format!("let f(a: Nat) -> Nat => {term};\n"), "f(a)")
         }
         Growth::Arrow => program(
             &format!("let T: Type = {}Nat;\n", "(Nat) -> ".repeat(size)),
@@ -464,7 +464,7 @@ pub fn grown(growth: Growth, size: usize) -> String {
 /// A whole program: `definitions`, then an entry printing `result` over `a`, the argument count.
 pub fn program(definitions: &str, result: &str) -> String {
     fill!(
-        "use /std/{Nat, Str};\n\n${definitions}\nlet entry() -> /std/Io({}) =\n    let a = /std/List/length(/std/Proc/args()!);\n    /std/print(Str/concat(Nat/to_str(${result}), \"\\n\"));\n\nentry()\n",
+        "use /std/{Nat, Str};\n\n${definitions}\nlet entry() -> /std/Io({}) =>\n    let a = /std/List/length(/std/Proc/args()!);\n    /std/print(Str/concat(Nat/to_str(${result}), \"\\n\"));\n\nentry()\n",
         definitions,
         result,
     )
@@ -472,7 +472,7 @@ pub fn program(definitions: &str, result: &str) -> String {
 
 /// `f(n)`, a chain of `size` `let`s in its body, each `line` of the one before.
 fn chain(size: usize, line: impl Fn(&str) -> String) -> String {
-    let mut body = "let f(n: Nat) -> Nat =\n    let x0 = n;\n".to_string();
+    let mut body = "let f(n: Nat) -> Nat =>\n    let x0 = n;\n".to_string();
     for index in 1..=size {
         writeln!(
             body,

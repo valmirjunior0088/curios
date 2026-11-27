@@ -7,11 +7,11 @@ fn a_channel_preserves_fifo_across_takes_and_a_finish() {
     assert_eq!(
         run(r#"
         use /std/{Nat, Str, Io, print, Channel};
-        let pushed(p: Channel/Push) -> Io({}) =
+        let pushed(p: Channel/Push) -> Io({}) =>
             print(match p | taken() => "taken " | full() => "full " | closed() => "closed " end);
-        let taken(t: Channel/Take(Nat)) -> Io({}) =
+        let taken(t: Channel/Take(Nat)) -> Io({}) =>
             print(match t | item(n) => Str/concat(Nat/to_str(n), " ") | empty() => "empty " | ended() => "ended " end);
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let c = Channel/new(@Nat, 2)!;
             let _ = taken(Channel/try_take(c)!)!;
             let _ = pushed(Channel/try_push(c, 10)!)!;
@@ -36,7 +36,7 @@ fn evidence_payloads_still_occupy_storage() {
     assert_eq!(
         run(r#"
         use /std/{Nat, Eq, Option, Box, Io, print, Channel};
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let proof = Box/new(@Option(Eq()(1, 1)), Option/some(Eq/refl()))!;
             let _ = print(match Box/get(proof)! | some(_) => "proof " | none() => "missing " end)!;
             let p = Channel/new(@Option(Eq()(1, 1)), 1)!;
@@ -70,7 +70,7 @@ fn type_payloads_still_occupy_storage() {
 
 #[test]
 fn a_zero_capacity_is_refused_at_the_public_constructor() {
-    let error = typecheck("let main() -> /std/Io({}) = let c = /std/Channel/new(@/std/Nat, 0)!; /std/Io/pure(()); main()")
+    let error = typecheck("let main() -> /std/Io({}) => let c = /std/Channel/new(@/std/Nat, 0)!; /std/Io/pure(()); main()")
         .expect_err("zero has no positive-capacity evidence");
     assert!(error.contains("Holds") || error.contains("Lt"), "{error}");
 }

@@ -105,7 +105,7 @@ fn a_map_a_loop_reads_before_an_insert_rebuilds_its_node_at_every_level() {
     ] {
         let walk = fill!(
             r#"
-            let walk(n: Nat, x: Nat, m: Map(Nat, Nat)) -> Map(Nat, Nat) =
+            let walk(n: Nat, x: Nat, m: Map(Nat, Nat)) -> Map(Nat, Nat) =>
                 match n
                 | 0 => m
                 | k + 1 =>
@@ -132,24 +132,24 @@ fn a_map_a_loop_reads_before_an_insert_rebuilds_its_node_at_every_level() {
 #[test]
 fn a_map_a_reader_holds_beside_its_insert_answers_as_if_copied() {
     let definitions = r#"
-        let fill(n: Nat, m: Map(Nat, Nat)) -> Map(Nat, Nat) =
+        let fill(n: Nat, m: Map(Nat, Nat)) -> Map(Nat, Nat) =>
             match n | 0 => m | k + 1 => fill(k, Map/insert(m, n, n + 6)) end;
-        let looped(a: Map(Nat, Nat), b: Map(Nat, Nat), k: Nat) -> Nat =
+        let looped(a: Map(Nat, Nat), b: Map(Nat, Nat), k: Nat) -> Nat =>
             match k
             | 0 =>
                 let b2 = Map/insert(b, 1, 99);
                 Option/unwrap_or(Map/try_get(a, 1), 0) * 1000 + Map/length(b2)
             | j + 1 => looped(a, b, j)
             end;
-        let called(a: Map(Nat, Nat), b: Map(Nat, Nat), k: Nat) -> Nat =
+        let called(a: Map(Nat, Nat), b: Map(Nat, Nat), k: Nat) -> Nat =>
             match k
             | 0 =>
                 let b2 = Map/insert(b, 1, 99);
                 Option/unwrap_or(Map/try_get(a, 1), 0) * 1000 + Map/length(b2)
             | j + 1 => match called(a, b, j) | 0 => 1 | i + 1 => i + 1 end
             end;
-        let outer(x: Map(Nat, Nat), n: Nat) -> Nat =
-            let probe(t: Map(Nat, Nat), k: Nat) -> Nat =
+        let outer(x: Map(Nat, Nat), n: Nat) -> Nat =>
+            let probe(t: Map(Nat, Nat), k: Nat) -> Nat =>
                 match k
                 | 0 =>
                     let x2 = Map/insert(x, 1, 99);
@@ -193,7 +193,7 @@ fn an_insert_into_a_map_read_again_leaves_the_maps_held_once_their_rebuilds() {
         &[
             TWO_WALKS,
             r#"
-            let held(n: Nat) -> Nat =
+            let held(n: Nat) -> Nat =>
                 let m = walk(3, 0, n % 65537, Map/empty());
                 Map/length(Map/insert(m, 70000, 1)) + Map/length(m);
             "#,
@@ -251,7 +251,7 @@ fn a_map_something_else_still_holds_answers_as_if_copied() {
     let walks = [
         // Read after its insert.
         r#"
-        let walk(n: Nat, m: Map(Nat, Nat), acc: Nat) -> Nat =
+        let walk(n: Nat, m: Map(Nat, Nat), acc: Nat) -> Nat =>
             match n
             | 0 => acc + Map/length(m)
             | k + 1 => let m2 = Map/insert(m, k % 97, k); walk(k, m2, acc + Map/length(m))
@@ -259,7 +259,7 @@ fn a_map_something_else_still_holds_answers_as_if_copied() {
         "#,
         // Two maps sharing a subtree, the older read again.
         r#"
-        let walk(n: Nat, m: Map(Nat, Nat), acc: Nat) -> Nat =
+        let walk(n: Nat, m: Map(Nat, Nat), acc: Nat) -> Nat =>
             match n
             | 0 => acc + Map/length(m)
             | k + 1 =>
@@ -270,7 +270,7 @@ fn a_map_something_else_still_holds_answers_as_if_copied() {
         "#,
         // Held by a list.
         r#"
-        let walk(n: Nat, ms: List(Map(Nat, Nat)), acc: Nat) -> Nat =
+        let walk(n: Nat, ms: List(Map(Nat, Nat)), acc: Nat) -> Nat =>
             match List/try_get(ms, 0)
             | none() => acc
             | some(m) =>
@@ -282,7 +282,7 @@ fn a_map_something_else_still_holds_answers_as_if_copied() {
         "#,
         // Captured by a closure called after the insert.
         r#"
-        let walk(n: Nat, m: Map(Nat, Nat), acc: Nat) -> Nat =
+        let walk(n: Nat, m: Map(Nat, Nat), acc: Nat) -> Nat =>
             match n
             | 0 => acc + Map/length(m)
             | k + 1 =>
@@ -294,7 +294,7 @@ fn a_map_something_else_still_holds_answers_as_if_copied() {
         // Constant data inserted into afresh on every round.
         r#"
         let base = Map/insert(Map/insert(Map/empty(), 1, 1), 2, 2);
-        let walk(n: Nat, m: Map(Nat, Nat), acc: Nat) -> Nat =
+        let walk(n: Nat, m: Map(Nat, Nat), acc: Nat) -> Nat =>
             match n
             | 0 => acc + Map/length(m)
             | k + 1 => walk(k, m, acc + Map/length(Map/insert(base, k % 97, k)))
@@ -320,7 +320,7 @@ fn a_map_something_else_still_holds_answers_as_if_copied() {
 fn a_map_a_box_holds_answers_as_if_copied() {
     let source = r#"
         use /std/{Str, Nat, Map, List, Option, Result, Try, Io, Proc, Fmt, Box};
-        let execute() -> Try(Io, Str, {}) =
+        let execute() -> Try(Io, Str, {}) =>
             let arguments = Proc/args()!;
             let bytes = Option/to_result(List/try_get(arguments, 1), "no input")!;
             let s = Result/map_failure(Str/of_bytes(bytes), (_) => "invalid utf-8")!;
@@ -347,7 +347,7 @@ fn a_map_two_keys_of_a_map_hold_is_inserted_into_by_a_copy() {
         &[
             TWO_WALKS,
             r#"
-            let nest(n: Nat) -> Nat =
+            let nest(n: Nat) -> Nat =>
                 let inner = walk(n, 0, (n + 1) % 65537, Map/empty());
                 let outer: Map(Nat, Map(Nat, Nat)) =
                     Map/insert(Map/insert(Map/empty(), 1, inner), 2, inner);
@@ -378,7 +378,7 @@ fn a_constant_tree_a_map_holds_is_inserted_into_by_a_copy() {
         &[
             SEARCH_TREE,
             r#"
-            let visit(n: Nat, m: Map(Nat, Tree), acc: Nat) -> Nat =
+            let visit(n: Nat, m: Map(Nat, Tree), acc: Nat) -> Nat =>
                 match n
                 | 0 => acc
                 | k + 1 =>
@@ -408,7 +408,7 @@ fn an_insert_returning_the_node_it_was_handed_rebuilds_where_it_descends() {
         | leaf()
         | node(left: Tree, key: Nat, right: Tree)
         end
-        let insert(t: Tree, k: Nat) -> Tree =
+        let insert(t: Tree, k: Nat) -> Tree =>
             match t
             | leaf() => Tree/node(Tree/leaf(), k, Tree/leaf())
             | node(l, x, r) =>
@@ -418,8 +418,8 @@ fn an_insert_returning_the_node_it_was_handed_rebuilds_where_it_descends() {
                 | _ => t
                 end
             end;
-        let size(t: Tree) -> Nat = match t | leaf() => 0 | node(l, _, r) => size(l) + 1 + size(r) end;
-        let walk(n: Nat, x: Nat, t: Tree) -> Tree =
+        let size(t: Tree) -> Nat => match t | leaf() => 0 | node(l, _, r) => size(l) + 1 + size(r) end;
+        let walk(n: Nat, x: Nat, t: Tree) -> Tree =>
             match n | 0 => t | k + 1 => let y = 75 * x % 65537; walk(k, y, insert(t, y)) end;
     "#;
     let (lowered, module) = modules(&program(

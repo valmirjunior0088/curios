@@ -16,10 +16,10 @@ fn a_field_of_a_payload_tuple_is_below_its_value() {
         | pair({Expr, Expr})
         end
 
-        let size(e: Expr) -> Nat =
+        let size(e: Expr) -> Nat =>
             match e | lit(n) => n | pair(p) => size(p.0) + size(p.1) end;
 
-        let Small(e: Expr) -> /std/Bool/True =
+        let Small(e: Expr) -> /std/Bool/True =>
             match size(e) == 0 | true => /std/Bool/True/qed() | false => /std/Bool/True/qed() end;
 
         /std/print("ok")
@@ -52,12 +52,12 @@ fn a_field_of_a_parameters_structure_is_below_the_parameter() {
         | both(Two(Expr))
         end
 
-        let eval(e: Expr) -> Nat =
+        let eval(e: Expr) -> Nat =>
             match e | lit(n) => n | both(q) => eval_two(q) end
-        and eval_two(p: Two(Expr)) -> Nat =
+        and eval_two(p: Two(Expr)) -> Nat =>
             eval(p.first) + eval(p.second);
 
-        let Small(e: Expr) -> /std/Bool/True =
+        let Small(e: Expr) -> /std/Bool/True =>
             match eval(e) == 0 | true => /std/Bool/True/qed() | false => /std/Bool/True/qed() end;
 
         /std/print("ok")
@@ -85,10 +85,10 @@ fn a_field_of_a_proof_record_is_below_the_record() {
         | twice(m: Nat, h: {Even(m), Bool/Holds(true)}): (m + 2)
         end
 
-        let ok(@n: Nat, e: Even(n)) -> Bool/Holds(true) =
+        let ok(@n: Nat, e: Even(n)) -> Bool/Holds(true) =>
             match e | zero() => Bool/True/qed() | twice(m, h) => ok(@m, h.0) end;
 
-        let Fine(@n: Nat, e: Even(n)) -> Prop = Eq()(ok(@n, e), ok(@n, e));
+        let Fine(@n: Nat, e: Even(n)) -> Prop => Eq()(ok(@n, e), ok(@n, e));
 
         /std/print("ok")
         "#,
@@ -115,12 +115,12 @@ fn a_field_of_a_record_built_around_the_argument_is_no_descent() {
         | pair({Expr, Expr})
         end
 
-        let eval(e: Expr) -> Nat =
+        let eval(e: Expr) -> Nat =>
             match e | lit(n) => n | pair(p) => eval_both(p) end
-        and eval_both(b: {Expr, Expr}) -> Nat =
+        and eval_both(b: {Expr, Expr}) -> Nat =>
             eval(b.0) + eval(b.1);
 
-        let Small(e: Expr) -> /std/Bool/True =
+        let Small(e: Expr) -> /std/Bool/True =>
             match eval(e) == 0 | true => /std/Bool/True/qed() | false => /std/Bool/True/qed() end;
 
         /std/print("ok")
@@ -148,12 +148,12 @@ fn a_field_of_a_binder_a_summary_bounds_is_below_what_the_binder_is_below() {
         | pair({Expr, Expr})
         end
 
-        let apply(x: {Expr, Expr}, g: ({Expr, Expr}) -> Nat) -> Nat = g(x);
+        let apply(x: {Expr, Expr}, g: ({Expr, Expr}) -> Nat) -> Nat => g(x);
 
-        let size(e: Expr) -> Nat =
+        let size(e: Expr) -> Nat =>
             match e | lit(n) => n | pair(p) => apply(p, (b) => size(b.0) + size(b.1)) end;
 
-        let Small(e: Expr) -> /std/Bool/True =
+        let Small(e: Expr) -> /std/Bool/True =>
             match size(e) == 0 | true => /std/Bool/True/qed() | false => /std/Bool/True/qed() end;
 
         /std/print("ok")
@@ -186,10 +186,10 @@ fn a_chain_of_projections_of_record_literals_is_the_field_it_reaches() {
             both: {Expr, Expr},
         }
 
-        let leaves(e: Expr) -> Nat =
+        let leaves(e: Expr) -> Nat =>
             match e | lit(n) => n | pair(p) => leaves(Two { first = p.0, both = p }.both.1) + leaves(p.0) end;
 
-        let Small(e: Expr) -> /std/Bool/True =
+        let Small(e: Expr) -> /std/Bool/True =>
             match leaves(e) == 0 | true => /std/Bool/True/qed() | false => /std/Bool/True/qed() end;
 
         /std/print("ok")
@@ -217,10 +217,10 @@ fn a_field_of_the_proposition_matched_is_below_the_proof_it_was_taken_from() {
         | step(h: {Tower, Bool/Holds(true)})
         end
 
-        let climb(t: Tower) -> Bool/Holds(true) =
+        let climb(t: Tower) -> Bool/Holds(true) =>
             match t | base() => Bool/True/qed() | step(h) => climb(h.0) end;
 
-        let Fine(t: Tower) -> Prop = Eq()(climb(t), climb(t));
+        let Fine(t: Tower) -> Prop => Eq()(climb(t), climb(t));
 
         /std/print("ok")
         "#,
@@ -247,9 +247,9 @@ fn a_case_on_a_field_takes_apart_what_is_below_the_record() {
 
         struct S: Type { next: Option(S) }
 
-        let F(x: S) -> Type = match x.next | none() => {} | some(y) => F(y) end;
+        let F(x: S) -> Type => match x.next | none() => {} | some(y) => F(y) end;
 
-        let g(x: S, y: F(x)) -> F(x) = y;
+        let g(x: S, y: F(x)) -> F(x) => y;
 
         /std/print("ok")
         "#,
@@ -303,7 +303,7 @@ fn the_librarys_json_encoder_is_reached_by_a_type() {
         r#"
         use /std/{Json, Str, Bool};
 
-        let Short(j: Json) -> /std/Bool/True =
+        let Short(j: Json) -> /std/Bool/True =>
             match Str/length(Json/encode(j)) == 0 | true => /std/Bool/True/qed() | false => /std/Bool/True/qed() end;
 
         /std/print("ok")

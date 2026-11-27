@@ -23,8 +23,8 @@ fn a_bound_given_up_in_a_dead_arm_says_the_arm_is_never_taken() {
         use /std/Bool/{Holds};
 
         let flag: Bool = false;
-        let needs(n: Nat, @_: Holds(flag)) -> Nat = n;
-        let dead(n: Nat) -> Nat = match flag | true => needs(n) | false => 0 end;
+        let needs(n: Nat, @_: Holds(flag)) -> Nat => n;
+        let dead(n: Nat) -> Nat => match flag | true => needs(n) | false => 0 end;
 
         print(Nat/to_str(dead(1)))
         "#,
@@ -49,12 +49,12 @@ fn a_dispatch_that_resolves_to_a_closed_comparison_records_nothing() {
         end
 
         satisfy Eql(U) {
-            eql(a, b) = Nat/lt(3, 2),
-            eq(a, _, _) = match a end,
-            refl(a) = match a end,
+            eql(a, b) => Nat/lt(3, 2),
+            eq(a, _, _) => match a end,
+            refl(a) => match a end,
         }
 
-        let dead(x: U, y: U) -> Nat =
+        let dead(x: U, y: U) -> Nat =>
             match x == y
             | true =>
                 let _p: Holds(Nat/lt(3, 2)) = True/qed();
@@ -76,7 +76,7 @@ fn a_guard_over_a_top_level_name_records_nothing() {
 
         let flag: Bool = false;
 
-        let dead(n: Nat) -> Nat =
+        let dead(n: Nat) -> Nat =>
             match flag
             | true =>
                 let _p: Holds(flag) = True/qed();
@@ -98,7 +98,7 @@ fn a_guard_over_a_global_projection_records_nothing() {
 
         let pair: {Bool, Nat} = (false, 0);
 
-        let dead(n: Nat) -> Nat =
+        let dead(n: Nat) -> Nat =>
             match pair.0
             | true =>
                 let _p: Holds(pair.0) = True/qed();
@@ -119,7 +119,7 @@ fn a_guard_over_a_local_definition_of_a_closed_term_records_nothing() {
         use /std/{Nat, print};
         use /std/Bool/{True, Holds};
 
-        let dead(n: Nat) -> Nat =
+        let dead(n: Nat) -> Nat =>
             let c = Nat/lt(3, 2);
             match c
             | true =>
@@ -140,7 +140,7 @@ fn a_guard_over_a_parameter_records_its_equation() {
         use /std/{Bool, Nat, print};
         use /std/Bool/{True, Holds};
 
-        let live(b: Bool, n: Nat) -> Nat =
+        let live(b: Bool, n: Nat) -> Nat =>
             match b
             | true =>
                 let _p: Holds(b) = True/qed();
@@ -173,7 +173,7 @@ fn a_guard_an_inner_case_contradicts_answers_nothing_in_that_arm() {
         use /std/{Nat, print};
         use /std/Bool/{True, Holds};
 
-        let dead(n: Nat) -> Nat =
+        let dead(n: Nat) -> Nat =>
             match n < 3
             | true =>
                 match n
@@ -197,7 +197,7 @@ fn a_guard_an_inner_boolean_case_contradicts_answers_nothing_in_that_arm() {
         use /std/{Bool, Nat, print};
         use /std/Bool/{True, Holds};
 
-        let dead(flag: Bool) -> Nat =
+        let dead(flag: Bool) -> Nat =>
             match Bool/not(flag)
             | true =>
                 match flag
@@ -222,9 +222,9 @@ fn a_guard_over_a_call_an_inner_case_contradicts_answers_nothing_in_that_arm() {
         use /std/{Nat, print};
         use /std/Bool/{True, Holds};
 
-        let bound(n: Nat) -> Nat = match n | 0 => 7 | _ => 0 end;
+        let bound(n: Nat) -> Nat => match n | 0 => 7 | _ => 0 end;
 
-        let dead(n: Nat) -> Nat =
+        let dead(n: Nat) -> Nat =>
             match bound(n) < 5
             | true =>
                 match n
@@ -249,7 +249,7 @@ fn a_guard_under_the_case_that_contradicts_it_records_nothing() {
         use /std/{Nat, print};
         use /std/Bool/{True, Holds};
 
-        let dead(n: Nat) -> Nat =
+        let dead(n: Nat) -> Nat =>
             match n
             | 5 =>
                 match n < 3
@@ -274,7 +274,7 @@ fn a_second_match_on_a_variable_an_arm_fixed_refines_nothing() {
         use /std/{Nat, print};
         use /std/Bool/{True, Holds};
 
-        let dead(n: Nat) -> Nat =
+        let dead(n: Nat) -> Nat =>
             match n
             | 5 =>
                 match n
@@ -305,7 +305,7 @@ fn a_contradiction_claimed_in_a_dead_arm_is_refused_as_one_that_does_not_follow(
         use /std/{Nat, print, proved};
         use /std/Bool/{False};
 
-        let dead(n: Nat) -> Nat =
+        let dead(n: Nat) -> Nat =>
             match n < 3
             | true =>
                 match n
@@ -331,9 +331,9 @@ fn a_guard_an_inner_case_agrees_with_holds_there_by_reduction() {
         use /std/{Nat, print};
         use /std/Bool/{True, Holds};
 
-        let bound(n: Nat) -> Nat = match n | 0 => 1 | _ => 9 end;
+        let bound(n: Nat) -> Nat => match n | 0 => 1 | _ => 9 end;
 
-        let live(n: Nat) -> Nat =
+        let live(n: Nat) -> Nat =>
             match bound(n) < 5
             | true =>
                 match n

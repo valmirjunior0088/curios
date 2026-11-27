@@ -1,6 +1,6 @@
 use /std/{Nat, Bool, Char, Str, Option, Parse};
 
-let hex_digit() -> Parse(Str, Nat) =
+let hex_digit() -> Parse(Str, Nat) =>
     let next = Parse/str/peek()!;
     match next
     | none() => Parse/fail("unterminated escape")
@@ -13,7 +13,7 @@ let hex_digit() -> Parse(Str, Nat) =
         end
     end;
 
-let hex_digits(count: Nat, acc: Nat) -> Parse(Str, Nat) =
+let hex_digits(count: Nat, acc: Nat) -> Parse(Str, Nat) =>
     match count
     | 0 => Parse/pure(acc)
     | pred + 1 =>
@@ -22,14 +22,14 @@ let hex_digits(count: Nat, acc: Nat) -> Parse(Str, Nat) =
     end;
 
 --- The character `code` is, as the text it is, declining a value that is no Unicode scalar.
-let scalar(code: Nat) -> Parse(Str, Str) =
+let scalar(code: Nat) -> Parse(Str, Str) =>
     match Char/of_nat(code)
     | some(c) => Parse/pure(Str/of_char(c))
     | none() => Parse/fail("invalid Unicode scalar in escape")
     end;
 
 --- What follows a backslash: the character the escape names.
-let escape() -> Parse(Str, Str) =
+let escape() -> Parse(Str, Str) =>
     let next = Parse/str/peek()!;
     match next
     | none() => Parse/fail("unterminated escape")
@@ -53,16 +53,16 @@ let escape() -> Parse(Str, Str) =
         end
     end;
 
-let crlf() -> Parse(Str, Option({Char, Char})) =
+let crlf() -> Parse(Str, Option({Char, Char})) =>
     Parse/optional(Parse/and(Parse/str/expect('\r'), Parse/str/expect('\n')));
 
 --- Whether `c` stands in a string as written whatever delimits it: a tab, or any character that is no control character.
-let is_text(c: Char) -> Bool =
+let is_text(c: Char) -> Bool =>
     let n = Char/to_nat(c);
     n == '\t' || n >= ' ' && n != '\u{7F}';
 
 --- A basic string's body from where it stands: the runs of the input between its escapes and the character each escape names, joined after `acc`, up to the closing quote.
-let basic_body(acc: Str) -> Parse(Str, Str) =
+let basic_body(acc: Str) -> Parse(Str, Str) =>
     let run = Parse/str/take_while((c) => is_text(c) && c != '"' && c != '\\')!;
     let here = Str/concat(acc, run);
     let next = Parse/str/peek()!;
@@ -81,12 +81,12 @@ let basic_body(acc: Str) -> Parse(Str, Str) =
         end
     end;
 
-let basic_str_scan() -> Parse(Str, Str) =
+let basic_str_scan() -> Parse(Str, Str) =>
     let _ = Parse/label(Parse/str/expect('"'), "expected string")!;
     basic_body("");
 
 --- A literal string's body: the piece of the input up to the closing quote, taken as written.
-let literal_body() -> Parse(Str, Str) =
+let literal_body() -> Parse(Str, Str) =>
     let run = Parse/str/take_while((c) => is_text(c) && c != '\'')!;
     let next = Parse/str/peek()!;
     match next
@@ -100,11 +100,11 @@ let literal_body() -> Parse(Str, Str) =
         end
     end;
 
-let literal_str_scan() -> Parse(Str, Str) =
+let literal_str_scan() -> Parse(Str, Str) =>
     let _ = Parse/label(Parse/str/expect('\''), "expected string")!;
     literal_body();
 
-let trim_run(seen_nl: Bool) -> Parse(Str, {}) =
+let trim_run(seen_nl: Bool) -> Parse(Str, {}) =>
     let stop: Parse(Str, {}) =
         match seen_nl
         | true => Parse/pure(())
@@ -131,7 +131,7 @@ let trim_run(seen_nl: Bool) -> Parse(Str, {}) =
         end
     end;
 
-let skip_opening_newline() -> Parse(Str, {}) =
+let skip_opening_newline() -> Parse(Str, {}) =>
     let lf = Parse/optional(Parse/str/expect('\n'))!;
     match lf
     | some(_) => Parse/pure(())
@@ -141,7 +141,7 @@ let skip_opening_newline() -> Parse(Str, {}) =
     end;
 
 --- A run of `quote` inside a multi-line string, read whole: fewer than three are text and the body goes on, three to five close the string with what is past the third kept as text, and six or more are refused. The text so far, and whether the string is closed.
-let quote_run(quote: Char, acc: Str) -> Parse(Str, {Str, Bool}) =
+let quote_run(quote: Char, acc: Str) -> Parse(Str, {Str, Bool}) =>
     let run = Parse/str/take_while((c) => c == quote)!;
     let q = Str/length(run);
     let mark = Str/of_char(quote);
@@ -151,7 +151,7 @@ let quote_run(quote: Char, acc: Str) -> Parse(Str, {Str, Bool}) =
     | _ => Parse/pure((Str/concat(acc, run), false))
     end;
 
-let ml_basic_body(acc: Str) -> Parse(Str, Str) =
+let ml_basic_body(acc: Str) -> Parse(Str, Str) =>
     let run = Parse/str/take_while((c) => is_text(c) && c != '"' && c != '\\')!;
     let here = Str/concat(acc, run);
     let next = Parse/str/peek()!;
@@ -189,7 +189,7 @@ let ml_basic_body(acc: Str) -> Parse(Str, Str) =
         end
     end;
 
-let ml_literal_body(acc: Str) -> Parse(Str, Str) =
+let ml_literal_body(acc: Str) -> Parse(Str, Str) =>
     let run = Parse/str/take_while((c) => is_text(c) && c != '\'')!;
     let here = Str/concat(acc, run);
     let next = Parse/str/peek()!;
@@ -217,21 +217,21 @@ let ml_literal_body(acc: Str) -> Parse(Str, Str) =
     end;
 
 --- A basic string, delimited by `"`, with its escapes resolved.
-pub let str_basic() -> Parse(Str, Str) =
+pub let str_basic() -> Parse(Str, Str) =>
     basic_str_scan();
 
 --- A literal string, delimited by `'`, taken as written.
-pub let str_literal() -> Parse(Str, Str) =
+pub let str_literal() -> Parse(Str, Str) =>
     literal_str_scan();
 
 --- A multi-line basic string, delimited by `"""`, with its escapes resolved and the opening line break dropped.
-pub let str_ml_basic() -> Parse(Str, Str) =
+pub let str_ml_basic() -> Parse(Str, Str) =>
     let () = Parse/str/literal("\"\"\"")!;
     let () = skip_opening_newline()!;
     ml_basic_body("");
 
 --- A multi-line literal string, delimited by `'''`, taken as written with the opening line break dropped.
-pub let str_ml_literal() -> Parse(Str, Str) =
+pub let str_ml_literal() -> Parse(Str, Str) =>
     let () = Parse/str/literal("'''")!;
     let () = skip_opening_newline()!;
     ml_literal_body("");

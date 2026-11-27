@@ -15,27 +15,27 @@ const IMPORTS: &str =
 
 /// Three recursive definitions over a list of any element type. Every written call of one takes a universe level of its own, so one call written twice is two spellings apart in an instance, which no unfolding settles. A predicate, a wrapper of it and an alias of `Nat` give the respellings of an argument no implicit takes part in; a family indexed by a truth value is the index a respelling is put at, and a pair of naturals the projection one is spelled through; a proof stuck on a binder, a struct and a family each bounding a field, and a division's bound give the proofs one is spelled through; a structure over a natural, and a structure, a family and an indexed family over a proof, give the types one is spelled in; a match on a call's result, that call behind a definition and a match in another's arm give the guards that meet a second match's scrutinee only where one of the two is unfolded; and a guard whose spelling is a case of another's gives two equations an arm's solution restates together.
 const DEFINITIONS: &str =
-    "let count(@T: Type, l: List(T)) -> Nat = match l | [] => 0 | [_, ..t] => count(t) + 1 end;
-let whole(@T: Type, l: List(T)) -> Bool = match l | [] => true | [_, ..t] => whole(t) end;
-let all(@T: Type, l: List(T), p: (T) -> Bool) -> Bool = match l | [] => true | [h, ..t] => match p(h) | true => all(t, p) | false => false end end;
-let small(n: Nat) -> Bool = n < 10;
-let tiny(n: Nat) -> Bool = small(n);
+    "let count(@T: Type, l: List(T)) -> Nat => match l | [] => 0 | [_, ..t] => count(t) + 1 end;
+let whole(@T: Type, l: List(T)) -> Bool => match l | [] => true | [_, ..t] => whole(t) end;
+let all(@T: Type, l: List(T), p: (T) -> Bool) -> Bool => match l | [] => true | [h, ..t] => match p(h) | true => all(t, p) | false => false end end;
+let small(n: Nat) -> Bool => n < 10;
+let tiny(n: Nat) -> Bool => small(n);
 let Naturals: Type = Nat;
 induct Tag: (Bool) -> Type | yes(): (true) end
 struct Pair: Type { left: Nat, right: Nat }
-let lemma(a: Nat, c: Nat, p: Holds(a < 10)) -> Holds(a < 10) = match c | 0 => p | _ => p end;
-let nonzero(b: Nat, c: Nat, p: Nat/NonZero(b)) -> Nat/NonZero(b) = match c | 0 => p | _ => p end;
+let lemma(a: Nat, c: Nat, p: Holds(a < 10)) -> Holds(a < 10) => match c | 0 => p | _ => p end;
+let nonzero(b: Nat, c: Nat, p: Nat/NonZero(b)) -> Nat/NonZero(b) => match c | 0 => p | _ => p end;
 struct Bounded: Type { n: Nat, at: Holds(n < 10) }
 induct Checked: Type | checked(n: Nat, at: Holds(n < 10)) end
 struct Box(n: Nat): Type { at: Nat }
 struct Within(n: Nat, at: Holds(n < 10)): Type { k: Nat }
 induct Pinned(n: Nat, at: Holds(n < 10)): Type | pinned() end
 induct Proven: (n: Nat, at: Holds(n < 10)) -> Type end
-let pick(e: (Nat) -> Bool, k: (Nat) -> Bool, c: Nat) -> Bool = match e(c) | true => k(0) | false => k(1) end;
-let test(e: (Nat) -> Bool, c: Nat) -> Bool = e(c);
-let chain(e: (Nat) -> Bool, r: (Nat) -> Bool, k: (Nat) -> Bool, c: Nat) -> Bool = match e(c) | true => match r(c) | true => k(0) | false => k(1) end | false => k(2) end;
-let first(e: (Nat) -> Bool, x: Nat, c: Nat) -> Bool = e(x + c);
-let second(e: (Nat) -> Bool, r: (Nat) -> Bool, x: Nat, c: Nat) -> Bool = match first(e, x, c) | true => r(c) | false => false end;";
+let pick(e: (Nat) -> Bool, k: (Nat) -> Bool, c: Nat) -> Bool => match e(c) | true => k(0) | false => k(1) end;
+let test(e: (Nat) -> Bool, c: Nat) -> Bool => e(c);
+let chain(e: (Nat) -> Bool, r: (Nat) -> Bool, k: (Nat) -> Bool, c: Nat) -> Bool => match e(c) | true => match r(c) | true => k(0) | false => k(1) end | false => k(2) end;
+let first(e: (Nat) -> Bool, x: Nat, c: Nat) -> Bool => e(x + c);
+let second(e: (Nat) -> Bool, r: (Nat) -> Bool, x: Nat, c: Nat) -> Bool => match first(e, x, c) | true => r(c) | false => false end;";
 
 /// The binders every cell is stated under. Two proofs of one bound and a function proving it, two functions and a higher-order one give the atoms that convert without being identical; functions of a type, of a proposition and of a structure, a type family, and a structure's value give the types and the literals a form is spelled with.
 const BINDERS: &[Binder] = &[
@@ -1008,7 +1008,7 @@ fn program(binders: &str, cells: &[&Cell]) -> String {
         .enumerate()
         .map(|(index, cell)| {
             format!(
-                "let cell{index}({binders}) -> {} = {};",
+                "let cell{index}({binders}) -> {} => {};",
                 cell.result, cell.body
             )
         })
@@ -1089,7 +1089,7 @@ fn a_comparison_guards_dual_is_answered_only_at_a_total_order() {
             r#"
             use /std/{${imports}, Io};
             use /std/Bool/{True, Holds};
-            let cell(${binders}) -> {} =
+            let cell(${binders}) -> {} =>
                 match ${less} | true => () | false => let _: Holds(${dual}) = True/qed(); () end;
             Io/pure(())
             "#,
@@ -1129,8 +1129,8 @@ fn a_guard_reading_an_expression_through_its_binders_types_is_settled_again_unde
         fill!(
             "use /std/{Nat, Bool, Io};
 use /std/Bool/{Holds, True};
-let F(b: Bool) -> Type = match b | true => {} | false => Nat end;
-let cell(c: Nat, d: Nat, e: (Nat) -> Bool, k: (Nat) -> Bool, h: (F(e(c))) -> Nat, p: F(e(c)), q: F(e(c))) -> {} =
+let F(b: Bool) -> Type => match b | true => {} | false => Nat end;
+let cell(c: Nat, d: Nat, e: (Nat) -> Bool, k: (Nat) -> Bool, h: (F(e(c))) -> Nat, p: F(e(c)), q: F(e(c))) -> {} =>
     match (match h(p) == h(q) | true => k(0) | false => k(1) end)
     | true => match ${inner} | true => let _: Holds(k(0)) = True/qed(); () | false => () end
     | false => ()
@@ -1151,9 +1151,9 @@ Io/pure(())",
 /// The definitions the index tests read: a predicate written two ways and a family indexed below a constructor.
 const INDEXED: &str = r#"
 use /std/{Nat, Bool, List, Option, Io};
-let all(@T: Type, l: List(T), p: (T) -> Bool) -> Bool = match l | [] => true | [h, ..t] => match p(h) | true => all(t, p) | false => false end end;
-let small(n: Nat) -> Bool = n < 10;
-let tiny(n: Nat) -> Bool = small(n);
+let all(@T: Type, l: List(T), p: (T) -> Bool) -> Bool => match l | [] => true | [h, ..t] => match p(h) | true => all(t, p) | false => false end end;
+let small(n: Nat) -> Bool => n < 10;
+let tiny(n: Nat) -> Bool => small(n);
 induct Nested: (Option(Bool)) -> Type | yes(): (Option/some(true)) end
 "#;
 
@@ -1161,7 +1161,7 @@ induct Nested: (Option(Bool)) -> Type | yes(): (Option/some(true)) end
 #[test]
 fn an_index_below_a_constructor_is_read_as_the_guards_case() {
     let program = fill!(
-        "${definitions}let cell(xs: List(Nat), x: Nested(Option/some(all(xs, tiny)))) -> {} =
+        "${definitions}let cell(xs: List(Nat), x: Nested(Option/some(all(xs, tiny)))) -> {} =>
     match all(xs, small) | true => () | false => match x end end;
 Io/pure(())",
         definitions = INDEXED,
@@ -1173,7 +1173,7 @@ Io/pure(())",
 #[test]
 fn an_index_the_guard_does_not_equal_leaves_its_case_possible() {
     let program = fill!(
-        "${definitions}let cell(xs: List(Nat), ys: List(Nat), x: Nested(Option/some(all(ys, small)))) -> {} =
+        "${definitions}let cell(xs: List(Nat), ys: List(Nat), x: Nested(Option/some(all(ys, small)))) -> {} =>
     match all(xs, small) | true => () | false => match x end end;
 Io/pure(())",
         definitions = INDEXED,

@@ -14,7 +14,7 @@ let page: Html =
                 [Html/text("1 < 2 & \"q\""), Html/void("br", []), Html/comment("note")])]);
 
 -- Text and attribute values are escaped, a flag stands alone, a void tree closes itself, and a page starts with the doctype, the charset and the title.
-test a_page_renders_escaped =
+test a_page_renders_escaped =>
     Test/equal(
         Html/encode(page),
         Str/flatten([
@@ -23,11 +23,11 @@ test a_page_renders_escaped =
             "<p class=\"x\" hidden>1 &lt; 2 &amp; &quot;q&quot;<br/><!--note--></p></body></html>"]));
 
 -- What `encode` writes, `decode` reads back as the same tree.
-test a_rendered_page_reads_back =
+test a_rendered_page_reads_back =>
     Test/equal(Html/decode(Html/encode(page)), Result/success(page));
 
 -- A fragment renders without a doctype, and script content is written as it is, since the browser decodes nothing there.
-test a_fragment_renders_bare =
+test a_fragment_renders_bare =>
     Test/equal(
         Html/encode(
             Html/fragment([
@@ -36,7 +36,7 @@ test a_fragment_renders_bare =
         "<script>if (a < b) {}</script>x");
 
 -- With no element name known, `<li>` written without its closing tag nests inside the one before it, and each closing tag closes the nearest open element; attributes read quoted or bare, and references decode.
-test a_tolerant_read_shapes_the_tree =
+test a_tolerant_read_shapes_the_tree =>
     Test/equal(
         Html/decode("<ul><li class=a>one &amp; two<li>three &#x41;<br>x</ul></p>"),
         Result/success(
@@ -57,13 +57,13 @@ test a_tolerant_read_shapes_the_tree =
                                     Html/element("br", [], [Html/text("x")])])])])));
 
 -- Several trees read as a fragment; a reference that names nothing known is kept as written.
-test several_trees_read_as_a_fragment =
+test several_trees_read_as_a_fragment =>
     Test/equal(
         Html/decode("a &zzz; b &#; c<hr/>"),
         Result/success(Html/fragment([Html/text("a &zzz; b &#; c"), Html/void("hr", [])])));
 
 -- No name is consulted and none is rewritten: an element keeps the case it was written in and is void only by its slash, so `<img>` holds what follows it; and a reference is one only with its semicolon.
-test a_read_consults_no_element_name =
+test a_read_consults_no_element_name =>
     Test/equal(
         Html/decode("<P>a &lt b<img src=x>after</P>"),
         Result/success(
@@ -75,7 +75,7 @@ test a_read_consults_no_element_name =
                     Html/element("img", [Attr/attr("src", "x")], [Html/text("after")])])));
 
 -- Queries walk the tree in document order.
-test queries_walk_the_tree =
+test queries_walk_the_tree =>
     let tree =
         Result/unwrap_or(
             Html/decode("<div><a href=\"/x\">first</a><p><a href=\"/y\">second</a></p></div>"),
@@ -97,7 +97,7 @@ test queries_walk_the_tree =
         Test/equal(Html/title_of(tree), Option/none())]);
 
 -- Text is read as the text it is: characters of two, three and four bytes stand in a text run, an attribute value, a comment and a raw-text element as they were written, and what `render` writes of them reads back.
-test multi_byte_text_reads_as_written =
+test multi_byte_text_reads_as_written =>
     let tree =
         Html/fragment([
             Html/element("p", [Attr/attr("title", "é→𝄞")], [Html/text("é → 𝄞")]),

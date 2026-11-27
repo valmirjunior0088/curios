@@ -6,8 +6,8 @@ use crate::test_support::*;
 fn an_undeclared_cycle_is_refused_with_the_way_out() {
     let source = r#"
         use /std/{Nat};
-        let f(n : Nat) -> Nat = g(n);
-        let g(n : Nat) -> Nat = f(n);
+        let f(n : Nat) -> Nat => g(n);
+        let g(n : Nat) -> Nat => f(n);
         /std/print("unreachable")
         "#;
 
@@ -18,7 +18,7 @@ fn an_undeclared_cycle_is_refused_with_the_way_out() {
     );
     // Placed at the first member's name: a cycle is about its declarations as wholes, and holds no position of its own.
     assert!(
-        report.contains("let f(n : Nat) -> Nat = g(n);"),
+        report.contains("let f(n : Nat) -> Nat => g(n);"),
         "expected the snippet at `f`'s declaration:\n{report}"
     );
     assert_eq!(
@@ -64,14 +64,14 @@ fn a_top_level_group_that_is_no_cycle_is_refused_naming_its_parts() {
         (
             r#"
             use /std/{Nat};
-            let alone(n: Nat) -> Nat = n
-            and generic(A: Type, n: Nat) -> Nat = alone(n);
+            let alone(n: Nat) -> Nat => n
+            and generic(A: Type, n: Nat) -> Nat => alone(n);
             /std/print(Nat/to_str(generic(Nat, 1)))
             "#,
             r#"
             use /std/{Nat};
-            let alone(n: Nat) -> Nat = n;
-            let generic(A: Type, n: Nat) -> Nat = alone(n);
+            let alone(n: Nat) -> Nat => n;
+            let generic(A: Type, n: Nat) -> Nat => alone(n);
             /std/print(Nat/to_str(generic(Nat, 1)))
             "#,
             "`alone` alone, and `generic` alone",
@@ -104,10 +104,10 @@ fn a_top_level_group_that_is_no_cycle_is_refused_naming_its_parts() {
             induct A: pub Type | a() end
             induct B: pub Type | b() end
             satisfy Show(A) {
-                show(_) = "1",
+                show(_) => "1",
             }
             and Show(B) {
-                show(_) = Show/show(A/a()),
+                show(_) => Show/show(A/a()),
             }
             /std/print(Show/show(B/b()))
             "#,
@@ -116,10 +116,10 @@ fn a_top_level_group_that_is_no_cycle_is_refused_naming_its_parts() {
             induct A: pub Type | a() end
             induct B: pub Type | b() end
             satisfy Show(A) {
-                show(_) = "1",
+                show(_) => "1",
             }
             satisfy Show(B) {
-                show(_) = Show/show(A/a()),
+                show(_) => Show/show(A/a()),
             }
             /std/print(Show/show(B/b()))
             "#,
@@ -175,7 +175,7 @@ fn a_value_that_reads_itself_is_refused_at_the_erase_boundary() {
 fn a_local_value_that_reads_itself_is_refused_at_the_erase_boundary() {
     let source = r#"
         use /std/{Nat};
-        let f(n : Nat) -> Nat =
+        let f(n : Nat) -> Nat =>
             let m : Nat = m + 1;
             m;
         /std/print("unreachable")
@@ -197,7 +197,7 @@ fn a_local_value_that_reads_itself_is_refused_at_the_erase_boundary() {
 fn a_shadowing_rebinding_is_refused_as_a_self_reference() {
     let source = r#"
         use /std/{Nat};
-        let f(n : Nat) -> Nat =
+        let f(n : Nat) -> Nat =>
             let n = n + 1;
             n;
         /std/print("unreachable")

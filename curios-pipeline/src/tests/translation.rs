@@ -104,7 +104,7 @@ fn a_call_is_written_with_its_name_as_the_reader_reaches_it() {
 fn an_operator_is_written_as_the_operator() {
     let source = r#"
         use /std/{Nat};
-        pub let subject(n: Nat) -> Nat = n * 2 + 1;
+        pub let subject(n: Nat) -> Nat => n * 2 + 1;
     "#;
 
     assert_eq!(
@@ -118,7 +118,7 @@ fn an_operator_that_takes_a_bound_is_written_without_its_proof() {
     let source = r#"
         use /std/{Nat};
         use /std/Bool/{Holds};
-        pub let subject(n: Nat, d: Nat, @positive: Holds(0 < d)) -> Nat = n / d + n % d;
+        pub let subject(n: Nat, d: Nat, @positive: Holds(0 < d)) -> Nat => n / d + n % d;
     "#;
 
     assert_eq!(
@@ -160,7 +160,7 @@ fn a_tuple_and_its_type_are_written_with_their_labels() {
 fn a_tuples_projection_is_written_by_its_place() {
     let source = r#"
         use /std/{Nat, Bool};
-        pub let subject(pair: {count: Nat, done: Bool}) -> Bool = pair.done;
+        pub let subject(pair: {count: Nat, done: Bool}) -> Bool => pair.done;
     "#;
 
     assert_eq!(body(source, "subject"), "(pair) => pair.1");
@@ -173,9 +173,9 @@ fn a_structures_projection_is_written_by_its_label_or_its_plain_place() {
         use /std/{Nat, Str};
         use /std/Bool/{Holds};
         pub struct Wide: pub Type { a: Nat, @small: Holds(a < 10), b: Str, Str }
-        pub let labelled(wide: Wide) -> Str = wide.b;
-        pub let placed(wide: Wide) -> Str = wide.2;
-        pub let hidden(wide: Wide) -> Holds(wide.a < 10) = wide.small;
+        pub let labelled(wide: Wide) -> Str => wide.b;
+        pub let placed(wide: Wide) -> Str => wide.2;
+        pub let hidden(wide: Wide) -> Holds(wide.a < 10) => wide.small;
     "#;
 
     assert_eq!(body(source, "labelled"), "(wide) => wide.b");
@@ -194,7 +194,7 @@ fn a_structures_literal_is_written_with_its_hidden_field_under_its_mark() {
         use /std/{Nat, Str};
         use /std/Bool/{Holds};
         pub struct Wide: pub Type { a: Nat, @small: Holds(a < 10), b: Str }
-        pub let subject(n: Nat, below: (k: Nat) -> Holds(k < 10)) -> Wide =
+        pub let subject(n: Nat, below: (k: Nat) -> Holds(k < 10)) -> Wide =>
             Wide { n, @small = below(n), "x" };
     "#;
 
@@ -213,8 +213,8 @@ fn a_hidden_proof_elaboration_fills_again_is_left_out() {
         pub induct Positive: pub Type
         | at(n: Nat, @Holds(0 < n))
         end
-        pub let below(a: Nat, b: Nat, @_: Holds(a <= b)) -> Nat = a;
-        pub let called(n: Nat, @small: Holds(n < 10)) -> Nat = below(n, 10);
+        pub let below(a: Nat, b: Nat, @_: Holds(a <= b)) -> Nat => a;
+        pub let called(n: Nat, @small: Holds(n < 10)) -> Nat => below(n, 10);
         pub let constructed: Positive = Positive/at(3);
         pub let literal: Wide = Wide { 3, @small = True/qed(), "x" };
     "#;
@@ -230,7 +230,7 @@ fn a_proof_left_out_ahead_of_a_written_hidden_member_holds_its_place() {
     let source = r#"
         use /std/{Nat};
         use /std/Bool/{Holds};
-        pub let pinned(@_: Holds(0 < 1), @A: Type, value: A) -> A = value;
+        pub let pinned(@_: Holds(0 < 1), @A: Type, value: A) -> A => value;
         pub let subject: Nat = pinned(@_, @Nat, 3);
     "#;
 
@@ -260,7 +260,7 @@ fn a_nominal_type_and_a_constructor_are_written_with_their_marks() {
 fn a_match_on_a_constructor_is_written_as_its_patterns() {
     let source = r#"
         use /std/{Nat, Option};
-        pub let subject(chosen: Option(Nat)) -> Nat =
+        pub let subject(chosen: Option(Nat)) -> Nat =>
             match chosen
             | some(n) => n + 1
             | none() => 0
@@ -277,7 +277,7 @@ fn a_match_on_a_constructor_is_written_as_its_patterns() {
 fn a_match_on_a_truth_value_is_written_as_its_two_arms() {
     let source = r#"
         use /std/{Nat, Bool};
-        pub let subject(flag: Bool) -> Nat = match flag | true => 1 | false => 0 end;
+        pub let subject(flag: Bool) -> Nat => match flag | true => 1 | false => 0 end;
     "#;
 
     assert_eq!(
@@ -290,7 +290,7 @@ fn a_match_on_a_truth_value_is_written_as_its_two_arms() {
 fn a_match_over_a_number_is_written_as_its_two_shapes() {
     let source = r#"
         use /std/{Nat};
-        pub let subject(n: Nat) -> Nat = match n | 0 => 0 | p + 1 => p + 2 end;
+        pub let subject(n: Nat) -> Nat => match n | 0 => 0 | p + 1 => p + 2 end;
     "#;
 
     assert_eq!(
@@ -303,7 +303,7 @@ fn a_match_over_a_number_is_written_as_its_two_shapes() {
 fn a_match_over_a_list_is_written_as_its_two_shapes() {
     let source = r#"
         use /std/{Nat, List};
-        pub let subject(xs: List(Nat)) -> Nat = match xs | [] => 0 | [x, ..rest] => x end;
+        pub let subject(xs: List(Nat)) -> Nat => match xs | [] => 0 | [x, ..rest] => x end;
     "#;
 
     assert_eq!(
@@ -316,7 +316,7 @@ fn a_match_over_a_list_is_written_as_its_two_shapes() {
 fn a_local_binding_is_written_as_a_let() {
     let source = r#"
         use /std/{Nat};
-        pub let subject(n: Nat) -> Nat =
+        pub let subject(n: Nat) -> Nat =>
             let twice: Nat = n + n;
             twice * twice;
     "#;
@@ -345,7 +345,7 @@ fn literals_are_written_as_the_grammar_spells_them() {
 fn a_dispatch_by_value_is_written_with_its_fallthrough() {
     let source = r#"
         use /std/{Nat};
-        pub let subject(n: Nat) -> Nat = match n | 1 => 10 | 2 => 20 | _ => 0 end;
+        pub let subject(n: Nat) -> Nat => match n | 1 => 10 | 2 => 20 | _ => 0 end;
     "#;
 
     assert_eq!(
@@ -359,7 +359,7 @@ fn a_dispatch_by_value_is_written_with_its_fallthrough() {
 fn a_lambda_handed_to_a_call_is_written_where_it_stands() {
     let source = r#"
         use /std/{Nat, List};
-        pub let subject(xs: List(Nat)) -> List(Nat) = List/map(xs, (x) => x + 1);
+        pub let subject(xs: List(Nat)) -> List(Nat) => List/map(xs, (x) => x + 1);
     "#;
 
     assert_eq!(
@@ -373,7 +373,7 @@ fn a_lambda_handed_to_a_call_is_written_where_it_stands() {
 fn a_witness_binder_is_written_unnamed_and_restored_where_it_is_used() {
     let source = r#"
         use /std/{Str, Show};
-        pub let subject(@A: Type, use Show(A), x: A) -> Str = Show/show(x);
+        pub let subject(@A: Type, use Show(A), x: A) -> Str => Show/show(x);
     "#;
 
     assert_eq!(
@@ -391,7 +391,7 @@ fn a_witness_resolution_would_not_restore_is_written() {
     let source = r#"
         use /std/{Nat, Str, Show};
         pub let loud: Show(Nat) = Show { (n) => "n" };
-        pub let subject(n: Nat) -> Str = Show/show(@Nat, use loud, n);
+        pub let subject(n: Nat) -> Str => Show/show(@Nat, use loud, n);
     "#;
 
     assert_eq!(body(source, "subject"), "(n) => Show/show(@_, use loud, n)");
@@ -402,7 +402,7 @@ fn a_witness_resolution_would_not_restore_is_written() {
 fn a_witness_resolution_restores_is_left_out() {
     let source = r#"
         use /std/{Nat, Str, Show};
-        pub let subject(n: Nat) -> Str = Show/show(n);
+        pub let subject(n: Nat) -> Str => Show/show(n);
     "#;
 
     assert_eq!(body(source, "subject"), "(n) => Show/show(n)");

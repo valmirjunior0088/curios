@@ -17,7 +17,7 @@ fn a_solution_through_a_product_is_spelled_alike_from_any_floor() {
         "lib",
         "use /std/{Int, Eq};
 
-pub let magnitude_of_product(a: Int, b: Int) -> Eq()(Int/abs(a * b), Int/abs(a) * Int/abs(b)) =
+pub let magnitude_of_product(a: Int, b: Int) -> Eq()(Int/abs(a * b), Int/abs(a) * Int/abs(b)) =>
     match Int/view(a)
     | nonneg(_) => match Int/view(b) | nonneg(_) => Eq/refl() | neg(_) => Eq/refl() end
     | neg(_) => match Int/view(b) | nonneg(_) => Eq/refl() | neg(_) => Eq/refl() end

@@ -55,11 +55,11 @@ use /std/ops/{Eql, Add, Sub, Mul, Div, Rem};
 use /std/Bool/{True, Holds};
 
 --- That `a` is not zero, decided — what `/` and `%` on `Int` ask of a divisor.
-pub let NonZero(a: Int) -> Prop =
+pub let NonZero(a: Int) -> Prop =>
     Holds(a != +0);
 
 --- That `a` is zero or above, decided.
-pub let NonNeg(a: Int) -> Prop =
+pub let NonNeg(a: Int) -> Prop =>
     Holds(a >= +0);
 
 --- An integer is a widened natural, or one below the negation of one: its two canonical forms, as the family's indices.
@@ -73,18 +73,18 @@ pub induct Sign: (Int) -> pub Type
 end
 
 --- `i`'s form: the natural it is, or the natural one below its negation is.
-pub let view(i: Int) -> Sign(i) =
+pub let view(i: Int) -> Sign(i) =>
     match i >= +0
     | true => Sign/nonneg(to_nat(i))
     | false => Sign/neg(to_nat(-1 - i))
     end;
 
-let absurd_succ(@P: Sort, x: Nat, h: Holds(eql(+0, Nat/to_int(x) + 1))) -> P =
+let absurd_succ(@P: Sort, x: Nat, h: Holds(eql(+0, Nat/to_int(x) + 1))) -> P =>
     match h end;
 
 -- Stated over `eql`, and decided through `lt` and `le`, each by name: an operator here would read the witness that names this.
 --- `Eql`'s law at `Int`: a decided equality is an equation.
-let eq_of_eql(a: Int, b: Int, h: Holds(eql(a, b))) -> Eq()(a, b) =
+let eq_of_eql(a: Int, b: Int, h: Holds(eql(a, b))) -> Eq()(a, b) =>
     match lt(a, b)
     | true =>
         let below: Holds(lt(a, b)) = True/qed();
@@ -102,7 +102,7 @@ let eq_of_eql(a: Int, b: Int, h: Holds(eql(a, b))) -> Eq()(a, b) =
     end;
 
 --- The value with its sign written, `+3` or `-3`, so the text re-parses as an `Int` without context.
-pub let to_str(n: Int) -> Str =
+pub let to_str(n: Int) -> Str =>
     let mag = Nat/to_str(abs(n));
     match n >= +0
     | true => Str/concat("+", mag)
@@ -110,11 +110,11 @@ pub let to_str(n: Int) -> Str =
     end;
 
 --- The bitwise complement.
-pub let not(x: Int) -> Int =
+pub let not(x: Int) -> Int =>
     xor(x, -1);
 
 --- The number an optional sign and a nonempty run of decimal digits spell, or `none` for any other text.
-pub let of_str(s: Str) -> Option(Int) =
+pub let of_str(s: Str) -> Option(Int) =>
     let (negative, digits): {Bool, Str} =
         match Str/strip_prefix(s, "-")
         | some(rest) => (true, rest)
@@ -131,13 +131,13 @@ pub let of_str(s: Str) -> Option(Int) =
     end;
 
 --- The procedure that decides `0 <= n`: the evidence when it holds, `none` otherwise.
-pub let non_neg(n: Int) -> Option(NonNeg(n)) =
+pub let non_neg(n: Int) -> Option(NonNeg(n)) =>
     Bool/holds(n >= +0);
 
 satisfy Eql(Int) {
     eql = eql,
     eq = eq_of_eql,
-    refl(_) = True/qed(),
+    refl(_) => True/qed(),
 }
 
 satisfy Add(Int) {
@@ -154,14 +154,14 @@ satisfy Mul(Int) {
 
 --- The divisor must be nonzero.
 satisfy Div(Int) {
-    Ok(b) = NonZero(b),
+    Ok(b) => NonZero(b),
     div = div,
 }
 
 --- The divisor must be nonzero.
 satisfy Rem(Int) {
-    Ok(b) = NonZero(b),
-    rem(a, b, @ok) = Nat/to_int(rem(a, b, @ok)),
+    Ok(b) => NonZero(b),
+    rem(a, b, @ok) => Nat/to_int(rem(a, b, @ok)),
 }
 
 satisfy Show(Int) {

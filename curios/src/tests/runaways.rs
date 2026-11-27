@@ -131,7 +131,7 @@ const A_PROOF_WHOSE_GUARDS_EVERY_ARM_SETTLES_AGAIN: &str = r#"
         bounded: Bool/Holds(remainder < d),
     }
 
-    let of(n: Int, d: Nat, @ok: Bool/Holds(0 < d)) -> DivMod(n, d) =
+    let of(n: Int, d: Nat, @ok: Bool/Holds(0 < d)) -> DivMod(n, d) =>
         match Int/view(n)
         | nonneg(m) =>
             DivMod {
@@ -163,7 +163,7 @@ const A_PROOF_WHOSE_GUARDS_EVERY_ARM_SETTLES_AGAIN: &str = r#"
         @ok: Bool/Holds(0 < d),
         joined: Eq()(n, q * Nat/to_int(d) + Nat/to_int(r)),
         bounded: Bool/Holds(r < d),
-    ) -> {quotient: Eq()(q, of(n, d).quotient), remainder: Eq()(r, of(n, d).remainder)} =
+    ) -> {quotient: Eq()(q, of(n, d).quotient), remainder: Eq()(r, of(n, d).remainder)} =>
         let split = of(n, d);
         let same: Bool/Holds(
             q * Nat/to_int(d) + Nat/to_int(r)
@@ -200,19 +200,19 @@ const A_CLASH_OVER_AN_EQUATION_A_LEMMA_INHABITS: &str = r#"
     use /std/{Nat, Eq, Io};
     use /std/Bool/{False};
 
-    let countdown(n : Nat) -> Nat =
+    let countdown(n : Nat) -> Nat =>
         match n
         | 0 => 0
         | k + 1 => countdown(k)
         end;
 
-    let zero(n : Nat) -> Eq()(countdown(n), 0) =
+    let zero(n : Nat) -> Eq()(countdown(n), 0) =>
         match n
         | 0 => Eq/refl()
         | k + 1 => zero(k)
         end;
 
-    let _absurd(h : Eq()(countdown(2000), 0)) -> False =
+    let _absurd(h : Eq()(countdown(2000), 0)) -> False =>
         match h end;
 
     Io/pure(())
@@ -235,19 +235,19 @@ fn a_clash_the_budget_cannot_finish_is_not_concluded() {
 const TWO_RECURSIONS_COLD: &str = r#"
     use /std/{Nat, Eq, Io};
 
-    let f(n : Nat) -> Nat =
+    let f(n : Nat) -> Nat =>
         match n
         | 0 => 0
         | k + 1 => f(k)
         end;
 
-    let g(n : Nat) -> Nat =
+    let g(n : Nat) -> Nat =>
         match n
         | 0 => 1
         | k + 1 => g(k)
         end;
 
-    let _both() -> Eq()((f(2000), g(2000)), (0, 1)) = Eq/refl();
+    let _both() -> Eq()((f(2000), g(2000)), (0, 1)) => Eq/refl();
 
     Io/pure(())
     "#;
@@ -256,21 +256,21 @@ const TWO_RECURSIONS_COLD: &str = r#"
 const TWO_RECURSIONS_WARMED: &str = r#"
     use /std/{Nat, Eq, Io};
 
-    let f(n : Nat) -> Nat =
+    let f(n : Nat) -> Nat =>
         match n
         | 0 => 0
         | k + 1 => f(k)
         end;
 
-    let g(n : Nat) -> Nat =
+    let g(n : Nat) -> Nat =>
         match n
         | 0 => 1
         | k + 1 => g(k)
         end;
 
-    let _warm() -> Eq()(f(2000), 0) = Eq/refl();
+    let _warm() -> Eq()(f(2000), 0) => Eq/refl();
 
-    let _both() -> Eq()((f(2000), g(2000)), (0, 1)) = Eq/refl();
+    let _both() -> Eq()((f(2000), g(2000)), (0, 1)) => Eq/refl();
 
     Io/pure(())
     "#;

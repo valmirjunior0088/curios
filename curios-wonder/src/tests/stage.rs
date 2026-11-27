@@ -127,7 +127,7 @@ fn a_librarys_core_rung_lowers_it_and_compiles_nothing() {
 }
 
 /// A program of two declarations, `twice` holding a lambda and `other` beside it.
-const TWO: &str = "use /std/{Nat};\n\nlet twice(n: Nat) -> Nat =\n    let step = (k: Nat) => k + n;\n    step(step(n));\n\nlet other(n: Nat) -> Nat = n + 1;\n\n/std/print(\"ok\\n\")\n";
+const TWO: &str = "use /std/{Nat};\n\nlet twice(n: Nat) -> Nat =>\n    let step = (k: Nat) => k + n;\n    step(step(n));\n\nlet other(n: Nat) -> Nat => n + 1;\n\n/std/print(\"ok\\n\")\n";
 
 /// The declaration at `path`'s part of the rung `name` of `program`, asked the way the one-shot transport asks.
 fn part(name: &str, program: &str, path: &[&str]) -> Result<String, crate::Refusal> {
@@ -206,13 +206,13 @@ fn a_declaration_in_scope_is_its_units_elaborated_part_and_has_no_core() {
 /// A program reading `n` from its arguments, so nothing folds away: `count` a tail recursion the optimizer makes a loop of in its caller, and `fib` a recursion of two calls, which stays a function of its own.
 const RECURSIONS: &str = "use /std/{Str, Nat, List, Option, Result, Try, Io, Proc, Fmt};
 
-let count(k: Nat, acc: Nat) -> Nat =
+let count(k: Nat, acc: Nat) -> Nat =>
     match k | 0 => acc | p + 1 => count(p, acc + p) end;
 
-let fib(n: Nat) -> Nat =
+let fib(n: Nat) -> Nat =>
     match n | 0 => 0 | p + 1 => match p | 0 => 1 | q + 1 => fib(p) + fib(q) end end;
 
-let execute() -> Try(Io, Str, {}) =
+let execute() -> Try(Io, Str, {}) =>
     let arguments = Proc/args()!;
     let bytes = Option/to_result(List/try_get(arguments, 1), \"no input\")!;
     let s = Result/map_failure(Str/of_bytes(bytes), (_) => \"invalid utf-8\")!;

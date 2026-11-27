@@ -8,7 +8,7 @@ let index_from(
     b: Bytes,
     byte: Byte,
     i: Nat,
-) -> Option({at: Nat, within: Holds(at < Bytes/length(b))}) =
+) -> Option({at: Nat, within: Holds(at < Bytes/length(b))}) =>
     match Bool/holds(i < Bytes/length(b))
     | none() => Option/none()
     | some(inside) =>
@@ -19,7 +19,7 @@ let index_from(
     end;
 
 -- `b` without the carriage return it ends with, where it ends with one.
-let without_return(b: Bytes) -> Bytes =
+let without_return(b: Bytes) -> Bytes =>
     match Bool/holds(0 < Bytes/length(b))
     | none() => b
     | some(nonempty) =>
@@ -31,7 +31,7 @@ let without_return(b: Bytes) -> Bytes =
     end;
 
 --- The bytes before the first `delimiter`, and the bytes after it. The state is how far the bytes held have been searched. A piece of more than `limit` bytes is refused, wherever its delimiter stands.
-pub let until(limit: Nat, delimiter: Byte, searched: Nat, held: Bytes) -> Step(Nat, Error, Bytes) =
+pub let until(limit: Nat, delimiter: Byte, searched: Nat, held: Bytes) -> Step(Nat, Error, Bytes) =>
     match index_from(held, delimiter, searched)
     | some(found) =>
         match found.at <= limit
@@ -46,7 +46,7 @@ pub let until(limit: Nat, delimiter: Byte, searched: Nat, held: Bytes) -> Step(N
     end;
 
 --- A line: the bytes before the first newline, without a carriage return that ends them, and the bytes after the newline. The state is how far the bytes held have been searched. A line of more than `limit` bytes is refused.
-pub let line(limit: Nat, searched: Nat, held: Bytes) -> Step(Nat, Error, Bytes) =
+pub let line(limit: Nat, searched: Nat, held: Bytes) -> Step(Nat, Error, Bytes) =>
     match until(limit, '\n', searched, held)
     | took(found, after) => Step/took(without_return(found), after)
     | more(next, kept) => Step/more(next, kept)
@@ -54,7 +54,7 @@ pub let line(limit: Nat, searched: Nat, held: Bytes) -> Step(Nat, Error, Bytes) 
     end;
 
 --- `n` bytes and the bytes after them, once there are that many. A count past `limit` is refused before any of it is read.
-pub let exactly(limit: Nat, n: Nat, held: Bytes) -> Step({}, Error, Bytes) =
+pub let exactly(limit: Nat, n: Nat, held: Bytes) -> Step({}, Error, Bytes) =>
     match
     | n > limit => Step/refused(Error/too_long())
     | n <= Bytes/length(held) => Step/took(Bytes/slice(held, 0, n), Bytes/drop(held, n))
@@ -62,7 +62,7 @@ pub let exactly(limit: Nat, n: Nat, held: Bytes) -> Step({}, Error, Bytes) =
     end;
 
 --- Everything a stream yields: never taken, only its stream's end saying there is no more. More than `limit` bytes are refused.
-pub let rest(limit: Nat, held: Bytes) -> Step({}, Error, Bytes) =
+pub let rest(limit: Nat, held: Bytes) -> Step({}, Error, Bytes) =>
     match Bytes/length(held) <= limit
     | true => Step/more((), held)
     | false => Step/refused(Error/too_long())

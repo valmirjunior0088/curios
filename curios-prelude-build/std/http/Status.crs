@@ -4,11 +4,11 @@ use /std/http/{Field};
 use /std/Bool/{Holds};
 
 --- Whether a reply of status `code` has no body whatever its fields say: a 1xx, 204 or 304 reply ends at its head (RFC 9112 §6.3 rule 1).
-pub let bodiless(code: Nat) -> Bool =
+pub let bodiless(code: Nat) -> Bool =>
     code < 200 || code == 204 || code == 304;
 
 --- Whether a reply of status `code` may carry content: every status but the bodiless ones and 205, whose reply a server sends none in (RFC 9110 §15.3.6).
-pub let carries_content(code: Nat) -> Bool =
+pub let carries_content(code: Nat) -> Bool =>
     Bool/not(bodiless(code) || code == 205);
 
 --- A reply's status: its three-digit code and its reason phrase.
@@ -31,7 +31,7 @@ satisfy Spell(Status) {
 }
 
 --- The reason phrase usually sent with `code`, or the empty phrase for a code this table lacks: HTTP makes the phrase optional, and a client reads the code.
-pub let reason_of(code: Nat) -> Field/Value =
+pub let reason_of(code: Nat) -> Field/Value =>
     match code
     | 100 => Field/Value/lit("Continue")
     | 200 => Field/Value/lit("OK")
@@ -57,5 +57,5 @@ pub let reason_of(code: Nat) -> Field/Value =
     end;
 
 --- The status `code` with its usual reason.
-pub let of(code: Nat, @_: Holds(100 <= code && code <= 999)) -> Status =
+pub let of(code: Nat, @_: Holds(100 <= code && code <= 999)) -> Status =>
     Status { code = code, reason = reason_of(code) };

@@ -65,7 +65,7 @@ fn a_dependent_through_a_constructed_type_reports_nothing_of_its_own() {
         | boxed(value : true)
         end
 
-        let _open(b : Box) -> Nat =
+        let _open(b : Box) -> Nat =>
             match b
             | boxed(v) => v
             end;
@@ -90,7 +90,7 @@ fn a_user_of_a_refused_witness_reports_nothing_of_its_own() {
         end
 
         satisfy Show(Color) {
-            show(c) = 1,
+            show(c) => 1,
         }
 
         let _shown : Str = Show/show(Color/red());
@@ -99,7 +99,7 @@ fn a_user_of_a_refused_witness_reports_nothing_of_its_own() {
         "#,
     );
 
-    assert!(report.contains("show(c) = 1,"), "{report}");
+    assert!(report.contains("show(c) => 1,"), "{report}");
     assert!(!report.contains("_shown"), "{report}");
     assert!(!report.contains("no witness"), "{report}");
 }
@@ -116,7 +116,7 @@ fn a_witness_refused_before_it_registered_leaves_its_user_reporting_no_witness()
         end
 
         satisfy Show(1) {
-            show(c) = "",
+            show(c) => "",
         }
 
         let _shown : Str = Show/show(Color/red());
@@ -138,7 +138,7 @@ fn a_test_of_a_refused_declaration_is_left_out_of_the_synthesized_tail() {
 
         let _a : Nat = true;
 
-        test uses_a =
+        test uses_a =>
             Test/equal(_a, 1);
 
         /std/print("unreachable")
@@ -156,7 +156,7 @@ fn a_units_tests_run_from_the_tail_of_the_program_compiled_after_it() {
     unit.insert_root(
         "lib",
         RootKind::Ordinary,
-        "use /std/{Nat, Test};\n\ntest addition_passes =\n    Test/assert(\"one and one are two\", 1 + 1 == 2);\n"
+        "use /std/{Nat, Test};\n\ntest addition_passes =>\n    Test/assert(\"one and one are two\", 1 + 1 == 2);\n"
             .parse()
             .expect("the unit parses"),
     );
@@ -193,13 +193,13 @@ fn both_erasure_obligations_are_reported_together() {
         r#"
         use /std/{Nat};
 
-        let Bad(n : Nat) -> Type =
+        let Bad(n : Nat) -> Type =>
             match n < 10
             | true => Bad(n - 1)
             | false => {}
             end;
 
-        let loop(P : Prop, n : Nat, again : (m : Nat) -> Nat) -> P =
+        let loop(P : Prop, n : Nat, again : (m : Nat) -> Nat) -> P =>
             loop(P, again(n), again);
 
         /std/print("unreachable")

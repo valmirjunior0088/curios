@@ -3,7 +3,7 @@ use /std/ops/{Ord};
 use /std/Bool/{True};
 
 --- The order of the two.
-pub let ord(x: Nat, y: Nat) -> Ordering =
+pub let ord(x: Nat, y: Nat) -> Ordering =>
     match
     | Nat/lt(x, y) => Ordering/lt()
     | x == y => Ordering/eq()
@@ -12,7 +12,7 @@ pub let ord(x: Nat, y: Nat) -> Ordering =
 
 -- By recursion on both sides, as [`flips`] is.
 --- `ord(a, b)` is `eq` only where `a` is `b`: the order agrees with equality.
-let eq(a: Nat, b: Nat, h: Eq()(ord(a, b), Ordering/eq())) -> Eq()(a, b) =
+let eq(a: Nat, b: Nat, h: Eq()(ord(a, b), Ordering/eq())) -> Eq()(a, b) =>
     match a
     | 0 =>
         match b
@@ -54,14 +54,14 @@ let trans: Ord/Trans(Ord/le_by(ord)) =
 
 -- Stated over `Nat/lt` by name, as [`is_le`] is over `Nat/le`: `a < b` would read the witness that names this.
 --- `a < b` is `ord` answering `lt`.
-let is_lt(a: Nat, b: Nat) -> Eq()(Nat/lt(a, b), Ordering/is_lt(ord(a, b))) =
+let is_lt(a: Nat, b: Nat) -> Eq()(Nat/lt(a, b), Ordering/is_lt(ord(a, b))) =>
     match a
     | 0 => match b | 0 | _ + 1 => Eq/refl() end
     | ap + 1 => match b | 0 => Eq/refl() | bp + 1 => is_lt(ap, bp) end
     end;
 
 --- `a <= b` is `ord` answering `lt` or `eq`.
-let is_le(a: Nat, b: Nat) -> Eq()(Nat/le(a, b), Ordering/is_le(ord(a, b))) =
+let is_le(a: Nat, b: Nat) -> Eq()(Nat/le(a, b), Ordering/is_le(ord(a, b))) =>
     match a
     | 0 => match b | 0 | _ + 1 => Eq/refl() end
     | ap + 1 => match b | 0 => Eq/refl() | bp + 1 => is_le(ap, bp) end

@@ -193,7 +193,7 @@ fn an_offered_baseline_is_taken_by_a_cache_and_by_nothing_else() {
 /// A program of two declarations and a final term that reads both.
 const PROGRAM: &str = "use /std/{Nat};
 
-let double(n: Nat) -> Nat = n + n;
+let double(n: Nat) -> Nat => n + n;
 
 let seven: Nat = 7;
 
@@ -276,13 +276,13 @@ fn a_program_whose_unit_a_cache_hands_back_is_the_program_compiled_whole() {
 }
 
 /// A program's declarations, closed with a term that checks.
-const CLOSED: &str = "let id(@A: Type, a: A) -> A = a;
+const CLOSED: &str = "let id(@A: Type, a: A) -> A => a;
 
 /std/print(id(@/std/Str, \"\"))
 ";
 
 /// The same declarations, closed with a term that does not: `id(@Nat, 1)` printed where a `Str` is wanted.
-const CLOSED_BY_A_REFUSAL: &str = "let id(@A: Type, a: A) -> A = a;
+const CLOSED_BY_A_REFUSAL: &str = "let id(@A: Type, a: A) -> A => a;
 
 /std/print(id(@/std/Nat, 1))
 ";

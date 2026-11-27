@@ -10,13 +10,13 @@ use {
 const TWO_INSTANCES_OF_ZIP: &str = r#"
     use /std/{Nat, List, Eq, Io};
     use /std/Bool/{True, False, Holds};
-    let same(@T: Type, l: List(T)) -> List(T) = l;
-    let zero_not_succ(@n: Nat, e: Eq()(0, n + 1)) -> False =
+    let same(@T: Type, l: List(T)) -> List(T) => l;
+    let zero_not_succ(@n: Nat, e: Eq()(0, n + 1)) -> False =>
         Eq/subst((m: Nat) => Holds(Nat/eql(0, m)), e, True/qed());
-    let succ_cancel(@a: Nat, @b: Nat, e: Eq()(a + 1, b + 1)) -> Eq()(a, b) =
+    let succ_cancel(@a: Nat, @b: Nat, e: Eq()(a + 1, b + 1)) -> Eq()(a, b) =>
         Eq/cong((w: Nat) => w - 1, e);
     pub let zip_len(@A: Type, @B: Type, a: List(A), b: List(B), p: Eq()(List/length(b), List/length(a)))
-        -> Eq()(List/length(List/zip(a, b)), List/length(a)) =
+        -> Eq()(List/length(List/zip(a, b)), List/length(a)) =>
         match a
         | [] => Eq/refl()
         | [x, ..xs] =>
@@ -27,7 +27,7 @@ const TWO_INSTANCES_OF_ZIP: &str = r#"
         end;
     pub let use_call(@A: Type, @B: Type, n: Nat, a: List(A), b: List(B),
                      ca: Eq()(List/length(same(a)), n), cb: Eq()(List/length(b), n))
-        -> Eq()(List/length(List/zip(same(a), b)), n) =
+        -> Eq()(List/length(List/zip(same(a), b)), n) =>
         Eq/trans(zip_len(same(a), b, Eq/trans(cb, Eq/sym(ca))), ca);
     Io/pure(())
     "#;
@@ -41,12 +41,12 @@ fn a_refined_scrutinee_carries_the_family_universe_levels() {
         | nil()
         | cons(A, L(A))
         end
-        let len(xs: L(Nat)) -> Nat =
+        let len(xs: L(Nat)) -> Nat =>
             match xs
             | nil() => 0
             | cons(_, rest) => len(rest) + 1
             end;
-        let len_self(xs: L(Nat)) -> Eq()(len(xs), len(xs)) =
+        let len_self(xs: L(Nat)) -> Eq()(len(xs), len(xs)) =>
             match xs
             | nil() => Eq/refl()
             | cons(x, rest) => Eq/refl()
@@ -64,7 +64,7 @@ fn a_solution_naming_its_own_group_is_stamped_with_the_groups_instance() {
         let source = fill!(
             r#"
             use /std/{Eq};
-            pub let same2(@A : Type) -> (x : A, y : A) -> Prop = (x, y) => Eq(@A)(x, y);
+            pub let same2(@A : Type) -> (x : A, y : A) -> Prop => (x, y) => Eq(@A)(x, y);
             induct Wit : pub Type
             | base()
             | tied(a : Wit, p : ${payload})
@@ -140,8 +140,8 @@ fn a_bare_former_passed_as_a_family_takes_an_instance_at_each_payload() {
             r#"
             use /std/{Nat, Io, List};
             ${declarations}
-            let through(F: (Type) -> Type, x: F(Nat), y: F(Type)) -> Nat = 0;
-            let probe(n: Nat) -> Nat = through(${family}, ${small}, ${large});
+            let through(F: (Type) -> Type, x: F(Nat), y: F(Type)) -> Nat => 0;
+            let probe(n: Nat) -> Nat => through(${family}, ${small}, ${large});
             /std/print("held")
             "#,
             declarations,
@@ -150,11 +150,11 @@ fn a_bare_former_passed_as_a_family_takes_an_instance_at_each_payload() {
             large
         )
     };
-    let io = "let small(n: Nat) -> Io(Nat) = Io/pure(n);";
-    let list = "let small(n: Nat) -> List(Nat) = [n];";
-    let alias = "let Act(A: Type) -> Type = Io(A);
-        let small(n: Nat) -> Act(Nat) = Io/pure(n);
-        let large(n: Nat) -> Act(Type) = Io/pure(Nat);";
+    let io = "let small(n: Nat) -> Io(Nat) => Io/pure(n);";
+    let list = "let small(n: Nat) -> List(Nat) => [n];";
+    let alias = "let Act(A: Type) -> Type => Io(A);
+        let small(n: Nat) -> Act(Nat) => Io/pure(n);
+        let large(n: Nat) -> Act(Type) => Io/pure(Nat);";
 
     for family in [
         through(io, "Io", "small(n)", "Io/pure(Nat)"),
@@ -174,10 +174,10 @@ fn an_ordinary_function_passed_bare_takes_an_instance_at_each_argument() {
         fill!(
             r#"
             use /std/{Nat, Eq};
-            let const_nat(A: Type, x: A) -> Nat = 0;
-            let witness() -> Eq()(const_nat(Nat, 0), const_nat(Nat, 0)) = Eq/refl();
-            let through(G: (A: Type, x: A) -> Nat, p: Eq()(G(Nat, 0), G(Nat, 0)), q: Eq()(G(Type, Nat), G(Type, Nat))) -> Nat = 0;
-            let probe() -> Nat = through(${function}, witness(), Eq/refl());
+            let const_nat(A: Type, x: A) -> Nat => 0;
+            let witness() -> Eq()(const_nat(Nat, 0), const_nat(Nat, 0)) => Eq/refl();
+            let through(G: (A: Type, x: A) -> Nat, p: Eq()(G(Nat, 0), G(Nat, 0)), q: Eq()(G(Type, Nat), G(Type, Nat))) -> Nat => 0;
+            let probe() -> Nat => through(${function}, witness(), Eq/refl());
             /std/print("held")
             "#,
             function
@@ -193,10 +193,10 @@ fn an_ordinary_function_passed_bare_takes_an_instance_at_each_argument() {
 fn a_former_passed_at_its_familys_level_is_the_node_one_written_at_zero_is() {
     let source = r#"
         use /std/{Nat, Bool, Io};
-        let small(n: Nat) -> Io(Nat) = Io/pure(n);
-        let Both(F: (Type) -> Type) -> Type = {F(Nat), F(Type)};
-        let first(x: Both(Io)) -> Io(Nat) = x.0;
-        pub let pick(b: Bool, n: Nat, x: Both(Io)) -> Io(Nat) =
+        let small(n: Nat) -> Io(Nat) => Io/pure(n);
+        let Both(F: (Type) -> Type) -> Type => {F(Nat), F(Type)};
+        let first(x: Both(Io)) -> Io(Nat) => x.0;
+        pub let pick(b: Bool, n: Nat, x: Both(Io)) -> Io(Nat) =>
             match b | true => small(n) | false => first(x) end;
         /std/print("picked")
         "#;
@@ -215,11 +215,11 @@ fn a_former_passed_at_its_familys_level_is_the_node_one_written_at_zero_is() {
 fn a_definition_carries_the_levels_its_value_holds() {
     let source = r#"
         use /std/{Nat, Str, Io, Result};
-        pub let const_nat(A: Type, x: A) -> Nat = 0;
-        pub let Act(A: Type) -> Type = Io(A);
+        pub let const_nat(A: Type, x: A) -> Nat => 0;
+        pub let Act(A: Type) -> Type => Io(A);
         pub struct Value: pub Type { A: Type, read: (Str) -> Result(Str, A) }
-        pub let Curried(A: Type) -> (Type) -> Type = (B: Type) => A;
-        pub let plain(n: Nat) -> Nat = n;
+        pub let Curried(A: Type) -> (Type) -> Type => (B: Type) => A;
+        pub let plain(n: Nat) -> Nat => n;
         /std/print("carried")
         "#;
 
@@ -241,10 +241,10 @@ fn a_definition_carries_the_levels_its_value_holds() {
 fn a_definition_whose_levels_outrun_the_budget_is_refused_where_it_is_declared() {
     let source = r#"
         use /std/{Nat};
-        pub let spin(n: Nat) -> Nat = match n | 0 => 0 | k + 1 => spin(k) end;
-        pub let Pick(n: Nat, _A: Type) -> Type = match n | 0 => Nat | _k + 1 => Nat end;
-        pub let D(A: Type) -> Type = Pick(spin(50000), A);
-        pub let keep(x: D(Nat)) -> D(Nat) = x;
+        pub let spin(n: Nat) -> Nat => match n | 0 => 0 | k + 1 => spin(k) end;
+        pub let Pick(n: Nat, _A: Type) -> Type => match n | 0 => Nat | _k + 1 => Nat end;
+        pub let D(A: Type) -> Type => Pick(spin(50000), A);
+        pub let keep(x: D(Nat)) -> D(Nat) => x;
         /std/print("declared")
         "#;
 
@@ -262,13 +262,13 @@ fn a_case_equation_read_at_another_instance_holds_the_two_to_one() {
             r#"
             use /std/{Nat, Bool, Eq};
             let U: Type = Type;
-            let even_at(A: Type, n: Nat) -> Bool =
+            let even_at(A: Type, n: Nat) -> Bool =>
                 match n
                 | 0 => true
                 | m + 1 => Bool/not(even_at(A, m))
                 end;
-            let needs(T: Type, inhabitant: T, n: Nat, proof: Eq()(even_at(T, n), true)) -> Nat = n;
-            pub let apart(n: Nat) -> Nat =
+            let needs(T: Type, inhabitant: T, n: Nat, proof: Eq()(even_at(T, n), true)) -> Nat => n;
+            pub let apart(n: Nat) -> Nat =>
                 match even_at(U, n)
                 | true => needs(U, ${inhabitant}, n, Eq/refl())
                 | false => 0
@@ -296,12 +296,12 @@ fn a_case_equation_read_at_another_instance_holds_its_sorts_to_one() {
             | added()
             | other()
             end
-            let ins(@K: Type, key: K, t: Nat, k: Nat, @same: Eq()(k + 0, k)) -> Out =
+            let ins(@K: Type, key: K, t: Nat, k: Nat, @same: Eq()(k + 0, k)) -> Out =>
                 match t | 0 => Out/added() | p + 1 => ins(key, p, k, @same) end;
-            let picked(@K: Type, key: K, n: Nat, k: Nat${binder}) -> Nat =
+            let picked(@K: Type, key: K, n: Nat, k: Nat${binder}) -> Nat =>
                 match ins(key, n, k, ${proof}) | added() => 1 | other() => 2 end;
             pub let held(@K: Type, key: K, n: Nat, k: Nat${binder}) -> Holds(
-                Nat/max(picked(key, n, k${passed}), 1) == picked(key, n, k${passed})) =
+                Nat/max(picked(key, n, k${passed}), 1) == picked(key, n, k${passed})) =>
                 match ins(key, n, k, ${proof}) | added() => True/qed() | other() => True/qed() end;
             /std/print("held")
             "#,
@@ -323,7 +323,7 @@ const EVEN: &str = r#"
     use /std/{Bool, Io};
     use /std/Bool/{Holds};
     induct Tree(K: Type): Type | tip(K) | join(Tree(K), Tree(K)) end
-    let even(@K: Type, t: Tree(K)) -> Bool =
+    let even(@K: Type, t: Tree(K)) -> Bool =>
         match t | tip(_) => true | join(l, r) => even(l) && even(r) end;
     "#;
 
@@ -337,18 +337,18 @@ fn a_statement_is_one_with_itself_written_again_under_an_operator() {
         "Holds(even(l) == even(r))",
     ] {
         let source = format!(
-            "{EVEN}\n let p(@K: Type, l: Tree(K), r: Tree(K), held: {statement}) -> {statement} = held;\n Io/pure(())"
+            "{EVEN}\n let p(@K: Type, l: Tree(K), r: Tree(K), held: {statement}) -> {statement} => held;\n Io/pure(())"
         );
         typecheck(&source).unwrap_or_else(|error| panic!("`{statement}`: {error}"));
     }
 
     // An alias of the statement, and a function that hands its proof back.
     let aliased = format!(
-        "{EVEN}\n let Both(@K: Type, l: Tree(K), r: Tree(K)) -> Prop = Holds(even(l) && even(r));\n let p(@K: Type, l: Tree(K), r: Tree(K), held: Both(l, r)) -> Both(l, r) = held;\n Io/pure(())"
+        "{EVEN}\n let Both(@K: Type, l: Tree(K), r: Tree(K)) -> Prop => Holds(even(l) && even(r));\n let p(@K: Type, l: Tree(K), r: Tree(K), held: Both(l, r)) -> Both(l, r) => held;\n Io/pure(())"
     );
     typecheck(&aliased).expect("an alias of the statement");
     let handed = format!(
-        "{EVEN}\n let same(@P: Prop, proof: P) -> P = proof;\n let p(@K: Type, l: Tree(K), r: Tree(K), held: Holds(even(l) && even(r))) -> Holds(even(l) && even(r)) = same(held);\n Io/pure(())"
+        "{EVEN}\n let same(@P: Prop, proof: P) -> P => proof;\n let p(@K: Type, l: Tree(K), r: Tree(K), held: Holds(even(l) && even(r))) -> Holds(even(l) && even(r)) => same(held);\n Io/pure(())"
     );
     typecheck(&handed).expect("the proof handed back by a function");
 }
@@ -359,9 +359,9 @@ fn a_derived_witness_compared_through_a_definition_elaborates_within_a_small_bud
     let source = r#"
         use /std/{Eq, Spell, Str};
         induct Tree(A: Type): pub Type | leaf(A) | node(Tree(A), Tree(A)) end
-        satisfy (@A: Type, use Spell(A)) => Spell(Tree(A)) { .. }
-        let shown(@A: Type, use Spell(A), t: Tree(A)) -> Str = Spell/spell(t);
-        let same(@A: Type, use Spell(A), t: Tree(A)) -> Eq()(shown(t), Spell/spell(t)) =
+        satisfy (@A: Type, use Spell(A)) -> Spell(Tree(A)) { .. }
+        let shown(@A: Type, use Spell(A), t: Tree(A)) -> Str => Spell/spell(t);
+        let same(@A: Type, use Spell(A), t: Tree(A)) -> Eq()(shown(t), Spell/spell(t)) =>
             Eq/refl();
         /std/print("ok")
         "#;
@@ -378,15 +378,15 @@ fn a_recursive_witness_compared_through_a_definition_is_certified_within_a_small
         r#"
         use /std/{Eq, Spell, Str};
         induct Tree(A: Type): pub Type | leaf(A) | node(Tree(A), Tree(A)) end
-        satisfy (@A: Type, use Spell(A)) => Spell(Tree(A)) {
-            spell(t) =
+        satisfy (@A: Type, use Spell(A)) -> Spell(Tree(A)) {
+            spell(t) =>
                 match t
                 | leaf(a) => Spell/spell(a)
                 | node(l, r) => Str/concat(Spell/spell(l), Spell/spell(r))
                 end,
         }
-        pub let shown(@A: Type, use Spell(A), t: Tree(A)) -> Str = Spell/spell(t);
-        pub let same(@A: Type, use Spell(A), t: Tree(A)) -> Eq()(shown(t), Spell/spell(t)) =
+        pub let shown(@A: Type, use Spell(A), t: Tree(A)) -> Str => Spell/spell(t);
+        pub let same(@A: Type, use Spell(A), t: Tree(A)) -> Eq()(shown(t), Spell/spell(t)) =>
             Eq/refl();
         /std/print("ok")
         "#,
@@ -396,15 +396,15 @@ fn a_recursive_witness_compared_through_a_definition_is_certified_within_a_small
             size(A) -> Nat,
         }
         induct Tree(A: Type): pub Type | leaf(A) | node(Tree(A), Tree(A)) end
-        satisfy (@A: Type, use Sized(A)) => Sized(Tree(A)) {
-            size(t) =
+        satisfy (@A: Type, use Sized(A)) -> Sized(Tree(A)) {
+            size(t) =>
                 match t
                 | leaf(a) => Sized/size(a)
                 | node(l, r) => Sized/size(l) + Sized/size(r)
                 end,
         }
-        pub let measured(@A: Type, use Sized(A), t: Tree(A)) -> Nat = Sized/size(t);
-        pub let same(@A: Type, use Sized(A), t: Tree(A)) -> Eq()(measured(t), Sized/size(t)) =
+        pub let measured(@A: Type, use Sized(A), t: Tree(A)) -> Nat => Sized/size(t);
+        pub let same(@A: Type, use Sized(A), t: Tree(A)) -> Eq()(measured(t), Sized/size(t)) =>
             Eq/refl();
         /std/print("ok")
         "#,

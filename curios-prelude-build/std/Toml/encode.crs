@@ -2,11 +2,11 @@ use /std/{Nat, Int, Flt, Bool, Char, Str, List, Map, Option, Toml, Fmt};
 use /std/time/{rfc3339, iso8601};
 use /std/Toml/scan/{is_bare_char};
 
-let bare_ok(s: Str) -> Bool =
+let bare_ok(s: Str) -> Bool =>
     Bool/not(Str/is_empty(s)) && Str/fold(s, true, (c, ok) => ok && is_bare_char(c));
 
 --- What a character is written as inside a basic string, when it is not written as itself: the quote, the backslash, the control characters and DEL, which TOML escapes.
-let escaped(c: Char) -> Option(Str) =
+let escaped(c: Char) -> Option(Str) =>
     let n = Char/to_nat(c);
     match n
     | '"' => Option/some("\\\"")
@@ -28,19 +28,19 @@ let escaped(c: Char) -> Option(Str) =
         end
     end;
 
-let quote_str(s: Str) -> Str =
+let quote_str(s: Str) -> Str =>
     Str/flatten(["\"", Str/escape(s, escaped), "\""]);
 
-let spell_key(k: Str) -> Str =
+let spell_key(k: Str) -> Str =>
     match bare_ok(k) | true => k | false => quote_str(k) end;
 
-let int_str(n: Int) -> Str =
+let int_str(n: Int) -> Str =>
     match n >= +0
     | true => Nat/to_str(Int/to_nat(n))
     | false => Str/concat("-", Nat/to_str(Int/abs(n)))
     end;
 
-let flt_str(f: Flt) -> Str =
+let flt_str(f: Flt) -> Str =>
     match Flt/is_finite(f)
     | false =>
         match
@@ -62,7 +62,7 @@ let flt_str(f: Flt) -> Str =
         end
     end;
 
-let value_str(v: Toml) -> Str =
+let value_str(v: Toml) -> Str =>
     match v
     | str(s) => quote_str(s)
     | int(n) => int_str(n)
@@ -88,14 +88,14 @@ let value_str(v: Toml) -> Str =
         | false => Fmt/render("{ % }")(pairs_str(Map/to_list(m)))
         end
     end
-and pairs_str(entries: List({Str, Toml})) -> Str =
+and pairs_str(entries: List({Str, Toml})) -> Str =>
     let start: List(Str) = [];
     let parts =
         List/fold(entries, start, (entry, parts) =>
             [..parts, Fmt/render("% = %")(spell_key(entry.0))(value_str(entry.1))]);
     Str/join(", ", parts);
 
-let encode_table(prefix: List(Str), m: Map(Str, Toml)) -> Str =
+let encode_table(prefix: List(Str), m: Map(Str, Toml)) -> Str =>
     let entries = Map/to_list(m);
     let start: List(Str) = [];
     let value_lines =
@@ -119,5 +119,5 @@ let encode_table(prefix: List(Str), m: Map(Str, Toml)) -> Str =
     Str/concat(Str/flatten(value_lines), Str/flatten(table_blocks));
 
 --- `m` as one deterministic document: the root's plain values first, then its tables. Every table has a spelling, so nothing is refused.
-pub let encode(m: Map(Str, Toml)) -> Str =
+pub let encode(m: Map(Str, Toml)) -> Str =>
     encode_table([], m);

@@ -2,13 +2,13 @@ use /std/{List, Bool};
 use /std/Bool/{True, Holds};
 
 --- Whether `a` stands in `le` to the first element of `l`, as it does to an empty list's.
-pub let leads(@T: Type, le: (T, T) -> Bool, a: T, l: List(T)) -> Bool =
+pub let leads(@T: Type, le: (T, T) -> Bool, a: T, l: List(T)) -> Bool =>
     match l | [] => true | [k, .._] => le(a, k) end;
 
 --- Whether each element of `l` stands in `le` to the one after it.
 ---
 --- A decision, so `Holds(ordered(l, le))` is discharged by reduction over a closed list, and the same function checks a list at run time. `le` is any relation; a comparator is read as one through `Ord/le` or `Ord/then`.
-pub let ordered(@T: Type, l: List(T), le: (T, T) -> Bool) -> Bool =
+pub let ordered(@T: Type, l: List(T), le: (T, T) -> Bool) -> Bool =>
     match l
     | [] => true
     | [h, ..t] =>
@@ -23,7 +23,7 @@ pub let cons(
     t: List(T),
     lead: Holds(leads(le, h, t)),
     rest: Holds(ordered(t, le)),
-) -> Holds(ordered([h, ..t], le)) =
+) -> Holds(ordered([h, ..t], le)) =>
     match leads(le, h, t)
     | true => rest
     | false => match lead end
@@ -36,7 +36,7 @@ pub let head(
     h: T,
     t: List(T),
     whole: Holds(ordered([h, ..t], le)),
-) -> Holds(leads(le, h, t)) =
+) -> Holds(leads(le, h, t)) =>
     match leads(le, h, t)
     | true => True/qed()
     | false => match whole end
@@ -49,7 +49,7 @@ pub let tail(
     h: T,
     t: List(T),
     whole: Holds(ordered([h, ..t], le)),
-) -> Holds(ordered(t, le)) =
+) -> Holds(ordered(t, le)) =>
     match leads(le, h, t)
     | true => whole
     | false => match whole end

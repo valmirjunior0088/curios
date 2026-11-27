@@ -8,7 +8,7 @@ fn an_operator_with_no_literal_operand_takes_no_default() {
     assert_eq!(
         run(r#"
         use /std/{Byte, Bool, print};
-        let id(@A: Type, a: A) -> A = a;
+        let id(@A: Type, a: A) -> A => a;
         let same = id((x) => x == x);
         let at_byte: (Byte) -> Bool = same;
         print(Bool/to_str(at_byte(7)))
@@ -19,7 +19,7 @@ fn an_operator_with_no_literal_operand_takes_no_default() {
     let report = error(
         r#"
         use /std/{Bool};
-        let id(@A: Type, a: A) -> A = a;
+        let id(@A: Type, a: A) -> A => a;
         let same = id((x) => x == x);
         /std/print("unreachable")
         "#,
@@ -36,7 +36,7 @@ fn infix_resolves_to_int_for_signed_literals() {
     assert_eq!(
         run(r#"
             use /std/{Str, Int, Io};
-            let entry() -> /std/Io({}) =
+            let entry() -> /std/Io({}) =>
                 let _ = /std/print(Int/to_str(-2 - +3))!;
                 /std/Io/pure(());
             entry()
@@ -52,7 +52,7 @@ fn infix_resolves_against_a_bound_variable_type() {
         run(r#"
             use /std/{Str, Int, Io};
             let x : Int = -10;
-            let entry() -> /std/Io({}) =
+            let entry() -> /std/Io({}) =>
                 let _ = /std/print(Int/to_str(x + 1))!;
                 /std/Io/pure(());
             entry()
@@ -68,7 +68,7 @@ fn infix_mixes_a_float_variable_with_an_integer_literal() {
         run(r#"
             use /std/{Str, Flt, Io};
             let x : Flt = 3.0;
-            let entry() -> /std/Io({}) =
+            let entry() -> /std/Io({}) =>
                 let _ = (match Flt/lt(x + 1, 4.5)
                 | true => /std/print("less")
                 | false => /std/print("more")
@@ -85,7 +85,7 @@ fn infix_undefined_operator_for_type_is_rejected() {
     // `&&` only has a witness on `Bool`, so `nat && nat` has no `And(Nat)` — a compile-time error, same as any other operator at an un-witnessed type.
     let source = r#"
         use /std/{Str, Io};
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let _ = (match 1 && 2
             | true => /std/print("yes")
             | false => /std/print("no")
@@ -103,7 +103,7 @@ fn infix_mismatched_operand_types_are_rejected() {
         use /std/{Str, Int, Io};
         let n : Nat = 1;
         let i : Int = -1;
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let _ = /std/print(Int/to_str(n + i))!;
             /std/Io/pure(());
         entry()
@@ -122,11 +122,11 @@ fn infix_add_on_a_user_record_resolves_its_witness() {
             use /std/ops/{Add};
             struct Point : pub Type { x : Nat, y : Nat }
             satisfy Add(Point) {
-                add(a, b) = Point { x = a.x + b.x, y = a.y + b.y }
+                add(a, b) => Point { x = a.x + b.x, y = a.y + b.y }
             }
             let p : Point = Point { x = 3, y = 4 };
             let q : Point = p + p;
-            let entry() -> /std/Io({}) =
+            let entry() -> /std/Io({}) =>
                 let _ = /std/print(Nat/to_str(q.y))!;
                 /std/Io/pure(());
             entry()
@@ -141,7 +141,7 @@ fn a_comparison_of_two_floats_is_refused_as_their_equality_is() {
     let refusal = error(
         r#"
         use /std/{Flt, Bool};
-        let below(a: Flt, b: Flt) -> Bool = a < b;
+        let below(a: Flt, b: Flt) -> Bool => a < b;
         /std/print("")
         "#,
     );
@@ -164,9 +164,9 @@ fn a_swapped_comparison_runs_its_operands_in_written_order() {
     assert_eq!(
         run(r#"
         use /std/{Nat, Bool, Str, print};
-        let f() -> /std/Io(Nat) = let _ = print("f ")!; /std/Io/pure(1);
-        let g() -> /std/Io(Nat) = let _ = print("g ")!; /std/Io/pure(2);
-        let entry() -> /std/Io({}) = print(Bool/to_str(f()! > g()!));
+        let f() -> /std/Io(Nat) => let _ = print("f ")!; /std/Io/pure(1);
+        let g() -> /std/Io(Nat) => let _ = print("g ")!; /std/Io/pure(2);
+        let entry() -> /std/Io({}) => print(Bool/to_str(f()! > g()!));
         entry()
         "#),
         b"f g false"
@@ -197,9 +197,9 @@ fn a_disequality_is_the_negation_of_its_witness_s_equality() {
             use /std/ops/{Eql};
             induct Any : pub Type | any() end
             satisfy Eql(Any) {
-                eql(_, _) = true,
-                eq(a, b, _) = match a | any() => match b | any() => Eq/refl() end end,
-                refl(_) = True/qed(),
+                eql(_, _) => true,
+                eq(a, b, _) => match a | any() => match b | any() => Eq/refl() end end,
+                refl(_) => True/qed(),
             }
             let a : Any = Any/any();
             let b : Any = Any/any();
@@ -216,8 +216,8 @@ fn infix_resolves_against_a_local_use_premise() {
         run(r#"
             use /std/{Nat, Str, Io};
             use /std/ops/{Add};
-            pub let double(@A : Type, use Add(A), x : A) -> A = x + x;
-            let entry() -> /std/Io({}) =
+            pub let double(@A : Type, use Add(A), x : A) -> A => x + x;
+            let entry() -> /std/Io({}) =>
                 let _ = /std/print(Nat/to_str(double(21)))!;
                 /std/Io/pure(());
             entry()
@@ -232,7 +232,7 @@ fn infix_without_witness_reports_no_witness() {
     let source = r#"
         use /std/{Bool, Str, Io};
         let b : Bool = true + false;
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let _ = /std/print(Bool/to_str(b))!;
             /std/Io/pure(());
         entry()
@@ -249,11 +249,11 @@ fn infix_literal_against_a_user_type_is_rejected() {
         use /std/ops/{Add};
         struct Point : pub Type { x : Nat, y : Nat }
         satisfy Add(Point) {
-            add(a, b) = Point { x = a.x + b.x, y = a.y + b.y }
+            add(a, b) => Point { x = a.x + b.x, y = a.y + b.y }
         }
         let p : Point = Point { x = 1, y = 2 };
         let q : Point = p + 1;
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let _ = /std/print(Nat/to_str(q.x))!;
             /std/Io/pure(());
         entry()
@@ -267,7 +267,7 @@ fn infix_literal_against_a_solved_operand_type_names_the_type() {
     let source = r#"
         use /std/{Nat, Str, Io};
         let s : Str = "a" + 1;
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let _ = /std/print(s)!;
             /std/Io/pure(());
         entry()
@@ -284,7 +284,7 @@ fn infix_literal_against_a_solved_operand_type_names_the_type() {
 fn infix_under_a_guard_takes_its_witness_where_it_stands() {
     let source = r#"
         use /std/{Nat, Bool};
-        let guarded(a: Nat, b: Nat, c: Nat) -> Nat =
+        let guarded(a: Nat, b: Nat, c: Nat) -> Nat =>
             match (a * b + c) % 7 <= (a + b * c) % 5
             | true =>
                 match (a + c) / 3 <= (b * b + a) % 11

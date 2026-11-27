@@ -56,7 +56,7 @@ const SERVER: &str = r#"
     use /std/{Str, Bytes, Nat, Show, Try, Io};
     use /std/tcp/{Listener, Socket};
     use /std/http/{Server, Request, Response, Url};
-    let handler(r: Request) -> Try(Io, Io/Error, Response) =
+    let handler(r: Request) -> Try(Io, Io/Error, Response) =>
         let said =
             Response/of_text(
                 200,
@@ -67,13 +67,13 @@ const SERVER: &str = r#"
             Try/pure(Response/with_header(said, "date", "Tue, 15 Nov 1994 08:12:31 GMT"))
         | _ => Try/pure(said)
         end;
-    let session() -> Try(Io, Io/Error, {}) =
+    let session() -> Try(Io, Io/Error, {}) =>
         Try/scope((s) =>
             let l = Listener/listen(s, "0.0.0.0", 8080)!;
             let c = Listener/accept(s, l)!;
             let _ = Server/answer(Server/default, Url/Scheme/http(), handler)(c)!;
             Io/close(c));
-    let program() -> Io({}) =
+    let program() -> Io({}) =>
         let r = Try/run(session())!;
         match r
         | success(_) => Io/pure(())
@@ -368,9 +368,9 @@ fn a_reply_is_written_finished_and_read_past_before_the_close(server: &Compiled)
 const CLIENT: &str = r#"
     use /std/{Str, Bytes, Nat, Option, Result, Show, Try, http, Io};
     use /std/http/{Method, Url, Request};
-    let text(b: Bytes) -> Str =
+    let text(b: Bytes) -> Str =>
         Result/unwrap_or(Str/of_bytes(b), "not text");
-    let told(method: Method, url: Url) -> Io(Str) =
+    let told(method: Method, url: Url) -> Io(Str) =>
         let r =
             Try/run(http/perform(Request { method = method, url = url, headers = [], body = 0x[] }))!;
         Io/pure(
@@ -391,7 +391,7 @@ const CLIENT: &str = r#"
                 | redirected(_) => "redirected"
                 end
             end);
-    let program() -> Io({}) =
+    let program() -> Io({}) =>
         let got = told(Method/get(), Url/lit("http://example.com/"))!;
         let headed = told(Method/head(), Url/lit("http://head.example/"))!;
         /std/print(Str/flatten([got, "\n", headed]));

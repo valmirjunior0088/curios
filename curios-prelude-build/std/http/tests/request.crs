@@ -2,30 +2,30 @@
 use /std/{Str, Nat, Option, Result, Test};
 use /std/http/{Method, Url, Request, Response, Limits, Refusal, Field};
 
-let read(s: Str) -> Result(Refusal, Request) =
+let read(s: Str) -> Result(Refusal, Request) =>
     Request/of_bytes(Limits/server, Url/Scheme/http(), Str/to_bytes(s));
 
 -- What a request that reads is: its method, its URL, and its body as text.
-let seen(s: Str) -> Result(Refusal, {Method, Str, Option(Str)}) =
+let seen(s: Str) -> Result(Refusal, {Method, Str, Option(Str)}) =>
     Result/map(
         read(s),
         (r) => (r.method, Url/to_str(r.url), Result/to_option(Str/of_bytes(r.body))));
 
-let is(s: Str, method: Method, url: Str, body: Str) -> Test({}) =
+let is(s: Str, method: Method, url: Str, body: Str) -> Test({}) =>
     Test/equal(seen(s), Result/success((method, url, Option/some(body))));
 
 -- The status a server answers `s` with, or `none` where it reads.
-let refused(s: Str) -> Option(Nat) =
+let refused(s: Str) -> Option(Nat) =>
     match read(s)
     | success(_) => Option/none()
     | failure(why) => Option/some(Response/of_refusal(why).status.code)
     end;
 
-let answers(s: Str, code: Nat) -> Test({}) =
+let answers(s: Str, code: Nat) -> Test({}) =>
     Test/equal(refused(s), Option/some(code));
 
 -- A request reads by its length, by its chunks, or as bodiless where it states neither, and what follows it is left alone.
-test a_request_reads_by_the_framing_it_states =
+test a_request_reads_by_the_framing_it_states =>
     Test/all([
         is(
             "GET /x?y=1 HTTP/1.1\r\nHost: example.com\r\n\r\n",
@@ -62,7 +62,7 @@ test a_request_reads_by_the_framing_it_states =
         is("GET / HTTP/1.0\r\nHost: h\r\n\r\n", Method/get(), "http://h/", "")]);
 
 -- A request whose framing cannot be read is answered 400, a coding before `chunked` 501, and one that has not all arrived is cut short.
-test a_request_that_cannot_be_framed_is_refused =
+test a_request_that_cannot_be_framed_is_refused =>
     Test/all([
         answers("POST / HTTP/1.1\r\nHost: h\r\nContent-Length: abc\r\n\r\nhello", 400),
         answers("POST / HTTP/1.1\r\nHost: h\r\nContent-Length: +5\r\n\r\nhello", 400),
@@ -97,7 +97,7 @@ test a_request_that_cannot_be_framed_is_refused =
         Test/equal(read(""), Result/failure(Refusal/incomplete()))]);
 
 -- A request line is a method, a target and a version between single spaces: a method the library does not name is not implemented, a major version other than 1 not supported, and any other line that is none is malformed.
-test a_request_line_is_a_method_a_target_and_a_version =
+test a_request_line_is_a_method_a_target_and_a_version =>
     Test/all([
         answers("TRACE / HTTP/1.1\r\nHost: h\r\n\r\n", 501),
         answers("get / HTTP/1.1\r\nHost: h\r\n\r\n", 501),
@@ -110,7 +110,7 @@ test a_request_line_is_a_method_a_target_and_a_version =
         answers("GET / HTTP/1.1\nHost: h\n\n", 400)]);
 
 -- A request is addressed to the authority its one `Host` states, or to its target's where that is a whole URL: none, two, or one that is no authority is refused at either version, as is a target that is neither a path nor a URL.
-test a_request_is_addressed_by_its_host_or_its_target =
+test a_request_is_addressed_by_its_host_or_its_target =>
     Test/all([
         is("GET http://a/b HTTP/1.1\r\nHost: h\r\n\r\n", Method/get(), "http://a/b", ""),
         is(
@@ -134,7 +134,7 @@ test a_request_is_addressed_by_its_host_or_its_target =
         answers("GET ftp://a/b HTTP/1.1\r\nHost: h\r\n\r\n", 400)]);
 
 -- A field line is a token, a colon and a value: one that is not is refused, not repaired, and a value's octets past ASCII are the value.
-test a_request_field_line_is_refused_or_read_as_it_is =
+test a_request_field_line_is_refused_or_read_as_it_is =>
     Test/all([
         answers("POST / HTTP/1.1\r\nHost: h\r\nContent-Length : 2\r\n\r\nhi", 400),
         answers("GET / HTTP/1.1\r\n X-A: one\r\nHost: h\r\n\r\n", 400),
@@ -156,9 +156,9 @@ test a_request_field_line_is_refused_or_read_as_it_is =
             Result/success(Field/Value/of_bytes(0x['c', 'a', 'f', 0xE9])))]);
 
 -- A request line past its bound is answered 414, a head past its own 431, and content past its own 413, the last before any of it is read.
-test a_request_past_a_bound_is_refused_by_the_bound =
+test a_request_past_a_bound_is_refused_by_the_bound =>
     let small = Limits { line = 32, head = 64, content = 4, chunk_line = 8 };
-    let under(s: Str) -> Option(Nat) =
+    let under(s: Str) -> Option(Nat) =>
         match Request/of_bytes(small, Url/Scheme/http(), Str/to_bytes(s))
         | success(_) => Option/none()
         | failure(why) => Option/some(Response/of_refusal(why).status.code)
@@ -191,13 +191,13 @@ test a_request_past_a_bound_is_refused_by_the_bound =
                 "POST / HTTP/1.1\r\nHost: h\r\nTransfer-Encoding: chunked\r\n\r\n3;extension=long\r\nabc\r\n0\r\n\r\n"),
             Option/some(400))]);
 
-let addressed(head: Str) -> Result(Refusal, Request/Address) =
+let addressed(head: Str) -> Result(Refusal, Request/Address) =>
     Result/bind(
         Request/head_of(Str/to_bytes(head)),
         (read) => Request/address_of(Url/Scheme/http(), read));
 
 -- `OPTIONS` asks about a resource as any method does, and about the server itself where its target is `*`, which no other method's is and under which HTTP/1.1 still owes its `Host`. A request for the server is no `Request`, since it has no URL.
-test options_is_asked_of_a_resource_or_of_the_server =
+test options_is_asked_of_a_resource_or_of_the_server =>
     Test/all([
         is("OPTIONS /x HTTP/1.1\r\nHost: h\r\n\r\n", Method/options(), "http://h/x", ""),
         Test/equal(

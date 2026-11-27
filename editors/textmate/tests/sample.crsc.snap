@@ -227,16 +227,16 @@
 #^^^^^^^^ source.curios.core
 #        ^ source.curios.core variable.other.curios
 #         ^ source.curios.core punctuation.separator.curios
->test /held = 1;
+>test /held => 1;
 #^^^^ source.curios.core keyword.control.curios
 #    ^ source.curios.core
 #     ^ source.curios.core punctuation.separator.path.curios
 #      ^^^^ source.curios.core entity.name.function.curios
 #          ^ source.curios.core
-#           ^ source.curios.core keyword.operator.assignment.curios
-#            ^ source.curios.core
-#             ^ source.curios.core constant.numeric.decimal.curios
-#              ^ source.curios.core punctuation.separator.curios
+#           ^^ source.curios.core keyword.operator.arrow.curios
+#             ^ source.curios.core
+#              ^ source.curios.core constant.numeric.decimal.curios
+#               ^ source.curios.core punctuation.separator.curios
 >let /m/witness~/std/ops/Add(Nat)#1 : (use w: /C()) -> #BoolType = /m/witness~3;
 #^^^ source.curios.core keyword.control.curios
 #   ^ source.curios.core

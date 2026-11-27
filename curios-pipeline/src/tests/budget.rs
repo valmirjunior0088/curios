@@ -35,12 +35,12 @@ fn smallest(accepted: impl Fn(u64) -> bool) -> u64 {
 
 /// Twelve aliases, each applying the one before it twice, so reading through the last costs four thousand unfoldings.
 fn aliases() -> String {
-    let mut source = String::from("let W1(A: Type) -> Type = A;\n");
+    let mut source = String::from("let W1(A: Type) -> Type => A;\n");
     for index in 2..=12 {
         let below = index - 1;
         writeln!(
             source,
-            "let W{index}(A: Type) -> Type = W{below}(W{below}(A));"
+            "let W{index}(A: Type) -> Type => W{below}(W{below}(A));"
         )
         .unwrap();
     }
@@ -83,7 +83,7 @@ fn value_over(sort: &str) -> String {
     let mut source = aliases();
     writeln!(
         source,
-        "induct B: Type\n| b()\nend\nlet value(@S1: {sort}, @S2: {sort}, @S3: {sort}, s1: S1, s2: S2, s3: S3) -> W12(B) = B/b();"
+        "induct B: Type\n| b()\nend\nlet value(@S1: {sort}, @S2: {sort}, @S3: {sort}, s1: S1, s2: S2, s3: S3) -> W12(B) => B/b();"
     )
     .unwrap();
     source.push_str("/std/Io/pure(())\n");
@@ -167,7 +167,7 @@ fn a_program_is_taken_under_the_same_budget_whatever_its_scope_holds() {
     let mut library = String::from("use /std/{Show, Str};\n");
     for index in 1..=128 {
         library.push_str(&fill!(
-            "pub induct B${index}: pub Type\n| b${index}()\nend\nsatisfy Show(B${index}) {\n    show(_) = \"b\",\n}\n",
+            "pub induct B${index}: pub Type\n| b${index}()\nend\nsatisfy Show(B${index}) {\n    show(_) => \"b\",\n}\n",
             index
         ));
     }

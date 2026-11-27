@@ -86,14 +86,14 @@ induct Shade: Type
 | dark(Nat)
 end
 satisfy Show(Shade) {
-    show(_) = \"shade\",
+    show(_) => \"shade\",
 }
 let made: Pair(Nat) = Pair { first = 1, second = 2 };
-let read(held: Pair(Nat)) -> Nat = held.second;
-let opened(held: Pair(Nat)) -> Nat =
+let read(held: Pair(Nat)) -> Nat => held.second;
+let opened(held: Pair(Nat)) -> Nat =>
     let Pair { first = inner, second = _ } = held;
     inner;
-let toned(shade: Shade) -> Nat =
+let toned(shade: Shade) -> Nat =>
     match shade
     | light() => 0
     | dark(depth) => depth

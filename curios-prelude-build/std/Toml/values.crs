@@ -7,35 +7,35 @@ use /std/Toml/keys/{key_dotted};
 use /std/Toml/numbers/{flt_number, flt_special, int_value};
 use /std/Toml/date_time/{date_time_value};
 
-let str_basic_value() -> Parse(Str, Toml) =
+let str_basic_value() -> Parse(Str, Toml) =>
     Parse/map(Parse/or(str_ml_basic(), str_basic()), (s) => Toml/str(s));
 
-let str_literal_value() -> Parse(Str, Toml) =
+let str_literal_value() -> Parse(Str, Toml) =>
     Parse/map(Parse/or(str_ml_literal(), str_literal()), (s) => Toml/str(s));
 
-let true_value() -> Parse(Str, Toml) =
+let true_value() -> Parse(Str, Toml) =>
     Parse/map(Parse/str/literal("true"), (()) => Toml/bool(true));
 
-let false_value() -> Parse(Str, Toml) =
+let false_value() -> Parse(Str, Toml) =>
     Parse/map(Parse/str/literal("false"), (()) => Toml/bool(false));
 
-let signed_number_value() -> Parse(Str, Toml) =
+let signed_number_value() -> Parse(Str, Toml) =>
     Parse/or(flt_number(), Parse/or(int_value(), flt_special()));
 
-let special_value() -> Parse(Str, Toml) =
+let special_value() -> Parse(Str, Toml) =>
     Parse/label(flt_special(), "expected value");
 
-let digit_led_value() -> Parse(Str, Toml) =
+let digit_led_value() -> Parse(Str, Toml) =>
     Parse/or(date_time_value(), Parse/or(flt_number(), int_value()));
 
-let inline_comma() -> Parse(Str, {}) =
+let inline_comma() -> Parse(Str, {}) =>
     let _ = Parse/str/expect(',')!;
     ws();
 
-let array_value() -> Parse(Str, Toml) =
+let array_value() -> Parse(Str, Toml) =>
     let _ = Parse/label(Parse/str/expect('['), "expected array")!;
     array_items([])
-and array_items(acc: List(Toml)) -> Parse(Str, Toml) =
+and array_items(acc: List(Toml)) -> Parse(Str, Toml) =>
     let () = trivia()!;
     let closed = Parse/optional(Parse/str/expect(']'))!;
     match closed
@@ -55,7 +55,7 @@ and array_items(acc: List(Toml)) -> Parse(Str, Toml) =
             end
         end
     end
-and inline_table_value() -> Parse(Str, Toml) =
+and inline_table_value() -> Parse(Str, Toml) =>
     let _ = Parse/label(Parse/str/expect('{'), "expected inline table")!;
     let () = ws()!;
     let empty = Parse/optional(Parse/str/expect('}'))!;
@@ -69,7 +69,7 @@ and inline_table_value() -> Parse(Str, Toml) =
         | failure(e) => Parse/fail(Error/message(e))
         end
     end
-and inline_pair() -> Parse(Str, {List(Str), Toml}) =
+and inline_pair() -> Parse(Str, {List(Str), Toml}) =>
     let path = key_dotted()!;
     let () = ws()!;
     let _ = Parse/label(Parse/str/expect('='), "expected '=' in inline table")!;
@@ -77,7 +77,7 @@ and inline_pair() -> Parse(Str, {List(Str), Toml}) =
     let v = value()!;
     let () = ws()!;
     Parse/pure((path, v))
-pub and value() -> Parse(Str, Toml) =
+pub and value() -> Parse(Str, Toml) =>
     let next = Parse/str/peek()!;
     match next
     | none() => Parse/fail("expected value")

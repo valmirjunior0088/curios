@@ -16,7 +16,7 @@ fn a_type_level_rec_cannot_tie_the_negative_knot() {
 
         let Bad : Type = Sink({});
 
-        let delta(x : Bad) -> /std/Bool/False =
+        let delta(x : Bad) -> /std/Bool/False =>
             match x
             | sink(g) => g(())
             end;
@@ -45,9 +45,9 @@ fn a_type_level_rec_cannot_tie_the_negative_knot() {
 fn a_term_whose_type_reduces_to_a_sort_is_a_type_position() {
     control(
         r#"
-        let _U(k: /std/Nat) -> Type = match k | 0 => Type | _ + 1 => Type end;
+        let _U(k: /std/Nat) -> Type => match k | 0 => Type | _ + 1 => Type end;
 
-        let _T(k: /std/Nat) -> _U(k) =
+        let _T(k: /std/Nat) -> _U(k) =>
             match k
             | 0 => /std/Nat
             | j + 1 => match j | 0 => /std/Nat | _ + 1 => _T(j) end
@@ -80,7 +80,7 @@ fn a_partial_type_behind_a_projection_is_still_a_type() {
 
         let P : {Type, /std/Nat} = (Sink({}), 0);
 
-        let delta(x : P.0) -> /std/Bool/False =
+        let delta(x : P.0) -> /std/Bool/False =>
             match x
             | sink(g) => g(())
             end;
@@ -118,7 +118,7 @@ fn a_total_type_function_applied_to_a_partial_value_ties_no_knot() {
         | more(rest : F)
         end
 
-        let Shape(f : F) -> Type =
+        let Shape(f : F) -> Type =>
             match f
             | stop() => {}
             | more(rest) => Sink(Shape(rest))
@@ -126,7 +126,7 @@ fn a_total_type_function_applied_to_a_partial_value_ties_no_knot() {
 
         let inf : F = F/more(inf);
 
-        let delta(x : Shape(F/more(F/stop()))) -> /std/Bool/False =
+        let delta(x : Shape(F/more(F/stop()))) -> /std/Bool/False =>
             match x
             | sink(g) => g(())
             end;
@@ -161,7 +161,7 @@ fn the_entrypoint_expression_is_not_a_blind_spot() {
         end
 
         /std/print((() =>
-            let forge(x : (() => let Bad : Type = Sink({}); Bad)()) -> {} = ();
+            let forge(x : (() => let Bad : Type = Sink({}); Bad)()) -> {} => ();
             "ok")()
         )
         "#,
@@ -180,7 +180,7 @@ fn a_type_level_rec_through_an_arrow_is_diagnosed_not_aborted() {
         r#"
         let Bad : Prop = ({}) -> /std/Bool/False;
 
-        let delta(x : Bad) -> /std/Bool/False = x(());
+        let delta(x : Bad) -> /std/Bool/False => x(());
 
         let boom = delta;
 
@@ -207,7 +207,7 @@ fn a_local_type_level_rec_through_an_arrow_is_diagnosed_too() {
     control(
         r#"
         /std/print((() =>
-            let forge(x : (() => let Bad : Prop = ({}) -> /std/Bool/False; Bad)()) -> {} = ();
+            let forge(x : (() => let Bad : Prop = ({}) -> /std/Bool/False; Bad)()) -> {} => ();
             "ok")()
         )
         "#,
@@ -228,7 +228,7 @@ fn a_partial_definition_stays_usable_in_a_program() {
     let source = r#"
         use /std/{Nat};
 
-        let collatz(n : Nat, steps : Nat) -> Nat =
+        let collatz(n : Nat, steps : Nat) -> Nat =>
             match
             | n <= 1 => steps
             | n % 2 == 0 => collatz(n / 2, steps + 1)
@@ -252,7 +252,7 @@ fn a_non_productive_type_level_loop_stays_folded_not_exhausted() {
         | more(rest : F)
         end
 
-        let Shape(f : F) -> Type =
+        let Shape(f : F) -> Type =>
             match f
             | stop() => Nat
             | more(rest) => Shape(rest)
@@ -260,7 +260,7 @@ fn a_non_productive_type_level_loop_stays_folded_not_exhausted() {
 
         let inf : F = F/more(inf);
 
-        let here(x : Shape(F/stop())) -> Nat = 0;
+        let here(x : Shape(F/stop())) -> Nat => 0;
 
         /std/print(Nat/to_str(here(7)))
         "#,
@@ -286,7 +286,7 @@ fn a_productive_type_level_loop_in_a_struct_field_stays_folded() {
         | more(rest : F)
         end
 
-        let Shape(f : F) -> Type =
+        let Shape(f : F) -> Type =>
             match f
             | stop() => {}
             | more(rest) => Sink(Shape(rest))
@@ -314,7 +314,7 @@ fn a_non_productive_type_level_loop_in_a_struct_field_stays_folded_too() {
         | more(rest : F)
         end
 
-        let Shape(f : F) -> Type =
+        let Shape(f : F) -> Type =>
             match f
             | stop() => Nat
             | more(rest) => Shape(rest)
@@ -324,7 +324,7 @@ fn a_non_productive_type_level_loop_in_a_struct_field_stays_folded_too() {
 
         struct Holder : pub Type { x : Shape(F/more(F/stop())) }
 
-        let take(h : Holder) -> Nat = h.x;
+        let take(h : Holder) -> Nat => h.x;
 
         /std/print(Nat/to_str(take(Holder { x = 7 })))
         "#,
@@ -360,7 +360,7 @@ fn a_payload_application_that_reaches_a_partial_function_stays_folded() {
         | z()
         end
 
-        let Bad(x : F) -> Type =
+        let Bad(x : F) -> Type =>
             match x
             | c(g) => Bad(g(0))
             | z() => {}
@@ -398,12 +398,12 @@ fn a_payload_descent_is_sound_only_because_a_partial_producer_is_refused_as_a_pr
         | node(f : (Nat) -> Fam)
         end
 
-        let drop(x : Fam) -> False =
+        let drop(x : Fam) -> False =>
             match x
             | node(f) => drop(f(0))
             end;
 
-        let grow(n : Nat) -> Fam = Fam/node((m) => grow(m));
+        let grow(n : Nat) -> Fam => Fam/node((m) => grow(m));
 
         /std/print("ok")
         "#,
@@ -427,13 +427,13 @@ fn a_partial_prelude_definition_stays_folded_in_a_user_unit() {
         r#"
         use /std/{Nat, Json, Str, Option};
 
-        let Bad(s : Str) -> Type =
+        let Bad(s : Str) -> Type =>
             match Option/to_result(Option/some(s), 0)
             | success(_) => Nat
             | failure(_) => {}
             end;
 
-        let held(s : Str, x : Bad(s)) -> Nat = 0;
+        let held(s : Str, x : Bad(s)) -> Nat => 0;
 
         /std/print(Nat/to_str(held("1", 0)))
         "#,
@@ -460,19 +460,19 @@ fn a_proof_or_type_that_may_not_terminate_is_refused_wherever_it_stands() {
         induct Wit: Type | w(p: Claim) end
         concept Lawful(A: Type): Type { op(A) -> A, law(x: A) -> Claim }
 
-        let spin(u: {}) -> Box = Box { p = True/qed() };
-        let decide(u: {}) -> Bool = true;
-        let take(@_: Claim) -> Nat = 0;
+        let spin(u: {}) -> Box => Box { p = True/qed() };
+        let decide(u: {}) -> Bool => true;
+        let take(@_: Claim) -> Nat => 0;
 
         pub let in_a_let: Nat = let _: Claim = spin(()).p; 0;
         pub let in_a_field: Box = Box { p = spin(()).p };
         pub let in_a_payload: Wit = Wit/w(spin(()).p);
         pub let in_an_implicit: Nat = take(@spin(()).p);
-        satisfy Lawful(Nat) { op(x) = x, law(_) = spin(()).p }
-        pub let in_a_signature(_: Holds(decide(()))) -> Nat = 0;
-        pub let in_a_groups_tail: Nat = let h(u: {}) -> Box = Box { p = True/qed() }; let _: Claim = h(()).p; 0;
-        pub let in_a_type_in_a_groups_tail: Nat = let d(u: {}) -> Bool = true; let f(_: Holds(d(()))) -> Nat = 0; 0;
-        pub let in_a_lets_tail: Nat = let g: ({}) -> Box = (() => let h(u: {}) -> Box = Box { p = True/qed() }; h)(); let _: Claim = g(()).p; 0;
+        satisfy Lawful(Nat) { op(x) => x, law(_) => spin(()).p }
+        pub let in_a_signature(_: Holds(decide(()))) -> Nat => 0;
+        pub let in_a_groups_tail: Nat = let h(u: {}) -> Box => Box { p = True/qed() }; let _: Claim = h(()).p; 0;
+        pub let in_a_type_in_a_groups_tail: Nat = let d(u: {}) -> Bool => true; let f(_: Holds(d(()))) -> Nat => 0; 0;
+        pub let in_a_lets_tail: Nat = let g: ({}) -> Box = (() => let h(u: {}) -> Box => Box { p = True/qed() }; h)(); let _: Claim = g(()).p; 0;
 
         /std/print(Nat/to_str(in_a_let + in_an_implicit + in_a_signature(True/qed())))
         "#,
@@ -480,11 +480,11 @@ fn a_proof_or_type_that_may_not_terminate_is_refused_wherever_it_stands() {
     )
     .refused(&[
         ("let Claim : Prop = True;", "let Claim : Prop = False;"),
-        ("let spin(u: {}) -> Box = Box { p = True/qed() };", "let spin(u: {}) -> Box = spin(u);"),
-        ("let decide(u: {}) -> Bool = true;", "let decide(u: {}) -> Bool = decide(u);"),
-        ("let h(u: {}) -> Box = Box { p = True/qed() }; let _", "let h(u: {}) -> Box = h(u); let _"),
-        ("let d(u: {}) -> Bool = true;", "let d(u: {}) -> Bool = d(u);"),
-        ("(() => let h(u: {}) -> Box = Box { p = True/qed() }; h)()", "(() => let h(u: {}) -> Box = h(u); h)()"),
+        ("let spin(u: {}) -> Box => Box { p = True/qed() };", "let spin(u: {}) -> Box => spin(u);"),
+        ("let decide(u: {}) -> Bool => true;", "let decide(u: {}) -> Bool => decide(u);"),
+        ("let h(u: {}) -> Box => Box { p = True/qed() }; let _", "let h(u: {}) -> Box => h(u); let _"),
+        ("let d(u: {}) -> Bool => true;", "let d(u: {}) -> Bool => d(u);"),
+        ("(() => let h(u: {}) -> Box => Box { p = True/qed() }; h)()", "(() => let h(u: {}) -> Box => h(u); h)()"),
     ]);
 
     for at in [
@@ -538,8 +538,8 @@ fn a_group_inside_a_term_is_judged_at_every_assignment_of_its_declarations_sorts
         use /std/{Nat};
         use /std/Bool/{False};
 
-        let spin(@A: Type, n: Nat) -> A =
-            let loop(k: Nat) -> A = loop(k);
+        let spin(@A: Type, n: Nat) -> A =>
+            let loop(k: Nat) -> A => loop(k);
             loop(n);
 
         let boom = (n: Nat) => spin(@Nat, n);
@@ -580,7 +580,7 @@ fn a_ruled_out_arm_of_a_closed_match_on_data_is_reached_by_no_reduction() {
         | c(): (0)
         end
 
-        pub let loop(u: {}) -> F(0) = F/c();
+        pub let loop(u: {}) -> F(0) => F/c();
 
         pub let T: Prop = match loop(()) | c() => True end;
         pub let typed: T = True/qed();
@@ -592,7 +592,7 @@ fn a_ruled_out_arm_of_a_closed_match_on_data_is_reached_by_no_reduction() {
     )
     .refused(&[
         ("use /std/Bool/{True};", "use /std/Bool/{True, False};"),
-        ("-> F(0) = F/c();", "-> F(1) = loop(u);"),
+        ("-> F(0) => F/c();", "-> F(1) => loop(u);"),
         ("pub let forged: True", "pub let forged: False"),
     ]);
 
@@ -614,8 +614,8 @@ fn a_family_whose_index_type_names_a_loop_stays_folded() {
         r#"
         use /std/{Nat, Eq};
 
-        let fine(n: Nat) -> Nat = n;
-        let spin(n: Nat) -> Nat = spin(n);
+        let fine(n: Nat) -> Nat => n;
+        let spin(n: Nat) -> Nat => spin(n);
 
         induct F: (p: Eq()(fine(0), 0)) -> Type
         | f(): (Eq/refl())
@@ -639,12 +639,12 @@ fn a_proof_scrutinee_naming_a_loop_is_refused_by_name_and_not_by_the_budget() {
         r#"
         use /std/{Nat, Eq};
 
-        let fine(n: Nat) -> Nat = n;
-        let spin(n: Nat) -> Nat = spin(n);
+        let fine(n: Nat) -> Nat => n;
+        let spin(n: Nat) -> Nat => spin(n);
 
-        let lemma(@n: Nat) -> Eq()(n, n) = Eq/refl();
+        let lemma(@n: Nat) -> Eq()(n, n) => Eq/refl();
 
-        let v() -> Nat = match lemma(@fine(0)) | refl() => 0 end;
+        let v() -> Nat => match lemma(@fine(0)) | refl() => 0 end;
 
         /std/print(Nat/to_str(v()))
         "#,
@@ -678,11 +678,11 @@ fn a_type_naming_a_loop_it_never_applies_is_accepted() {
     let preamble = r#"
         use /std/{Nat, List, Io, Vec};
 
-        let spin(n: Nat) -> Io(Nat) = Io/bind(Io/yield(), (()) => spin(n));
+        let spin(n: Nat) -> Io(Nat) => Io/bind(Io/yield(), (()) => spin(n));
     "#;
     for program in [
         r#"
-        let take(v: Vec(Io(Nat), List/length(List/map([1, 2, 3], spin)))) -> Nat = Vec/length(v);
+        let take(v: Vec(Io(Nat), List/length(List/map([1, 2, 3], spin)))) -> Nat => Vec/length(v);
 
         /std/print(Nat/to_str(take(Vec/of_list(List/map([1, 2, 3], spin)))))
         "#,
@@ -692,22 +692,22 @@ fn a_type_naming_a_loop_it_never_applies_is_accepted() {
             run(T) -> Io(Answers),
         }
 
-        satisfy (@A: Type, @B: Type) => Joint({Io(A), Io(B)}) {
+        satisfy (@A: Type, @B: Type) -> Joint({Io(A), Io(B)}) {
             Answers = {A, B},
-            run(t) = Io/both(t.0, t.1),
+            run(t) => Io/both(t.0, t.1),
         }
 
-        let all_of(@T: Type, use Joint(T), actions: T) -> Io(Joint/Answers(@T)) =
+        let all_of(@T: Type, use Joint(T), actions: T) -> Io(Joint/Answers(@T)) =>
             Joint/run(actions);
 
-        let main() -> Io({}) =
+        let main() -> Io({}) =>
             let (a, b) = all_of((Io/pure(1), Io/pure(2)))!;
             /std/print(Nat/to_str(a + b));
 
         main()
         "#,
         r#"
-        let all_counted(@A: Type, actions: List(Io(A))) -> Io(Vec(A, List/length(actions))) =
+        let all_counted(@A: Type, actions: List(Io(A))) -> Io(Vec(A, List/length(actions))) =>
             match actions
             | [] => Io/pure(Vec/nil())
             | [a, ..more] =>
@@ -716,9 +716,9 @@ fn a_type_naming_a_loop_it_never_applies_is_accepted() {
                 Io/pure(Vec/cons(x, rest))
             end;
 
-        let counted() -> Nat = Vec/length(Vec/of_list(List/map([1, 2, 3], spin)));
+        let counted() -> Nat => Vec/length(Vec/of_list(List/map([1, 2, 3], spin)));
 
-        let main() -> Io(Nat) =
+        let main() -> Io(Nat) =>
             let answers = all_counted(List/map([4, 5, 6], (n: Nat) => Io/pure(n)))!;
             Io/pure(Vec/length(answers) + counted());
 
@@ -742,9 +742,9 @@ fn a_family_behind_a_stuck_loop_is_held_to_positivity() {
         | c(): (0)
         end
 
-        let loop(u: {}) -> F(1) = loop(u);
+        let loop(u: {}) -> F(1) => loop(u);
 
-        let G(x: F(1), A: Type) -> Type = match x | c() => A end;
+        let G(x: F(1), A: Type) -> Type => match x | c() => A end;
 
         induct B: Type
         | mk(f: (G(loop(()), Nat)) -> False)
@@ -768,10 +768,10 @@ fn a_proof_standing_in_a_type_and_naming_a_loop_is_refused() {
         use /std/{Nat, Eq};
         use /std/Bool/{True};
 
-        let fine(n: Nat) -> Nat = n;
-        let spin(n: Nat) -> Nat = spin(n);
+        let fine(n: Nat) -> Nat => n;
+        let spin(n: Nat) -> Nat => spin(n);
 
-        let lemma(@n: Nat) -> Eq()(n, n) = Eq/refl();
+        let lemma(@n: Nat) -> Eq()(n, n) => Eq/refl();
 
         let T: Prop = match lemma(@fine(0)) | refl() => True end;
 
@@ -815,7 +815,7 @@ fn a_family_instantiated_at_a_loop_ties_no_knot() {
         | more(rest : F)
         end
 
-        let Shape(f : F) -> Type =
+        let Shape(f : F) -> Type =>
             match f
             | stop() => {}
             | more(rest) => Sink(Shape(rest))
@@ -827,7 +827,7 @@ fn a_family_instantiated_at_a_loop_ties_no_knot() {
         | mk(x : Shape(f))
         end
 
-        let delta(t : Trap(F/more(F/stop()))) -> /std/Bool/False =
+        let delta(t : Trap(F/more(F/stop()))) -> /std/Bool/False =>
             match t
             | mk(x) => match x | sink(g) => g(()) end
             end;

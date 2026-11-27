@@ -21,7 +21,7 @@ pub let blank: Tile =
     Tile/glyph(Glyph/space, Style/plain);
 
 --- The tiles `g` takes in `style`: itself, and a continuation where it is wide.
-pub let of_glyph(g: Glyph, style: Style) -> List(Tile) =
+pub let of_glyph(g: Glyph, style: Style) -> List(Tile) =>
     match Glyph/width(g) == 2
     | true => [Tile/glyph(g, style), Tile/continuation()]
     | false => [Tile/glyph(g, style)]

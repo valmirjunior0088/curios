@@ -24,10 +24,10 @@ satisfy Spell(Framing) {
     ..
 }
 
-let present(headers: List(Field), name: Str) -> Bool =
+let present(headers: List(Field), name: Str) -> Bool =>
     List/any(headers, (f: Field) => Field/Name/is(f.name, name));
 
-let is_chunked(coding: Bytes) -> Bool =
+let is_chunked(coding: Bytes) -> Bool =>
     match Str/of_bytes(coding)
     | success(s) => Str/eql_ignoring_ascii_case(s, "chunked")
     | failure(_) => false
@@ -41,7 +41,7 @@ induct Codings: Type
 | other_last()
 end
 
-let codings(headers: List(Field)) -> Codings =
+let codings(headers: List(Field)) -> Codings =>
     match present(headers, "Transfer-Encoding")
     | false => Codings/absent()
     | true =>
@@ -56,7 +56,7 @@ let codings(headers: List(Field)) -> Codings =
     end;
 
 -- The length `Content-Length` states: none where the field is absent, the number where every member of its list is that one number, and a refusal otherwise.
-let stated(headers: List(Field)) -> Result(Refusal, Option(Nat)) =
+let stated(headers: List(Field)) -> Result(Refusal, Option(Nat)) =>
     match present(headers, "Content-Length")
     | false => Result/success(Option/none())
     | true =>
@@ -71,7 +71,7 @@ let stated(headers: List(Field)) -> Result(Refusal, Option(Nat)) =
     end;
 
 --- How a request's body is delimited. `Transfer-Encoding` is read ahead of `Content-Length`, and alone where both are there; its codings are `chunked` and nothing else, one that does not end in `chunked` being unframeable and one that has another coding before it not implemented; and in an HTTP/1.0 request it is faulty framing. A request with neither field has no body.
-pub let of_request(version: Version, headers: List(Field)) -> Result(Refusal, Framing) =
+pub let of_request(version: Version, headers: List(Field)) -> Result(Refusal, Framing) =>
     match codings(headers)
     | absent() =>
         let length = stated(headers)!;
@@ -97,7 +97,7 @@ pub let of_reply(
     code: Nat,
     version: Version,
     headers: List(Field),
-) -> Result(Refusal, Framing) =
+) -> Result(Refusal, Framing) =>
     match method == Method/head() || Status/bodiless(code)
     | true => Result/success(Framing/none())
     | false =>

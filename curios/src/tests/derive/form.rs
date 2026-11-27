@@ -31,7 +31,7 @@ fn a_derived_body_reaching_a_proof_is_held_to_termination_as_its_written_body_is
         use /std/Bool/{False, Holds};
         induct Tree: Type | leaf(Nat) | node(Tree, Tree) end
         satisfy Hash(Tree) { .. }
-        let _apart(h: Holds(Hash/hash(Tree/leaf(1)) == Hash/hash(Tree/leaf(2)))) -> False = h;
+        let _apart(h: Holds(Hash/hash(Tree/leaf(1)) == Hash/hash(Tree/leaf(2)))) -> False => h;
         /std/print("")
         "#;
     let written = r#"
@@ -39,12 +39,12 @@ fn a_derived_body_reaching_a_proof_is_held_to_termination_as_its_written_body_is
         use /std/Bool/{False, Holds};
         induct Tree: Type | leaf(Nat) | node(Tree, Tree) end
         satisfy Hash(Tree) {
-            hash(t) = match t
+            hash(t) => match t
                 | leaf(x) => 0x[..Nat/hash(0), ..Hash/hash(x)]
                 | node(l, r) => 0x[..Nat/hash(1), ..Hash/delimited(Hash/hash(l)), ..Hash/hash(r)]
                 end,
         }
-        let _apart(h: Holds(Hash/hash(Tree/leaf(1)) == Hash/hash(Tree/leaf(2)))) -> False = h;
+        let _apart(h: Holds(Hash/hash(Tree/leaf(1)) == Hash/hash(Tree/leaf(2)))) -> False => h;
         /std/print("")
         "#;
 
@@ -151,7 +151,7 @@ fn a_private_representation_refuses_the_derivation_outside_its_module() {
 fn a_missing_premise_is_advised_as_its_reader_spells_the_concept() {
     let advised = r#"
         induct Tree(A: Type): pub Type | leaf(A) | node(Tree(A), Tree(A)) end
-        satisfy (@A: Type) => /std/Spell(Tree(A)) { .. }
+        satisfy (@A: Type) -> /std/Spell(Tree(A)) { .. }
         /std/print("")
         "#;
     let report = error(advised);
@@ -164,7 +164,7 @@ fn a_missing_premise_is_advised_as_its_reader_spells_the_concept() {
 
     let pasted = r#"
         induct Tree(A: Type): pub Type | leaf(A) | node(Tree(A), Tree(A)) end
-        satisfy (@A: Type, use /std/Spell(A)) => /std/Spell(Tree(A)) { .. }
+        satisfy (@A: Type, use /std/Spell(A)) -> /std/Spell(Tree(A)) { .. }
         /std/print("ok")
         "#;
     assert_eq!(run(pasted), b"ok");
@@ -175,7 +175,7 @@ fn a_missing_payload_witness_names_the_payload_and_the_premise_to_add() {
     let premise = r#"
         use /std/{Str, Spell};
         induct Box(A: Type): pub Type | boxed(A) end
-        satisfy (@A: Type) => Spell(Box(A)) { .. }
+        satisfy (@A: Type) -> Spell(Box(A)) { .. }
         /std/print("")
         "#;
     let report = error(premise);
@@ -209,7 +209,7 @@ fn a_derived_witness_lowers_to_the_derive_transient() {
         induct Point: pub Type | origin() end
         induct Wrap(A: Type): pub Type | wrap(A) end
         satisfy Show(Point) { .. }
-        satisfy (@A: Type, use Show(A)) => Show(Wrap(A)) { .. }
+        satisfy (@A: Type, use Show(A)) -> Show(Wrap(A)) { .. }
         /std/print("")
         "#;
 
@@ -255,7 +255,7 @@ fn a_concept_without_a_derivation_is_refused_by_name() {
     let premised = r#"
         use /std/{Str, Show};
         induct Wrap(A: Type): pub Type | wrap(A) end
-        satisfy (@A: Type, use Show(A)) => Show(Wrap(A)) { .. }
+        satisfy (@A: Type, use Show(A)) -> Show(Wrap(A)) { .. }
         /std/print("")
         "#;
     assert!(
@@ -289,7 +289,7 @@ fn the_signature_refusals_fire_on_a_derived_witness_as_on_a_written_one() {
             show(A) -> Str
         }
         satisfy Show(Nat) {
-            show(n) = Nat/to_str(n)
+            show(n) => Nat/to_str(n)
         }
         satisfy Show(Nat) { .. }
         /std/print("")
@@ -311,7 +311,7 @@ fn a_parameterized_head_is_refused_as_a_written_witness_is() {
         use /std/{Str, Show};
         induct Tree(A: Type): pub Type | leaf(A) end
         satisfy Show(Tree) {
-            show(t) = "",
+            show(t) => "",
         }
         /std/print("")
         "#;
@@ -347,7 +347,7 @@ fn a_sealed_concept_refuses_a_derived_witness_outside_its_module() {
                 tag(A) -> Str
             }
             satisfy Tag(Nat) {
-                tag(n) = Nat/to_str(n)
+                tag(n) => Nat/to_str(n)
             }
         end
         use Guard/{Tag};

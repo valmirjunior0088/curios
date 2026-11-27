@@ -13,13 +13,13 @@ fn a_concept_field_may_carry_a_type() {
         }
         satisfy Sized(Nat) {
             Carrier = Nat,
-            pick() = Bool,
+            pick() => Bool,
         }
         let alias : Type = Sized/Carrier(@Nat);
         let v : alias = 3;
         let picked : Type = Sized/pick(@Nat);
         let b : picked = true;
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let _ = /std/print(Nat/to_str(v))!;
             match b
             | true => /std/print("t")
@@ -59,12 +59,12 @@ fn two_calls_of_a_method_under_a_stated_precondition_are_one_atom() {
             step(a : A) -> A,
         }
         satisfy Guarded(Nat) {
-            Ok(a) = Holds(true),
-            step(a) = a - 16,
+            Ok(a) => Holds(true),
+            step(a) => a - 16,
         }
-        let low(n : Nat) -> Nat =
+        let low(n : Nat) -> Nat =>
             match n < 16 | true => n | false => low(Guarded/step(n)) end;
-        let moved(m : Nat, b : Nat, lows : Holds(low(m) == low(b))) -> True =
+        let moved(m : Nat, b : Nat, lows : Holds(low(m) == low(b))) -> True =>
             match m < 16
             | true => True/qed()
             | false =>

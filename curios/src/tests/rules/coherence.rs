@@ -14,7 +14,7 @@ fn duplicate_witness_is_an_error() {
             show(A) -> Str
         }
         satisfy Show(Nat) {
-            show(n) = Nat/to_str(n)
+            show(n) => Nat/to_str(n)
         }
         let n : Nat = 1;
         /std/print(Show/show(n))
@@ -22,7 +22,7 @@ fn duplicate_witness_is_an_error() {
         b"1",
     )
     .refused(&[
-        ("        let n : Nat = 1;", "        satisfy Show(Nat) {\n            show(n) = Nat/to_str(n)\n        }\n        let n : Nat = 1;"),
+        ("        let n : Nat = 1;", "        satisfy Show(Nat) {\n            show(n) => Nat/to_str(n)\n        }\n        let n : Nat = 1;"),
     ])
     .by_elaborator_in("/witness~/Show(Nat)#1", |error| {
         matches!(error, Error::DuplicateWitness { concept, key, first, second, .. } if *concept == global("/Show") && pinned_key(key) == "Nat" && *first == Qualifier::empty() && *second == Qualifier::empty())
@@ -42,7 +42,7 @@ fn duplicate_witness_reports_its_declaring_module() {
             | t()
             end
             satisfy C(T) {
-                f(x) = x
+                f(x) => x
             }
         end
         /std/Io/pure(())
@@ -50,7 +50,7 @@ fn duplicate_witness_reports_its_declaring_module() {
         b"",
     )
     .refused(&[
-        ("            satisfy C(T) {\n                f(x) = x\n            }\n", "            satisfy C(T) {\n                f(x) = x\n            }\n            satisfy C(T) {\n                f(x) = x\n            }\n"),
+        ("            satisfy C(T) {\n                f(x) => x\n            }\n", "            satisfy C(T) {\n                f(x) => x\n            }\n            satisfy C(T) {\n                f(x) => x\n            }\n"),
     ])
     .by_elaborator_in("/M/witness~/M/C(/M/T)#1", |error| {
         matches!(error, Error::DuplicateWitness { concept, key, first, second, .. } if *concept == global("/M/C") && pinned_key(key) == "/M/T" && *first == Qualifier::from(["M"]) && *second == Qualifier::from(["M"]))
@@ -70,7 +70,7 @@ fn a_duplicate_across_two_modules_names_both() {
                 f(X) -> X
             }
             satisfy C(T) {
-                f(x) = x
+                f(x) => x
             }
         end
         mod B
@@ -81,7 +81,7 @@ fn a_duplicate_across_two_modules_names_both() {
         b"",
     )
     .refused(&[
-        ("            use /A/{T, C};\n", "            use /A/{T, C};\n            satisfy C(T) {\n                f(x) = x\n            }\n"),
+        ("            use /A/{T, C};\n", "            use /A/{T, C};\n            satisfy C(T) {\n                f(x) => x\n            }\n"),
     ])
     .by_elaborator_in("/B/witness~/A/C(/A/T)", |error| {
         matches!(error, Error::DuplicateWitness { concept, key, first, second, .. } if *concept == global("/A/C") && pinned_key(key) == "/A/T" && *first == Qualifier::from(["A"]) && *second == Qualifier::from(["B"]))
@@ -121,7 +121,7 @@ fn a_standard_library_witness_cannot_be_shadowed() {
         use /std/{Bool, Show, Str};
         induct Mine : pub Type | m() end
         satisfy Show(Mine) {
-            show(b) = "shadow"
+            show(b) => "shadow"
         }
         /std/print(Show/show(Mine/m()))
         "#,
@@ -143,7 +143,7 @@ fn witness_for_a_locally_owned_type_is_not_an_orphan() {
         use /std/{Nat, Str, Show};
         pub struct Wrapper : pub Type { inner : Nat }
         satisfy Show(Wrapper) {
-            show(w) = Nat/to_str(w.inner)
+            show(w) => Nat/to_str(w.inner)
         }
         let w : Wrapper = Wrapper { inner = 7 };
         /std/print(Show/show(w))
@@ -161,9 +161,9 @@ fn parametric_witnesses_over_one_family_still_collide() {
         induct Box(S : Type, A : Type) : Type
         | wrap(A)
         end
-        satisfy (@S : Type) => Monad((A : Type) => Box(S, A)) {
-            pure(@A, a) = Box/wrap(a),
-            bind(@A, @B, m, f) =
+        satisfy (@S : Type) -> Monad((A : Type) => Box(S, A)) {
+            pure(@A, a) => Box/wrap(a),
+            bind(@A, @B, m, f) =>
                 match m
                 | wrap(a) => f(a)
                 end,
@@ -173,7 +173,7 @@ fn parametric_witnesses_over_one_family_still_collide() {
         b"ok",
     )
     .refused(&[
-        ("        /std/print(\"ok\")", "        satisfy Monad((A : Type) => Box(Str, A)) {\n            pure(@A, a) = Box/wrap(a),\n            bind(@A, @B, m, f) =\n                match m\n                | wrap(a) => f(a)\n                end,\n        }\n        /std/print(\"ok\")"),
+        ("        /std/print(\"ok\")", "        satisfy Monad((A : Type) => Box(Str, A)) {\n            pure(@A, a) => Box/wrap(a),\n            bind(@A, @B, m, f) =>\n                match m\n                | wrap(a) => f(a)\n                end,\n        }\n        /std/print(\"ok\")"),
     ])
     .by_elaborator_in("/witness~/std/Monad/Monad(/Box)#1", |error| {
         matches!(error, Error::DuplicateWitness { .. })
@@ -188,13 +188,13 @@ fn a_witness_spelled_through_a_name_for_a_type_collides_with_the_types_own() {
         use /std/{Nat, Str};
         concept Named(A : Type) : pub Type { name() -> Str }
         let N : Type = Nat;
-        satisfy Named(N) { name() = "alias" }
+        satisfy Named(N) { name() => "alias" }
         /std/print(Named/name(@Nat))
         "#,
         b"alias",
     )
     .refused(&[
-        ("        let N : Type = Nat;", "        satisfy Named(Nat) { name() = \"nat\" }\n        let N : Type = Nat;"),
+        ("        let N : Type = Nat;", "        satisfy Named(Nat) { name() => \"nat\" }\n        let N : Type = Nat;"),
     ])
     .by_elaborator_in("/witness~/Named(Nat)#1", |error| {
         matches!(error, Error::DuplicateWitness { concept, key, .. } if *concept == global("/Named") && pinned_key(key) == "Nat")
@@ -211,13 +211,13 @@ fn a_group_member_with_a_taken_key_is_a_duplicate() {
             show(A) -> Str
         }
         induct A : pub Type | a(Nat) end
-        satisfy Show(A) { show(x) = "first", }
+        satisfy Show(A) { show(x) => "first", }
         /std/print(Show/show(A/a(1)))
         "#,
         b"first",
     )
     .refused(&[
-        ("satisfy Show(A) { show(x) = \"first\", }", "satisfy Show(A) { show(x) = \"first\", }\n        and Show(A) { show(x) = \"second\", }"),
+        ("satisfy Show(A) { show(x) => \"first\", }", "satisfy Show(A) { show(x) => \"first\", }\n        and Show(A) { show(x) => \"second\", }"),
     ])
     .by_elaborator_in("/witness~/Show(/A)", |error| {
         matches!(error, Error::DuplicateWitness { concept, key, .. } if *concept == global("/Show") && pinned_key(key) == "/A")
@@ -234,14 +234,14 @@ fn a_duplicate_tuple_shape_is_refused() {
             tag(A) -> Str,
         }
         satisfy Tag({Nat, Bool}) {
-            tag(t) = "one",
+            tag(t) => "one",
         }
         /std/print(Tag/tag((1, true)))
         "#,
         b"one",
     )
     .refused(&[
-        ("            tag(t) = \"one\",\n        }\n", "            tag(t) = \"one\",\n        }\n        satisfy Tag({Nat, Bool}) {\n            tag(t) = \"two\",\n        }\n"),
+        ("            tag(t) => \"one\",\n        }\n", "            tag(t) => \"one\",\n        }\n        satisfy Tag({Nat, Bool}) {\n            tag(t) => \"two\",\n        }\n"),
     ])
     .by_elaborator_in("/witness~/Tag({_, _})#1", |error| {
         matches!(error, Error::DuplicateWitness { concept, key, .. } if *concept == global("/Tag") && pinned_key(key) == "{_, _}")
@@ -258,7 +258,7 @@ fn a_tuple_witness_for_a_standard_concept_is_an_orphan() {
             show(A) -> Str,
         }
         satisfy Display({Nat, Bool}) {
-            show(t) = "mine",
+            show(t) => "mine",
         }
         /std/print(Display/show((1, true)))
         "#,
@@ -282,7 +282,7 @@ fn a_tuple_witness_for_an_entry_concept_registers() {
             tag(A) -> Str,
         }
         satisfy Tag({Nat, Bool}) {
-            tag(t) = "mine",
+            tag(t) => "mine",
         }
         let z: {Nat, Bool} = (1, true);
         /std/print(Tag/tag(z))
@@ -298,7 +298,7 @@ fn a_witness_head_with_nothing_written_is_the_application() {
         r#"
         use /std/{Nat, Str};
         concept Show(A : Type) : pub Type { show(A) -> Str }
-        satisfy Show(Nat) { show(n : Nat) = "" }
+        satisfy Show(Nat) { show(n : Nat) => "" }
         /std/print("ok")
         "#,
         b"ok",

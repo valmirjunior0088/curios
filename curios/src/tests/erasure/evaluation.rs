@@ -24,7 +24,7 @@ fn a_let_bound_proof_leaves_no_computation_behind() {
         use /std/Bool/{True};
         use /std/Nat/{le};
         use /std/Bool/{Holds};
-        let use_it(a: Nat, b: Nat, _p: Holds(a <= b)) -> Nat = a + b;
+        let use_it(a: Nat, b: Nat, _p: Holds(a <= b)) -> Nat => a + b;
         Io/bind(Proc/args(), (args) =>
             let n = List/length(args);
             let p = le/trans(@n, @n, @n + 1, le/refl(n), True/qed());
@@ -61,7 +61,7 @@ fn a_top_level_proof_does_not_run_before_the_program() {
 fn an_unused_total_value_leaves_no_computation_behind() {
     let source = r#"
         use /std/{Nat, List, Io, Proc};
-        let count(a: Nat, b: Nat) -> Nat =
+        let count(a: Nat, b: Nat) -> Nat =>
             match a | 0 => b | ap + 1 => count(ap, b + 1) end;
         Io/bind(Proc/args(), (args) =>
             let n = List/length(args);
@@ -80,7 +80,7 @@ fn an_unused_total_value_leaves_no_computation_behind() {
 fn an_unused_partial_value_is_still_computed() {
     let source = r#"
         use /std/{Nat, List, Io, Proc};
-        let count(a: Nat, b: Nat) -> Nat =
+        let count(a: Nat, b: Nat) -> Nat =>
             match a | 0 => b | _ + 1 => count(a, b + 1) end;
         Io/bind(Proc/args(), (args) =>
             let n = List/length(args);
@@ -102,7 +102,7 @@ fn proof_in_an_erased_position_is_not_evaluated() {
         use /std/Nat/{le};
         let a : Nat = 6;
         let b : Nat = 7;
-        let consume(x : Nat, y : Nat, p : Eq()(x + (y - x), y)) -> Nat = 42;
+        let consume(x : Nat, y : Nat, p : Eq()(x + (y - x), y)) -> Nat => 42;
         /std/print(Nat/to_str(consume(a, b, le/add_sub_cancel(a, b, le/add_r(a, 1)))))
         "#;
     assert_eq!(run(source), b"42");
@@ -153,7 +153,7 @@ fn a_recursion_on_a_bound_is_fused_with_its_step() {
     let source = r#"
         use /std/{Nat, List, Io, Proc};
         use /std/Bool/{True};
-        let sum_to(n: Nat) -> Nat =
+        let sum_to(n: Nat) -> Nat =>
             Nat/descend(
                 (k: Nat) => k,
                 (_) => Nat,

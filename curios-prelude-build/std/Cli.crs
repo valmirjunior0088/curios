@@ -37,7 +37,7 @@ pub struct Value: pub Type {
 }
 
 -- The text the bytes `b` encode, or why a reader of text refuses them.
-let decoded(b: Bytes) -> Result(Str, Str) =
+let decoded(b: Bytes) -> Result(Str, Str) =>
     match Str/of_bytes(b)
     | success(s) => Result/success(s)
     | failure(_) => Result/failure("not valid UTF-8")
@@ -102,7 +102,7 @@ pub let path: Value =
         choices = [] };
 
 --- A reader of a program's own type: `read` turns the text into a value or says why it cannot, and `show` writes a value back, as help shows a default. Bytes that are no text are refused before `read` is asked.
-pub let reader(@A: Type, metavar: Str, read: (Str) -> Result(Str, A), show: (A) -> Str) -> Value =
+pub let reader(@A: Type, metavar: Str, read: (Str) -> Result(Str, A), show: (A) -> Str) -> Value =>
     Value {
         A = A,
         metavar = metavar,
@@ -114,7 +114,7 @@ pub let reader(@A: Type, metavar: Str, read: (Str) -> Result(Str, A), show: (A) 
         choices = [] };
 
 --- One of a closed set of values, each read from its name: help lists the names, and shows a value by its own.
-pub let one_of(@A: Type, use Eql(A), metavar: Str, named: List({Str, A})) -> Value =
+pub let one_of(@A: Type, use Eql(A), metavar: Str, named: List({Str, A})) -> Value =>
     let names = List/map(named, (entry: {Str, A}) => entry.0);
     Value {
         A = A,
@@ -184,7 +184,7 @@ pub struct Field: pub Type {
     kind: Kind,
 }
 
-let named(long: Str, help: Str, kind: Kind) -> Field =
+let named(long: Str, help: Str, kind: Kind) -> Field =>
     Field {
         long = long,
         short = Option/none(),
@@ -195,31 +195,31 @@ let named(long: Str, help: Str, kind: Kind) -> Field =
         kind = kind };
 
 --- A flag `--long`, `true` where it is given.
-pub let flag(long: Str, help: Str) -> Field =
+pub let flag(long: Str, help: Str) -> Field =>
     named(long, help, Kind/flag());
 
 --- A flag counted: `-vvv` is three, and none is zero.
-pub let count(long: Str, help: Str) -> Field =
+pub let count(long: Str, help: Str) -> Field =>
     named(long, help, Kind/count());
 
 --- A switch read as `--long` and `--no-long`, the last one given standing, and `fallback` where neither is.
-pub let toggle(long: Str, fallback: Bool, help: Str) -> Field =
+pub let toggle(long: Str, fallback: Bool, help: Str) -> Field =>
     named(long, help, Kind/toggle(fallback));
 
 --- An option `--long VALUE` that must be given.
-pub let option(long: Str, v: Value, help: Str) -> Field =
+pub let option(long: Str, v: Value, help: Str) -> Field =>
     named(long, help, Kind/option(v, Presence/required()));
 
 --- An option that may be absent, read as an `Option`.
-pub let optional(long: Str, v: Value, help: Str) -> Field =
+pub let optional(long: Str, v: Value, help: Str) -> Field =>
     named(long, help, Kind/option(v, Presence/optional()));
 
 --- An option that stands for `fallback` where it is absent.
-pub let default(long: Str, v: Value, fallback: v.A, help: Str) -> Field =
+pub let default(long: Str, v: Value, fallback: v.A, help: Str) -> Field =>
     named(long, help, Kind/option(v, Presence/default(fallback)));
 
 --- An option given any number of times, every value kept in order.
-pub let many(long: Str, v: Value, help: Str) -> Field =
+pub let many(long: Str, v: Value, help: Str) -> Field =>
     named(long, help, Kind/many(v));
 
 --- Flags of which at most one is given, each standing for its value: read by `long`, as `presence` says where none is given.
@@ -229,7 +229,7 @@ pub let choice(
     alternatives: List(Alternative(A)),
     presence: Presence(A),
     help: Str,
-) -> Field =
+) -> Field =>
     named(long, help, Kind/choice(A, alternatives, presence));
 
 --- An argument read by its place.
@@ -242,7 +242,7 @@ pub struct Positional: pub Type {
 }
 
 --- A positional, `NAME` in help.
-pub let positional(name: Str, v: Value, help: Str) -> Positional =
+pub let positional(name: Str, v: Value, help: Str) -> Positional =>
     Positional { name = name, help = help, v = v };
 
 --- What a command reads by place, in the one order a line can give them: the required, then the optional, then the rest.
@@ -254,7 +254,7 @@ pub struct Positionals: pub Type {
 }
 
 --- `required`, and nothing after them.
-pub let positionals(required: List(Positional)) -> Positionals =
+pub let positionals(required: List(Positional)) -> Positionals =>
     Positionals { required = required, optional = [], rest = Option/none() };
 
 --- A command a program is made of: a leaf reads its options and its positionals, and a group reads its options and hands the rest of the line to the command its next word names.
@@ -268,7 +268,7 @@ end
 pub use Command/*;
 
 --- The word a command is chosen by.
-pub let name(c: Command) -> Str =
+pub let name(c: Command) -> Str =>
     match c | leaf(n, _, _, _) | group(n, _, _, _) => n end;
 
 --- A name as a line spells it.
@@ -282,7 +282,7 @@ pub induct Spelled: pub Type
 end
 
 -- The text a line writes `s` as.
-let text_of(s: Spelled) -> Str =
+let text_of(s: Spelled) -> Str =>
     match s
     | long(n) => Str/concat("--", n)
     | negated(n) => Str/concat("--no-", n)
@@ -305,7 +305,7 @@ pub induct Problem: pub Type
 | within(command: Str, problem: Problem)
 end
 
-let described(p: Problem) -> Str =
+let described(p: Problem) -> Str =>
     match p
     | invalid_name(n) => Fmt/render("invalid name #")(n)
     | invalid_short(c) => Fmt/render("invalid short name '%'")(c)
@@ -316,18 +316,18 @@ let described(p: Problem) -> Str =
     end;
 
 satisfy Show(Problem) {
-    show(p) = described(p),
+    show(p) => described(p),
 }
 
 --- What a declaration with these problems is: a proposition nothing proves, so a declaration that has them is refused where it is written, by its problems.
 pub induct Refused: (List(Problem)) -> pub Prop
 end
 
-let Clear(problems: List(Problem)) -> Prop =
+let Clear(problems: List(Problem)) -> Prop =>
     match problems | [] => True | [p, ..more] => Refused([p, ..more]) end;
 
 --- That `command`, with `version` where it has one, describes one unambiguous command line, decided by reduction: `True` where it does, and otherwise `Refused` of every problem it has.
-pub let WellFormed(command: Command, version: Option(Str)) -> Prop =
+pub let WellFormed(command: Command, version: Option(Str)) -> Prop =>
     Clear(check/problems(command, version));
 
 --- A command line a program reads.
@@ -340,11 +340,11 @@ pub struct Cli: pub Type {
 }
 
 --- A fixed declaration, checked by reduction where it is written: one with problems is refused there, by them.
-pub let declare(command: Command, version: Option(Str), @ok: WellFormed(command, version)) -> Cli =
+pub let declare(command: Command, version: Option(Str), @ok: WellFormed(command, version)) -> Cli =>
     Cli { command = command, version = version, @ok = ok };
 
 --- A declaration checked as the program runs: the command line, or every problem that keeps it from describing one.
-pub let checked(command: Command, version: Option(Str)) -> Result(List(Problem), Cli) =
+pub let checked(command: Command, version: Option(Str)) -> Result(List(Problem), Cli) =>
     match check/problems(command, version)
     | [] => Result/success(Cli { command = command, version = version, @ok = True/qed() })
     | [p, ..more] => Result/failure([p, ..more])
@@ -383,23 +383,23 @@ pub induct Reading(A: Type): pub Type
 end
 
 --- `argv` read against `cli`, `env` the environment variables the declaration names: what it parsed into, a request for help or the version, or the refusal. Help is answered before anything else on the line is, and the version next.
-pub let parse(cli: Cli, argv: List(Bytes), env: Map(Str, Bytes)) -> Reading(Parsed(cli.command)) =
+pub let parse(cli: Cli, argv: List(Bytes), env: Map(Str, Bytes)) -> Reading(Parsed(cli.command)) =>
     parse/command(cli.command, argv, [], cli.version, env);
 
 --- The help of the command `path` names from the root, as `--help` writes it.
-pub let help(cli: Cli, path: List(Str)) -> Str =
+pub let help(cli: Cli, path: List(Str)) -> Str =>
     render/help(cli.command, cli.version, path);
 
 --- The usage line of the command `path` names from the root.
-pub let usage(cli: Cli, path: List(Str)) -> Str =
+pub let usage(cli: Cli, path: List(Str)) -> Str =>
     render/usage(cli.command, path);
 
 --- `failure` as `main` reports it: what the line got wrong, the usage line of the command `path` names, and where help is.
-pub let report(cli: Cli, path: List(Str), failure: Failure) -> Str =
+pub let report(cli: Cli, path: List(Str), failure: Failure) -> Str =>
     render/report(cli.command, path, failure);
 
 -- Every environment variable `c` and the commands beneath it declare.
-let variables(c: Command) -> List(Str) =
+let variables(c: Command) -> List(Str) =>
     match c
     | leaf(_, _, options, _) =>
         List/concat_map(options, (f) =>
@@ -410,14 +410,14 @@ let variables(c: Command) -> List(Str) =
                 match f.env | some(n) => [n] | none() => [] end),
             ..variables_of(commands)]
     end
-and variables_of(commands: List(Command)) -> List(Str) =
+and variables_of(commands: List(Command)) -> List(Str) =>
     match commands
     | [] => []
     | [c, ..more] => [..variables(c), ..variables_of(more)]
     end;
 
 -- The variables of `names` the host sets, each as the bytes it holds, which a value reads as it reads an argument.
-let environment(names: List(Str)) -> Io(Map(Str, Bytes)) =
+let environment(names: List(Str)) -> Io(Map(Str, Bytes)) =>
     match names
     | [] => Io/pure(Map/empty())
     | [n, ..more] =>
@@ -429,12 +429,12 @@ let environment(names: List(Str)) -> Io(Map(Str, Bytes)) =
         end
     end;
 
-let refuse(text: Str) -> Io({}) =
+let refuse(text: Str) -> Io({}) =>
     let () = print_err(text)!;
     Proc/exit(2);
 
 --- The process's command line read against `cli`, beside the environment variables it declares, and what it parsed into handed to `run`. Help and the version are written to standard output; a line refused is reported on standard error with the usage of the command that refused it, and ends the program with 2.
-pub let main(cli: Cli, run: (Parsed(cli.command)) -> Io({})) -> Io({}) =
+pub let main(cli: Cli, run: (Parsed(cli.command)) -> Io({})) -> Io({}) =>
     let raw = Proc/args()!;
     let dropped = match raw | [] => [] | [_, ..more] => more end;
     let env = environment(variables(cli.command))!;
@@ -450,7 +450,7 @@ pub let try_main(
     command: Command,
     version: Option(Str),
     run: (Parsed(command)) -> Io({}),
-) -> Io({}) =
+) -> Io({}) =>
     match check/problems(command, version)
     | [] => main(Cli { command = command, version = version, @ok = True/qed() }, run)
     | [p, ..more] =>

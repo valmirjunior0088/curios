@@ -21,19 +21,19 @@ fn prelude_monad_arr_binds() {
 // Whether an action is embedded is asked of every witness the unit declares: `run` answers a `Box` action where `Io` is expected, which is an embedding where both heads are monads and a mismatch where one is not. The answer is the same with `Monad(Box)` and `Lift(Box, Io)` written after `run` as before it — where it once followed which of them had elaborated, and the first order was refused, `Box(Nat)` against `Io(Nat)`.
 #[test]
 fn an_action_is_embedded_wherever_its_monads_witnesses_are_written() {
-    let run_ = "let run(n: Nat) -> Io(Nat) = boxed(n);";
-    let witnesses = r#"satisfy Monad(Box) { pure(@_, a) = Box { value = a }, bind(@_, @_, m, f) = f(m.value) }
-        satisfy Lift(Box, Io) { lift(@_, m) = Io/pure(m.value) }"#;
+    let run_ = "let run(n: Nat) -> Io(Nat) => boxed(n);";
+    let witnesses = r#"satisfy Monad(Box) { pure(@_, a) => Box { value = a }, bind(@_, @_, m, f) => f(m.value) }
+        satisfy Lift(Box, Io) { lift(@_, m) => Io/pure(m.value) }"#;
     let program = |first: &str, second: &str| {
         fill!(
             r#"
             use /std/{Nat, Io, Monad};
             use /std/Monad/{Lift};
             pub struct Box(A: Type): pub Type { value: A }
-            let boxed(n: Nat) -> Box(Nat) = Box { value = n };
+            let boxed(n: Nat) -> Box(Nat) => Box { value = n };
             ${first}
             ${second}
-            let main() -> Io({}) = let n = run(3)!; /std/print(Nat/to_str(n));
+            let main() -> Io({}) => let n = run(3)!; /std/print(Nat/to_str(n));
             main()
             "#,
             first,
@@ -50,7 +50,7 @@ fn an_action_is_embedded_wherever_its_monads_witnesses_are_written() {
 fn monadic_sugar_binds_through_the_concept() {
     let source = r#"
         use /std/{Nat, Str, Option, Monad};
-        pub let chain(a : Option(Nat), b : Option(Nat)) -> Option(Nat) =
+        pub let chain(a : Option(Nat), b : Option(Nat)) -> Option(Nat) =>
             let x = a!;
             let y = b!;
             Monad/pure(Nat/add(x, y));
@@ -66,7 +66,7 @@ fn bang_works_in_monad_generic_code() {
     let source = r#"
         use /std/{Monad};
         use /std/{Nat, Str, Option, List};
-        pub let add_both(@M : (Type) -> Type, use Monad(M), a : M(Nat), b : M(Nat)) -> M(Nat) =
+        pub let add_both(@M : (Type) -> Type, use Monad(M), a : M(Nat), b : M(Nat)) -> M(Nat) =>
             Monad/pure(a! + b!);
         let o : Option(Nat) = add_both(Option/some(20), Option/some(22));
         let l : List(Nat) = add_both([1, 2], [10]);
@@ -86,14 +86,14 @@ fn a_bang_sequences_in_a_two_parameter_monad_region() {
         induct Box(S : Type, A : Type) : Type
         | wrap(A)
         end
-        satisfy (@S : Type) => Monad((A : Type) => Box(S, A)) {
-            pure(@A, a) = Box/wrap(a),
-            bind(@A, @B, m, f) =
+        satisfy (@S : Type) -> Monad((A : Type) => Box(S, A)) {
+            pure(@A, a) => Box/wrap(a),
+            bind(@A, @B, m, f) =>
                 match m
                 | wrap(a) => f(a)
                 end,
         }
-        pub let prog() -> Box(Str, Nat) =
+        pub let prog() -> Box(Str, Nat) =>
             let v = Monad/pure(3)!;
             Monad/pure(Nat/add(v, v));
         let out =
@@ -109,19 +109,19 @@ fn a_bang_sequences_in_a_two_parameter_monad_region() {
 /// Three ways to sequence a `Result(Str, Type)`, whose payload is a type and so sits a level above the types it names: `walk` with `!` in an arm, `flat` with `!` in a flat body, and `spelled` through `Monad/bind` itself. All three go through `Result`'s `Monad` witness, and a witness pinning the method levels at zero — `bind` taking `A, B : Type 0` only — would refuse each, the arm as "this Type would need to be strictly below itself". A concept's method level is its family's domain (`UniverseSolver::identify_bounded_choices`), which `Result`'s witness leaves to the caller. `tag` reads each outcome back, so the three are run rather than only checked.
 const LARGE_PAYLOAD: &str = r#"
     use /std/{Str, Nat, List, Result, Monad};
-    pub let walk(x: Result(Str, Type), n: List(Str)) -> Result(Str, Type) =
+    pub let walk(x: Result(Str, Type), n: List(Str)) -> Result(Str, Type) =>
         match n
         | [] => x
         | [_, .._] =>
             let t = x!;
             Result/success(t)
         end;
-    pub let flat(x: Result(Str, Type)) -> Result(Str, Type) =
+    pub let flat(x: Result(Str, Type)) -> Result(Str, Type) =>
         let t = x!;
         Result/success(t);
-    pub let spelled(x: Result(Str, Type)) -> Result(Str, Type) =
+    pub let spelled(x: Result(Str, Type)) -> Result(Str, Type) =>
         Monad/bind(x, (t) => Result/success(t));
-    let tag(r: Result(Str, Type)) -> Str =
+    let tag(r: Result(Str, Type)) -> Str =>
         match r
         | success(_) => "s"
         | failure(_) => "f"
@@ -148,7 +148,7 @@ fn a_bang_sequences_a_large_payload() {
 fn a_large_payload_binds_without_the_witness() {
     let source = format!(
         r#"{LARGE_PAYLOAD}
-        let direct(x: Result(Str, Type)) -> Result(Str, Type) = Result/bind(x, (t) => Result/success(t));
+        let direct(x: Result(Str, Type)) -> Result(Str, Type) => Result/bind(x, (t) => Result/success(t));
         /std/print(Str/flatten([tag(direct(Result/success(Nat))), tag(direct(Result/failure("refused")))]))
         "#
     );
@@ -246,8 +246,8 @@ impl Region {
         fill!(
             r#"
             use /std/{${uses}};
-            let small(n: Nat) -> ${small} = ${pure}(n);
-            let large(n: Nat) -> ${large} = ${pure}(Nat);
+            let small(n: Nat) -> ${small} => ${pure}(n);
+            let large(n: Nat) -> ${large} => ${pure}(Nat);
             ${declarations}
             /std/print("bound")
             "#,
@@ -271,13 +271,13 @@ impl Region {
     fn big(&self, spelling: Spelling) -> String {
         let body = self.sequenced(spelling, "small(n)", &format!("{}(Nat)", self.pure));
 
-        self.program(&format!("pub let big(n: Nat) -> {} = {body};", self.large))
+        self.program(&format!("pub let big(n: Nat) -> {} => {body};", self.large))
     }
 
     fn one_declaration(&self, spelling: Spelling) -> String {
         let body = self.sequenced(spelling, "large(n)", &format!("{}(n)", self.pure));
 
-        format!("pub let one(n: Nat) -> {} = {body};", self.small)
+        format!("pub let one(n: Nat) -> {} => {body};", self.small)
     }
 
     // A small region binding a large action.
@@ -290,7 +290,7 @@ impl Region {
         let Region { small, pure, .. } = self;
 
         self.program(&format!(
-            "pub let both(n: Nat) -> {small} = let _ = small(n)!; let _ = large(n)!; {pure}(n);"
+            "pub let both(n: Nat) -> {small} => let _ = small(n)!; let _ = large(n)!; {pure}(n);"
         ))
     }
 
@@ -298,7 +298,10 @@ impl Region {
     fn huge(&self, spelling: Spelling) -> String {
         let body = self.sequenced(spelling, "large(n)", &format!("{}(Type)", self.pure));
 
-        self.program(&format!("pub let huge(n: Nat) -> {} = {body};", self.large))
+        self.program(&format!(
+            "pub let huge(n: Nat) -> {} => {body};",
+            self.large
+        ))
     }
 
     // `one` set beside a region at its own level by a caller.
@@ -308,7 +311,7 @@ impl Region {
 
         self.program(&format!(
             "{one}
-            pub let pick(b: Bool, n: Nat) -> {small} =
+            pub let pick(b: Bool, n: Nat) -> {small} =>
                 match b | true => one(n) | false => small(n) end;"
         ))
     }
@@ -399,9 +402,9 @@ fn a_region_binds_actions_at_two_levels() {
 fn a_family_takes_nominal_instances_at_two_payloads() {
     let through = r#"
         use /std/{Str, Nat, Result};
-        let small(n: Nat) -> Result(Str, Nat) = Result/success(n);
-        let through(F: (Type) -> Type, x: F(Nat), y: F(Type)) -> Nat = 0;
-        let probe(n: Nat) -> Nat = through((A) => Result(Str, A), small(n), Result/success(Nat));
+        let small(n: Nat) -> Result(Str, Nat) => Result/success(n);
+        let through(F: (Type) -> Type, x: F(Nat), y: F(Type)) -> Nat => 0;
+        let probe(n: Nat) -> Nat => through((A) => Result(Str, A), small(n), Result/success(Nat));
         /std/print("bound")
         "#;
 
@@ -430,8 +433,8 @@ fn a_transformers_own_bind_takes_a_larger_region_over_a_bare_base_monad() {
         fill!(
             r#"
             use /std/{Str, Nat, Io, Option, Try};
-            let small(n: Nat) -> Try(${base}, Str, Nat) = Try/pure(n);
-            pub let big(n: Nat) -> Try(${base}, Str, Type) = Try/bind(small(n), (_) => Try/pure(Nat));
+            let small(n: Nat) -> Try(${base}, Str, Nat) => Try/pure(n);
+            pub let big(n: Nat) -> Try(${base}, Str, Type) => Try/bind(small(n), (_) => Try/pure(Nat));
             /std/print("bound")
             "#,
             base

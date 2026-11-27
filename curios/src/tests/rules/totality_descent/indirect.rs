@@ -12,7 +12,7 @@ fn a_call_through_a_parameter_bound_function_does_not_descend() {
         r#"
         use /std/{Nat};
 
-        let loop(P : Prop, n : Nat, again : (m : Nat) -> Nat, base : P) -> P =
+        let loop(P : Prop, n : Nat, again : (m : Nat) -> Nat, base : P) -> P =>
             match n
             | 0 => base
             | k + 1 => loop(P, k, again, base)
@@ -43,7 +43,7 @@ fn the_library_recursion_on_a_bound_serves_a_proof() {
     let source = r#"
         use /std/{Nat, Str, Char, List};
         use /std/Bool/{True, Holds};
-        let two_more(n: Nat) -> Holds(n < n + 2) =
+        let two_more(n: Nat) -> Holds(n < n + 2) =>
             Nat/descend((k: Nat) => k, (k) => Holds(k < k + 2), (k, ih) => True/qed(), n);
         /std/print(Str/of_char(List/get(@Char, ['a', 'b', 'c'], 1, @two_more(1))))
         "#;
@@ -55,8 +55,8 @@ fn the_library_recursion_on_a_bound_serves_a_proof() {
 fn the_library_recursion_on_a_bound_computes_at_a_dependent_family() {
     let source = r#"
         use /std/{Nat, Eq};
-        let Shape(n: Nat) -> Type = match n | 0 => {} | _ + 1 => Nat end;
-        let pick(n: Nat) -> Shape(n) =
+        let Shape(n: Nat) -> Type => match n | 0 => {} | _ + 1 => Nat end;
+        let pick(n: Nat) -> Shape(n) =>
             Nat/descend((k: Nat) => k, Shape, (k, _) => match k | 0 => () | kp + 1 => kp end, n);
         let _computed: Eq()(pick(5), 4) = Eq/refl();
         /std/print(Nat/to_str(pick(5)))
@@ -76,7 +76,7 @@ fn a_hand_written_convoy_keeps_its_descent_visible() {
         | more(c: Byte, st: Scan, t: Bytes, rest: Utf8(step(c, st), t)): (st, 0x[c, ..t])
         end
 
-        let dv(s: Scan, @b: Bytes, d: Utf8(s, b)) -> Eq()(0, 0) =
+        let dv(s: Scan, @b: Bytes, d: Utf8(s, b)) -> Eq()(0, 0) =>
             match d
             | stop() => Eq/refl()
             | more(c, st, t, rest) => ((r: Utf8(step(c, st), t)) => dv(step(c, st), r))(rest)
@@ -99,7 +99,7 @@ fn a_let_alias_keeps_its_descent_visible() {
         | more(c: Byte, st: Scan, t: Bytes, rest: Utf8(step(c, st), t)): (st, 0x[c, ..t])
         end
 
-        let dv(s: Scan, @b: Bytes, d: Utf8(s, b)) -> Eq()(0, 0) =
+        let dv(s: Scan, @b: Bytes, d: Utf8(s, b)) -> Eq()(0, 0) =>
             match d
             | stop() => Eq/refl()
             | more(c, st, t, rest) => let r = rest; dv(step(c, st), r)
@@ -122,7 +122,7 @@ fn a_proof_over_a_dependent_hypothesis_descends() {
         | more(c: Byte, st: Scan, t: Bytes, rest: Utf8(step(c, st), t)): (st, 0x[c, ..t])
         end
 
-        let dv(s : Scan, @b : Bytes, d : Utf8(s, b)) -> Eq()(0, 0) =
+        let dv(s : Scan, @b : Bytes, d : Utf8(s, b)) -> Eq()(0, 0) =>
             match s
             | lead() => match d | stop() => Eq/refl() | more(c, _, t, rest) => dv(step(c, Scan/lead()), rest) end
             | cont(_, _, _) => match d | more(c, _, _, rest) => dv(step(c, s), rest) end
@@ -142,9 +142,9 @@ fn a_member_named_only_in_its_own_goal_is_a_call_its_group_must_descend_on() {
         use /std/{Nat};
         use /std/Bool/{True};
 
-        pub let Const(_: True) -> Prop = True;
+        pub let Const(_: True) -> Prop => True;
 
-        pub let g(n: Nat) -> True =
+        pub let g(n: Nat) -> True =>
             let held: Const(True/qed()) =
                 match n
                 | 0 => True/qed()
@@ -170,7 +170,7 @@ fn a_call_handing_back_a_lambdas_binder_does_not_descend() {
         use /std/{Nat};
         use /std/Bool/{True};
 
-        pub let again(n: Nat) -> True =
+        pub let again(n: Nat) -> True =>
             ((x: Nat) =>
                 match x
                 | 0 => True/qed()
@@ -196,11 +196,11 @@ fn a_call_in_a_callback_descends_where_its_callee_applies_it_below() {
         induct Rose : Type
         | node(label : Nat, children : List(Rose))
         end
-        let has_zero(t : Rose) -> Bool =
+        let has_zero(t : Rose) -> Bool =>
             match t
             | node(label, children) => label == 0 || List/any(children, (c) => has_zero(c))
             end;
-        let Zeroed(t : Rose) -> /std/Bool/True =
+        let Zeroed(t : Rose) -> /std/Bool/True =>
             match has_zero(t) | true => /std/Bool/True/qed() | false => /std/Bool/True/qed() end;
         /std/print("ok")
         "#,
@@ -227,16 +227,16 @@ fn a_callback_its_callee_hands_on_is_graded_where_the_callee_applies_it() {
         induct Rose : Type
         | node(label : Nat, children : List(Rose))
         end
-        let any_kept(l : List(Rose), pred : (Rose) -> Bool) -> Bool =
+        let any_kept(l : List(Rose), pred : (Rose) -> Bool) -> Bool =>
             match l
             | [] => false
             | [h, ..t] => pred(h) || List/any(t, pred)
             end;
-        let has_zero(t : Rose) -> Bool =
+        let has_zero(t : Rose) -> Bool =>
             match t
             | node(label, children) => label == 0 || any_kept(children, (c) => has_zero(c))
             end;
-        let Zeroed(t : Rose) -> /std/Bool/True =
+        let Zeroed(t : Rose) -> /std/Bool/True =>
             match has_zero(t) | true => /std/Bool/True/qed() | false => /std/Bool/True/qed() end;
         /std/print("ok")
         "#,
@@ -259,18 +259,18 @@ fn a_callback_handed_past_a_members_parameters_is_graded_as_unrelated() {
         use /std/{Nat};
         use /std/Bool/{True};
 
-        let hide(n: Nat, f: (Nat) -> True) -> True =
+        let hide(n: Nat, f: (Nat) -> True) -> True =>
             match n
             | 0 => wrap(n)((_) => True/qed())
             | k + 1 => f(k)
             end
-        and wrap(m: Nat) -> ((Nat) -> True) -> True =
+        and wrap(m: Nat) -> ((Nat) -> True) -> True =>
             match m
             | 0 => (g) => g(0)
             | k + 1 => (g) => hide(k, g)
             end;
 
-        let spin(n: Nat) -> True = hide(n, (c) => spin(c));
+        let spin(n: Nat) -> True => hide(n, (c) => spin(c));
 
         /std/print("ok")
         "#,
@@ -297,22 +297,22 @@ fn a_recursion_through_a_std_callback_is_graded_alike_by_both_checkers() {
         | node(label : Nat, children : List(Rose))
         end
 
-        let via_find(t : Rose) -> Bool =
+        let via_find(t : Rose) -> Bool =>
             match t
             | node(label, children) =>
                 label == 0 || match List/find(children, (c) => via_find(c)) | some(_) => true | none() => false end
             end;
-        let Found(t : Rose) -> /std/Bool/True =
+        let Found(t : Rose) -> /std/Bool/True =>
             match via_find(t) | true => /std/Bool/True/qed() | false => /std/Bool/True/qed() end;
 
-        let via_take_while(t : Rose) -> Nat =
+        let via_take_while(t : Rose) -> Nat =>
             match t
             | node(label, children) => label + List/length(List/take_while(children, (c) => via_take_while(c) == 0))
             end;
-        let Taken(t : Rose) -> /std/Bool/True =
+        let Taken(t : Rose) -> /std/Bool/True =>
             match via_take_while(t) == 0 | true => /std/Bool/True/qed() | false => /std/Bool/True/qed() end;
 
-        let via_traverse(t : Rose) -> Option(Nat) =
+        let via_traverse(t : Rose) -> Option(Nat) =>
             match t
             | node(label, children) =>
                 match List/traverse(children, (c) => via_traverse(c))
@@ -320,7 +320,7 @@ fn a_recursion_through_a_std_callback_is_graded_alike_by_both_checkers() {
                 | none() => Option/none()
                 end
             end;
-        let Traversed(t : Rose) -> /std/Bool/True =
+        let Traversed(t : Rose) -> /std/Bool/True =>
             match Option/is_some(via_traverse(t)) | true => /std/Bool/True/qed() | false => /std/Bool/True/qed() end;
 
         /std/print("ok")
@@ -351,16 +351,16 @@ fn zero_ruled_out_of_an_applied_lambdas_binder_is_ruled_out_of_what_it_stands_fo
         r#"
         use /std/{Nat, Bool};
 
-        let chained(n : Nat) -> Bool =
+        let chained(n : Nat) -> Bool =>
             ((x : Nat) => match x | 0 => false | 5 => true | _ => chained(x - 1) end)(n);
 
-        let Chained(n : Nat) -> /std/Bool/True =
+        let Chained(n : Nat) -> /std/Bool/True =>
             match chained(n) | true => /std/Bool/True/qed() | false => /std/Bool/True/qed() end;
 
-        let guarded(n : Nat) -> Bool =
+        let guarded(n : Nat) -> Bool =>
             ((x : Nat) => match x == 0 | true => false | false => guarded(x - 1) end)(n);
 
-        let Guarded(n : Nat) -> /std/Bool/True =
+        let Guarded(n : Nat) -> /std/Bool/True =>
             match guarded(n) | true => /std/Bool/True/qed() | false => /std/Bool/True/qed() end;
 
         /std/print("ok")
@@ -399,31 +399,31 @@ fn a_let_over_a_variable_an_inversion_solves_is_graded_as_the_variable() {
         | c(k : Nat) : (k)
         end
 
-        let inlined(t : Nat, q : Q(t)) -> Bool =
+        let inlined(t : Nat, q : Q(t)) -> Bool =>
             match q
             | c(k) => step(t)
             end
-        and step(m : Nat) -> Bool =
+        and step(m : Nat) -> Bool =>
             match m
             | 0 => false
             | j + 1 => inlined(j, Q/c(j))
             end;
 
-        let Inlined(t : Nat, q : Q(t)) -> /std/Bool/True =
+        let Inlined(t : Nat, q : Q(t)) -> /std/Bool/True =>
             match inlined(t, q) | true => /std/Bool/True/qed() | false => /std/Bool/True/qed() end;
 
-        let bound(t : Nat, q : Q(t)) -> Bool =
+        let bound(t : Nat, q : Q(t)) -> Bool =>
             let u = t;
             match q
             | c(k) => hop(u)
             end
-        and hop(m : Nat) -> Bool =
+        and hop(m : Nat) -> Bool =>
             match m
             | 0 => false
             | j + 1 => bound(j, Q/c(j))
             end;
 
-        let Bound(t : Nat, q : Q(t)) -> /std/Bool/True =
+        let Bound(t : Nat, q : Q(t)) -> /std/Bool/True =>
             match bound(t, q) | true => /std/Bool/True/qed() | false => /std/Bool/True/qed() end;
 
         /std/print("ok")

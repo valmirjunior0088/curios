@@ -44,24 +44,24 @@ fn project(name: &str) -> Temporary {
         "lib.crs",
         r#"use /std/{Nat, Str, Bool, Bytes, Option, Io, Eq, Test};
 
-pub let double(n: Nat) -> Nat = n * 2;
+pub let double(n: Nat) -> Nat => n * 2;
 
-test doubling_passes =
+test doubling_passes =>
     Test/equal(double(21), 42);
 
-test addition_passes =
+test addition_passes =>
     Test/assert("one and one are two", 1 + 1 == 2);
 
-test equality_fails =
+test equality_fails =>
     let _ = /std/print_err("comparing\n")!; Test/equal(double(2), 5);
 
-test overflow_traps =
+test overflow_traps =>
     let v = /std/Proc/env("CURIOS_UNSET_OVERFLOW")!; let _ = /std/rand/bytes(Nat/shl(1, 70) + Bytes/length(Option/unwrap_or(v, 0x[])))!; Test/assert("it holds", true);
 
-test exits_seven =
+test exits_seven =>
     let _ = /std/Proc/exit(@{}, 7)!; Test/assert("it holds", true);
 
-test effect_passes =
+test effect_passes =>
     let s = Io/pure("x")!; Test/equal(s, "x");
 "#,
     );
@@ -216,10 +216,10 @@ fn a_test_that_exits_before_it_reports_is_exited_whatever_its_code() {
         "lib.crs",
         r#"use /std/{Test, Proc};
 
-test quits_early =
+test quits_early =>
     let _ = Proc/exit(@{}, 0)!; Test/assert("it holds", true);
 
-test fails_quietly =
+test fails_quietly =>
     let _ = Proc/exit(@{}, 1)!; Test/assert("it holds", true);
 "#,
     );
@@ -258,13 +258,13 @@ fn a_test_that_writes_is_closed_beneath_what_it_wrote() {
         "lib.crs",
         r#"use /std/{Test, print, print_err};
 
-test quiet =
+test quiet =>
     Test/assert("it holds", true);
 
-test draws =
+test draws =>
     let _ = print("drawn\n")!; Test/assert("it holds", true);
 
-test mutters =
+test mutters =>
     let _ = print_err("half")!; Test/assert("it holds", true);
 "#,
     );
@@ -363,26 +363,26 @@ fn a_modules_tests_run_together_and_the_tally_counts_what_the_filter_skipped() {
         "lib.crs",
         r#"use /std/{Test};
 
-test first =
+test first =>
     Test/assert("it holds", true);
 
 mod Inner
     use /std/{Test};
 
-    test kept =
+    test kept =>
         Test/assert("it holds", true);
 
-    test left =
+    test left =>
         Test/assert("it holds", true);
 end
 
-test second =
+test second =>
     Test/assert("it holds", true);
 
 mod Left
     use /std/{Test};
 
-    test out =
+    test out =>
         Test/assert("it holds", true);
 end
 "#,
@@ -457,17 +457,17 @@ fn a_target_runs_only_the_tests_of_what_it_selects() {
     write(
         &root,
         "lib.crs",
-        "use /std/{Test};\n\ntest in_library =\n    Test/assert(\"it holds\", true);\n",
+        "use /std/{Test};\n\ntest in_library =>\n    Test/assert(\"it holds\", true);\n",
     );
     write(
         &root,
         "app.crs",
-        "use /std/{Test};\n\ntest in_app =\n    Test/assert(\"it holds\", true);\n\n/std/print(\"ran\\n\")\n",
+        "use /std/{Test};\n\ntest in_app =>\n    Test/assert(\"it holds\", true);\n\n/std/print(\"ran\\n\")\n",
     );
     write(
         &root,
         "scratch/loose.crs",
-        "use /std/{Test};\n\ntest in_loose =\n    Test/assert(\"it holds\", true);\n",
+        "use /std/{Test};\n\ntest in_loose =>\n    Test/assert(\"it holds\", true);\n",
     );
 
     let executable = curios(&root, &["test", "app"]);
@@ -501,7 +501,7 @@ fn a_target_runs_only_the_tests_of_what_it_selects() {
 fn a_module_on_standard_input_runs_its_own_tests_and_is_no_program_to_run() {
     let root = temporary("stdin-module");
     fs::create_dir_all(&root).unwrap();
-    let module = "use /std/{Test};\n\ntest in_piped =\n    Test/assert(\"it holds\", true);\n";
+    let module = "use /std/{Test};\n\ntest in_piped =>\n    Test/assert(\"it holds\", true);\n";
 
     let tested = fed(&root, &["test", "-"], module);
     in_order(
@@ -530,7 +530,7 @@ fn a_module_on_standard_input_runs_its_own_tests_and_is_no_program_to_run() {
 fn a_run_closes_on_where_each_test_that_did_not_pass_is_found() {
     let root = temporary("unpassed");
     fs::create_dir_all(&root).unwrap();
-    let module = "use /std/{Test};\n\ntest holds =\n    Test/assert(\"it holds\", true);\n\ntest falls =\n    Test/assert(\"it falls\", false);\n\ntest falls_too =\n    Test/assert(\"it falls too\", false);\n";
+    let module = "use /std/{Test};\n\ntest holds =>\n    Test/assert(\"it holds\", true);\n\ntest falls =>\n    Test/assert(\"it falls\", false);\n\ntest falls_too =>\n    Test/assert(\"it falls too\", false);\n";
 
     let failing = stderr(&fed(&root, &["--progress", "plain", "test", "-"], module));
     let (_, end) = failing
@@ -545,7 +545,7 @@ fn a_run_closes_on_where_each_test_that_did_not_pass_is_found() {
     let passing = stderr(&fed(
         &root,
         &["--progress", "plain", "test", "-"],
-        "use /std/{Test};\n\ntest holds =\n    Test/assert(\"it holds\", true);\n",
+        "use /std/{Test};\n\ntest holds =>\n    Test/assert(\"it holds\", true);\n",
     ));
     assert!(
         passing.trim_end().lines().last().is_some_and(
@@ -562,7 +562,7 @@ fn run_forwards_an_argument_that_is_not_utf8_as_its_bytes() {
     write(
         &root,
         "args.crs",
-        "use /std/{Str, Bytes, List, Show, Io, Proc};\nlet main() -> Io({}) =\nlet args = Proc/args()!;\nlet rest: List(Bytes) = match args | [] => [] | [first, ..tail] => tail end;\n/std/print(Str/join(\" \", List/map(rest, (a: Bytes) => Show/show(a))));\nmain()\n",
+        "use /std/{Str, Bytes, List, Show, Io, Proc};\nlet main() -> Io({}) =>\nlet args = Proc/args()!;\nlet rest: List(Bytes) = match args | [] => [] | [first, ..tail] => tail end;\n/std/print(Str/join(\" \", List/map(rest, (a: Bytes) => Show/show(a))));\nmain()\n",
     );
     let output = Command::new(env!("CARGO_BIN_EXE_curios"))
         .env_remove(CABINET)
@@ -589,7 +589,7 @@ fn run_delivers_both_streams_in_the_order_the_program_wrote_them() {
     let (status, output) = merged(
         &root,
         &["run", "-"],
-        "let main() -> /std/Io({}) = let _ = /std/print(\"a\")!;\nlet _ = /std/print_err(\"b\")!;\n/std/print(\"c\\n\");\nmain()\n",
+        "let main() -> /std/Io({}) => let _ = /std/print(\"a\")!;\nlet _ = /std/print_err(\"b\")!;\n/std/print(\"c\\n\");\nmain()\n",
     );
 
     assert!(status.success(), "{output}");
@@ -709,12 +709,12 @@ fn wonder_tests_lists_declared_paths_per_target_form() {
     write(
         &root,
         "lib.crs",
-        "use /std/{Nat, Test};\n\ntest lib_zeta =\n    Test/assert(\"it holds\", 1 == 1);\n\ntest lib_alpha =\n    Test/assert(\"it holds\", 2 == 2);\n",
+        "use /std/{Nat, Test};\n\ntest lib_zeta =>\n    Test/assert(\"it holds\", 1 == 1);\n\ntest lib_alpha =>\n    Test/assert(\"it holds\", 2 == 2);\n",
     );
     write(
         &root,
         "app.crs",
-        "use /std/{Nat, Str, Io, Test};\n\ntest app_zeta =\n    Test/assert(\"it holds\", 3 == 3);\n\ntest app_alpha =\n    Test/assert(\"it holds\", 4 == 4);\n\n/std/print(\"ran\\n\")\n",
+        "use /std/{Nat, Str, Io, Test};\n\ntest app_zeta =>\n    Test/assert(\"it holds\", 3 == 3);\n\ntest app_alpha =>\n    Test/assert(\"it holds\", 4 == 4);\n\n/std/print(\"ran\\n\")\n",
     );
 
     // The package entire: the library's tests, then each executable's, in the order their test programs run them, which is declared rather than sorted — and nothing executes, so the authored entry never prints.
@@ -773,13 +773,13 @@ fn every_target_files_its_payload_so_the_second_invocation_reuses_them_all() {
     write(
         &root,
         "lib.crs",
-        "use /std/{Nat, Test};\n\ntest lib_holds =\n    Test/assert(\"it holds\", 1 == 1);\n",
+        "use /std/{Nat, Test};\n\ntest lib_holds =>\n    Test/assert(\"it holds\", 1 == 1);\n",
     );
     write(&root, "app.crs", "/std/print(\"ran\\n\")\n");
     write(
         &root,
         "other.crs",
-        "use /std/{Nat, Test};\n\ntest other_holds =\n    Test/assert(\"it holds\", 2 == 2);\n\n/std/print(\"ran\\n\")\n",
+        "use /std/{Nat, Test};\n\ntest other_holds =>\n    Test/assert(\"it holds\", 2 == 2);\n\n/std/print(\"ran\\n\")\n",
     );
 
     let cold = curios(&root, &["test"]);

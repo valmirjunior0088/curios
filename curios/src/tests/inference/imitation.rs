@@ -15,7 +15,7 @@ fn program(body: &str) -> String {
         let x: Two(Nat, Bool) = Two { a = 1, b = true };
         let y: Two(Nat, Nat) = Two { a = 1, b = 2 };
         let z: Two(Bool, Bool) = Two { a = true, b = true };
-        let and(s: Str, t: Str) -> Str = Str/concat(s, Str/concat(" ", t));
+        let and(s: Str, t: Str) -> Str => Str/concat(s, Str/concat(" ", t));
         ${body}
         "#,
         body
@@ -27,10 +27,10 @@ fn program(body: &str) -> String {
 fn a_function_an_argument_states_is_not_taken_from_an_imitation() {
     let source = program(
         r#"
-        let first(@M: (Type) -> Type, @A: Type, x: M(A), w: Holder(M)) -> Nat = w.n;
-        let second(@M: (Type) -> Type, @A: Type, w: Holder(M), x: M(A)) -> Nat = w.n;
-        let before(@M: (Type) -> Type, p: Two(M(Nat), Holder(M))) -> Nat = p.b.n;
-        let after(@M: (Type) -> Type, p: Two(Holder(M), M(Nat))) -> Nat = p.a.n;
+        let first(@M: (Type) -> Type, @A: Type, x: M(A), w: Holder(M)) -> Nat => w.n;
+        let second(@M: (Type) -> Type, @A: Type, w: Holder(M), x: M(A)) -> Nat => w.n;
+        let before(@M: (Type) -> Type, p: Two(M(Nat), Holder(M))) -> Nat => p.b.n;
+        let after(@M: (Type) -> Type, p: Two(Holder(M), M(Nat))) -> Nat => p.a.n;
         let one: (Two(Two(Nat, Bool), Holder((X: Type) => Two(X, Bool)))) -> Nat = before;
         let other: (Two(Holder((X: Type) => Two(X, Bool)), Two(Nat, Bool))) -> Nat = after;
         print(Str/join(" ", [
@@ -50,7 +50,7 @@ fn a_function_an_argument_states_is_not_taken_from_an_imitation() {
 fn a_function_only_an_imitation_gives_is_taken_where_the_call_completes() {
     let source = program(
         r#"
-        let lone(@M: (Type) -> Type, @A: Type, x: M(A), f: (M(A)) -> M(Bool)) -> M(Bool) = f(x);
+        let lone(@M: (Type) -> Type, @A: Type, x: M(A), f: (M(A)) -> M(Bool)) -> M(Bool) => f(x);
         let r = lone(x, (p) => Two { a = p.a + 1, b = p.b });
         print(Nat/to_str(r.a))
         "#,
@@ -64,9 +64,9 @@ fn a_function_only_an_imitation_gives_is_taken_where_the_call_completes() {
 fn an_application_no_call_awaits_is_imitated_where_its_item_completes() {
     let source = program(
         r#"
-        let five(@M: (Type) -> Type, use Monad(M)) -> M(Nat) = Monad/pure(5);
+        let five(@M: (Type) -> Type, use Monad(M)) -> M(Nat) => Monad/pure(5);
         let declared: Option(Nat) = five;
-        let inside(n: Nat) -> Nat =
+        let inside(n: Nat) -> Nat =>
             let local: Option(Nat) = five;
             Option/unwrap_or(local, n);
         print(and(Nat/to_str(Option/unwrap_or(declared, 0)), Nat/to_str(inside(0))))
@@ -82,14 +82,14 @@ fn an_imitation_is_kept_where_its_arguments_still_wait() {
     let source = program(
         r#"
         struct Fn(S: Type, T: Type): pub Type { run: (S) -> T }
-        let same(@S: Type) -> Fn(S, S) = Fn { run = (s) => s };
+        let same(@S: Type) -> Fn(S, S) => Fn { run = (s) => s };
         concept Starts(M: (Type) -> Type): pub Type {
             start(@A: Type, M(A)) -> Nat,
         }
         satisfy Starts((T: Type) => Fn(Nat, T)) {
-            start(f) = 3,
+            start(f) => 3,
         }
-        let keep(@M: (Type) -> Type, @A: Type, f: M(A)) -> M(A) = f;
+        let keep(@M: (Type) -> Type, @A: Type, f: M(A)) -> M(A) => f;
         let kept = keep(same());
         print(and(Nat/to_str(Starts/start(same())), Nat/to_str(kept.run(4))))
         "#,
@@ -103,7 +103,7 @@ fn an_imitation_is_kept_where_its_arguments_still_wait() {
 fn two_imitations_that_give_an_implicit_one_function_agree() {
     let source = program(
         r#"
-        let both(@M: (Type) -> Type, @A: Type, @B: Type, x: M(A), y: M(B)) -> Nat = 3;
+        let both(@M: (Type) -> Type, @A: Type, @B: Type, x: M(A), y: M(B)) -> Nat => 3;
         print(Str/join(" ", [
             Nat/to_str(both(x, y)),
             Nat/to_str(both(y, x)),
@@ -121,7 +121,7 @@ fn two_imitations_that_give_an_implicit_two_functions_refuse_the_call() {
     for (arguments, one, another) in [("x, z", "Nat", "Bool"), ("z, x", "Bool", "Nat")] {
         let report = error(&program(&format!(
             r#"
-            let both(@M: (Type) -> Type, @A: Type, @B: Type, x: M(A), y: M(B)) -> Nat = 3;
+            let both(@M: (Type) -> Type, @A: Type, @B: Type, x: M(A), y: M(B)) -> Nat => 3;
             print(Nat/to_str(both({arguments})))
             "#
         )));

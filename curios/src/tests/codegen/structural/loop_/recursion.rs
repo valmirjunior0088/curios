@@ -365,13 +365,13 @@ fn a_map_inserts_leaf_key_is_encoded_through_a_direct_call() {
 fn an_unread_call_through_a_total_definitions_local_loop_is_dropped() {
     const LOCAL_LOOPS: &str = r#"
         use /std/{Nat, List, Proc};
-        let tally(n: Nat) -> Nat =
-            let count(k: Nat, acc: Nat) -> Nat = match k | 0 => acc | j + 1 => count(j, acc + 30011) end;
+        let tally(n: Nat) -> Nat =>
+            let count(k: Nat, acc: Nat) -> Nat => match k | 0 => acc | j + 1 => count(j, acc + 30011) end;
             count(n, 0);
-        let whirl(n: Nat) -> Nat =
-            let spin(k: Nat) -> Nat = match k | 0 => 0 | _ => spin(k + 30013) end;
+        let whirl(n: Nat) -> Nat =>
+            let spin(k: Nat) -> Nat => match k | 0 => 0 | _ => spin(k + 30013) end;
             spin(n);
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let taint = List/length(Proc/args()!);
             let unread_total = tally(taint);
             let unread_partial = whirl(taint);
@@ -395,15 +395,15 @@ fn an_unread_call_through_a_total_definitions_local_loop_is_dropped() {
 fn an_unread_fold_handed_a_pure_stepper_is_dropped() {
     const FOLDS: &str = r#"
         use /std/{Nat, List, Bytes, Proc};
-        let spin(k: Nat) -> Nat = match k | 0 => 0 | _ => spin(k + 30023) end;
-        let tally(bytes: Bytes, arguments: List(Bytes)) -> Nat =
+        let spin(k: Nat) -> Nat => match k | 0 => 0 | _ => spin(k + 30023) end;
+        let tally(bytes: Bytes, arguments: List(Bytes)) -> Nat =>
             let unread_bytes = Bytes/fold(bytes, 0, (b, acc) => acc + 30017);
             let unread_list = List/fold(arguments, 0, (s, acc) => acc + 30019);
             List/length(arguments);
-        let churn(bytes: Bytes) -> Nat =
+        let churn(bytes: Bytes) -> Nat =>
             let unread_partial = Bytes/fold(bytes, 0, (b, acc) => spin(acc));
             Bytes/length(bytes);
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let arguments = Proc/args()!;
             let bytes = Bytes/flatten(arguments);
             /std/print(Nat/to_str(tally(bytes, arguments) + churn(bytes)));
@@ -430,10 +430,10 @@ fn an_unread_fold_handed_a_pure_stepper_is_dropped() {
 fn an_unread_fold_inlined_into_its_one_caller_is_dropped() {
     const FOLD: &str = r#"
         use /std/{Nat, List, Bytes, Proc};
-        let tally(bytes: Bytes) -> Nat =
+        let tally(bytes: Bytes) -> Nat =>
             let unread = Bytes/fold(bytes, 0, (b, acc) => acc + 30029);
             Bytes/length(bytes);
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let bytes = Bytes/flatten(Proc/args()!);
             /std/print(Nat/to_str(tally(bytes)));
         entry()

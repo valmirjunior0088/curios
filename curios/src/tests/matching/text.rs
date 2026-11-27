@@ -7,7 +7,7 @@ use {crate::test_support::*, curios_common::fill};
 fn a_char_is_dispatched_on_its_characters() {
     let source = r#"
         use /std/{Char, List, Nat, Str};
-        let spacing(c: Char) -> Nat =
+        let spacing(c: Char) -> Nat =>
             match c
             | ' ' | '\t' => 0
             | '\n' => 1
@@ -25,7 +25,7 @@ fn a_char_is_dispatched_on_its_characters() {
 fn a_string_is_dispatched_on_its_strings() {
     let source = r#"
         use /std/{List, Nat, Str};
-        let command(name: Str) -> Nat =
+        let command(name: Str) -> Nat =>
             match name
             | "" => 0
             | "a" => 1
@@ -50,19 +50,19 @@ fn a_string_is_dispatched_on_its_strings() {
 fn a_string_pattern_nests_where_a_pattern_does() {
     let source = r#"
         use /std/{List, Nat, Option, Str};
-        let flag(o: Option(Str)) -> Nat =
+        let flag(o: Option(Str)) -> Nat =>
             match o
             | some("--help") => 1
             | some(_) => 2
             | none() => 0
             end;
-        let verb(args: List(Str)) -> Nat =
+        let verb(args: List(Str)) -> Nat =>
             match args
             | ["run", ..rest] => 10 + List/length(rest)
             | ["test"] => 20
             | _ => 0
             end;
-        let pair(p: {Str, Nat}) -> Nat =
+        let pair(p: {Str, Nat}) -> Nat =>
             match p
             | ("x", 0) => 1
             | ("x", n) => 2 + n
@@ -81,43 +81,43 @@ fn a_string_pattern_nests_where_a_pattern_does() {
 fn a_text_dispatch_refuses_what_its_type_does_not_take() {
     for (declaration, refusal) in [
         (
-            "let f(c: Char) -> Nat = match c | 97 => 1 | _ => 0 end;",
+            "let f(c: Char) -> Nat => match c | 97 => 1 | _ => 0 end;",
             "takes a `Nat`, a `Byte` or a `Bool` apart",
         ),
         (
-            "let f(c: Char) -> Nat = match c | 'a' => 1 | p + 1 => 0 end;",
+            "let f(c: Char) -> Nat => match c | 'a' => 1 | p + 1 => 0 end;",
             "takes a `Nat` apart by its predecessor",
         ),
         (
-            "let f(i: Int) -> Nat = match i | 'a' => 1 | _ => 0 end;",
+            "let f(i: Int) -> Nat => match i | 'a' => 1 | _ => 0 end;",
             "takes a `Nat`, a `Byte` or a `Char` apart",
         ),
         (
-            r#"let f(n: Nat) -> Nat = match n | "a" => 1 | _ => 0 end;"#,
+            r#"let f(n: Nat) -> Nat => match n | "a" => 1 | _ => 0 end;"#,
             "takes a `Str` apart by its bytes",
         ),
         (
-            r#"let f(b: Bytes) -> Nat = match b | "a" => 1 | _ => 0 end;"#,
+            r#"let f(b: Bytes) -> Nat => match b | "a" => 1 | _ => 0 end;"#,
             "takes a `Str` apart by its bytes",
         ),
         (
-            r#"let f(s: Str) -> Nat = match s | "a" => 1 | 0x[] => 0 | _ => 2 end;"#,
+            r#"let f(s: Str) -> Nat => match s | "a" => 1 | 0x[] => 0 | _ => 2 end;"#,
             "shape mismatch",
         ),
         (
-            r#"let f(s: Str) -> Nat = match s | "a" => 1 | "a" => 2 | _ => 0 end;"#,
+            r#"let f(s: Str) -> Nat => match s | "a" => 1 | "a" => 2 | _ => 0 end;"#,
             "unreachable arm",
         ),
         (
-            r#"let f(s: Str) -> Nat = match s | "a" => 1 | "b" => 2 end;"#,
+            r#"let f(s: Str) -> Nat => match s | "a" => 1 | "b" => 2 end;"#,
             r#"no arm matches `""`"#,
         ),
         (
-            r#"let f(s: Str) -> Nat = match s | "" => 0 | "a" => 1 end;"#,
+            r#"let f(s: Str) -> Nat => match s | "" => 0 | "a" => 1 end;"#,
             "no arm matches `_`",
         ),
         (
-            "let f(c: Char) -> Nat = match c | 'a' => 1 end;",
+            "let f(c: Char) -> Nat => match c | 'a' => 1 end;",
             "no arm matches `_`",
         ),
     ] {

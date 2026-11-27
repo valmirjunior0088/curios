@@ -7,32 +7,32 @@ use /std/Bool/{True, Holds};
 --- A magnitude widened back is the integer it was taken of, where that is zero or above.
 ---
 --- Conversion decides it where the operand's term alone shows it at least zero; it reads no hypothesis, so under one a proof takes this lemma.
-pub let of_non_neg(a: Int, p: Int/NonNeg(a)) -> Eq()(Nat/to_int(abs(a)), a) =
+pub let of_non_neg(a: Int, p: Int/NonNeg(a)) -> Eq()(Nat/to_int(abs(a)), a) =>
     match Int/view(a)
     | nonneg(_) => Eq/refl()
     | neg(_) => match p end
     end;
 
 --- A magnitude widened back is the negation of the integer it was taken of, where that is below zero.
-pub let of_neg(a: Int, p: Holds(a < +0)) -> Eq()(Nat/to_int(abs(a)), +0 - a) =
+pub let of_neg(a: Int, p: Holds(a < +0)) -> Eq()(Nat/to_int(abs(a)), +0 - a) =>
     match Int/view(a)
     | nonneg(_) => match p end
     | neg(_) => Eq/refl()
     end;
 
 --- A magnitude widened back is at least the integer it was taken of, whatever its sign.
-pub let at_least(a: Int) -> Holds(a <= Nat/to_int(abs(a))) =
+pub let at_least(a: Int) -> Holds(a <= Nat/to_int(abs(a))) =>
     match Int/view(a) | nonneg(_) | neg(_) => True/qed() end;
 
 --- A magnitude widened back is at least the negation of the integer it was taken of, whatever its sign.
-pub let at_least_negated(a: Int) -> Holds(+0 - a <= Nat/to_int(abs(a))) =
+pub let at_least_negated(a: Int) -> Holds(+0 - a <= Nat/to_int(abs(a))) =>
     match Int/view(a) | nonneg(_) | neg(_) => True/qed() end;
 
 -- By [`Int/view`] of each operand.
 --- The magnitude of a product is the product of the magnitudes.
 ---
 --- Conversion takes it where both operands are widened naturals or their negations and not at a product of two symbols, which reaches `abs` distributed.
-pub let of_mul(a: Int, b: Int) -> Eq()(abs(a * b), abs(a) * abs(b)) =
+pub let of_mul(a: Int, b: Int) -> Eq()(abs(a * b), abs(a) * abs(b)) =>
     match Int/view(a)
     | nonneg(_) | neg(_) =>
         match Int/view(b) | nonneg(_) | neg(_) => Eq/refl() end

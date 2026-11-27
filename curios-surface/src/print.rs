@@ -990,7 +990,7 @@ impl<D: Layout> TreePrinter<D> {
         flat([print_plicity(plicity), member])
     }
 
-    /// A tuple-literal / struct-literal field: positional, `label = value`, or the definition sugar `label(params) = value` re-sugared from the retained parameter list.
+    /// A tuple-literal / struct-literal field: positional, `label = value`, or the definition sugar `label(params) => value` re-sugared from the retained parameter list.
     fn tuple_field(self, field: TupleField<D>) -> Printer {
         match (field.label, field.func_params) {
             (Some(label), Some(params)) => flat([
@@ -1003,7 +1003,7 @@ impl<D: Layout> TreePrinter<D> {
                         .collect(),
                     ")",
                 ),
-                self.attached_body(" =", field.value),
+                self.attached_body(" =>", field.value),
             ]),
             (Some(label), None) => flat([pure(label), self.attached_value(" =", field.value)]),
             (None, _) => self.term(field.value),
@@ -1020,7 +1020,7 @@ impl<D: Layout> TreePrinter<D> {
         }
     }
 
-    /// One lambda parameter, which the definition sugar `label(params) = value` writes too: its plicity mark (`@`/`use`), the binder pattern, and its optional domain annotation. A lambda's `use` member is `use _`, the wildcard holding its place.
+    /// One lambda parameter, which the definition sugar `label(params) => value` writes too: its plicity mark (`@`/`use`), the binder pattern, and its optional domain annotation. A lambda's `use` member is `use _`, the wildcard holding its place.
     fn func_pattern_param(self, param: FuncParam<D>) -> Printer {
         let FuncParam {
             plicity,
@@ -1420,8 +1420,9 @@ impl<D: Layout> TreePrinter<D> {
     fn let_signature(self, signature: LetSignature<D>, top: bool) -> Printer {
         // A top-level definition's body is a body, and so is a function's; a local value is a term.
         let bound = |body: Term<D>, function: bool| match (top, function) {
-            (true, _) => flat([pure(" ="), hard_line(), indent(self.body(body))]),
-            (false, true) => self.attached_body(" =", body),
+            (true, true) => flat([pure(" =>"), hard_line(), indent(self.body(body))]),
+            (true, false) => flat([pure(" ="), hard_line(), indent(self.body(body))]),
+            (false, true) => self.attached_body(" =>", body),
             (false, false) => self.attached_value(" =", body),
         };
         match signature {
@@ -1441,6 +1442,30 @@ impl<D: Layout> TreePrinter<D> {
                 let signature = self.signature(params, output);
                 flat([signature, bound(body, true)])
             }
+            LetSignature::Lambda {
+                params,
+                output,
+                body,
+            } => {
+                let signature = self.lambda_signature(params, output);
+                flat([signature, bound(body, true)])
+            }
+        }
+    }
+
+    /// A local function's parameters as a lambda writes them, and the `-> output` where it states one, in the one group [`TreePrinter::signature`] measures a stated function's in.
+    fn lambda_signature(self, params: Vec<FuncParam<D>>, output: Option<Term<D>>) -> Printer {
+        let items = params
+            .into_iter()
+            .map(|param| self.func_pattern_param(param))
+            .collect::<Vec<_>>();
+        let output = match output {
+            Some(output) => flat([pure(" -> "), self.term(output)]),
+            None => flat([]),
+        };
+        match items.is_empty() {
+            true => flat([pure("()"), output]),
+            false => group(flat([telescope(items), output])),
         }
     }
 
@@ -1463,7 +1488,7 @@ impl<D: Layout> TreePrinter<D> {
             flat([
                 lead(&[Keyword::Test]),
                 D::declared(&test.core, test.label),
-                pure(" ="),
+                pure(" =>"),
                 hard_line(),
                 indent(flat([self.body(test.body), ends()])),
                 pure(";"),
@@ -2454,7 +2479,7 @@ fn print_top_witness(printer: TreePrinter<Program>, items: Vec<TopWitness>) -> P
 fn witness_signature(params: Vec<Printer>, app: Printer) -> Printer {
     match params.is_empty() {
         true => app,
-        false => group(flat([telescope(params), pure(" => "), app])),
+        false => group(flat([telescope(params), pure(" -> "), app])),
     }
 }
 
@@ -2520,7 +2545,7 @@ fn print_witness_member(
     flat([lead(words), witness_signature(params, app), body])
 }
 
-/// A witness-body entry, which is an implementation field — `label = value`, or the definition sugar `label(params) = value` re-sugared from the retained parameter list.
+/// A witness-body entry, which is an implementation field — `label = value`, or the definition sugar `label(params) => value` re-sugared from the retained parameter list.
 fn print_witness_entry(printer: TreePrinter<Program>, field: WitnessField) -> Printer {
     match field.func_params {
         Some(params) => flat([
@@ -2533,7 +2558,7 @@ fn print_witness_entry(printer: TreePrinter<Program>, field: WitnessField) -> Pr
                     .collect(),
                 ")",
             ),
-            printer.attached_body(" =", field.value),
+            printer.attached_body(" =>", field.value),
         ]),
         None => flat([
             pure(field.label.to_string()),
@@ -2574,6 +2599,9 @@ pub fn print_let_head(item: &TopLet, sys: &'static str) -> Printer {
         LetSignature::Name { type_: None, .. } => pure(""),
         LetSignature::Func { params, output, .. } => {
             printer.signature(params.clone(), output.clone())
+        }
+        LetSignature::Lambda { params, output, .. } => {
+            printer.lambda_signature(params.clone(), output.clone())
         }
     };
     flat([

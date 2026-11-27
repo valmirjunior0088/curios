@@ -16,7 +16,7 @@ use /std/ops/{Eql};
 use /std/Bool/{True, False, Holds};
 
 --- The byte at `i`, or `none` past the end.
-pub let try_get(b: Bytes, i: Nat) -> Option(Byte) =
+pub let try_get(b: Bytes, i: Nat) -> Option(Byte) =>
     match i < length(b)
     | true => Option/some(get(b, i))
     | false => Option/none()
@@ -24,14 +24,14 @@ pub let try_get(b: Bytes, i: Nat) -> Option(Byte) =
 
 -- A direct cons, which is the shape `0x[h, ..t]` builds and the shape `to_nat` folds back, so taking one apart is the eliminator's own seam rather than the window at the far one a big-endian snoc would need.
 --- The minimal encoding of `n`, least-significant byte first as the carrier reads: empty for zero, no trailing zero otherwise, so distinct numbers encode distinctly.
-pub let of_nat(n: Nat) -> Bytes =
+pub let of_nat(n: Nat) -> Bytes =>
     match n == 0
     | true => 0x[]
     | false => 0x[Nat/to_byte(n % 256), ..of_nat(n / 256)]
     end;
 
 -- A cons has no length of zero: the comparison that decides the two lengths refutes the equation.
-let no_cons(k: Byte, p: Bytes, e: Eq()(0, length(0x[k, ..p]))) -> False =
+let no_cons(k: Byte, p: Bytes, e: Eq()(0, length(0x[k, ..p]))) -> False =>
     Eq/subst((m: Nat) => Holds(0 == m), e, True/qed());
 
 -- By induction on both runs: the tails' numbers are the quotients by `256` and the heads the remainders, each of which conversion reads off a byte beside a multiple.
@@ -43,7 +43,7 @@ pub let to_nat_inj(
     b: Bytes,
     same: Eq()(length(a), length(b)),
     e: Eq()(to_nat(a), to_nat(b)),
-) -> Eq()(a, b) =
+) -> Eq()(a, b) =>
     match a
     | 0x[] =>
         match b
@@ -65,11 +65,11 @@ pub let to_nat_inj(
     end;
 
 -- The recursion `of_nat` performs terminates, which is what lets injectivity recurse the same way.
-let high_below(n: Nat, positive: Holds(0 < n)) -> Holds(n / 256 < n) =
+let high_below(n: Nat, positive: Holds(0 < n)) -> Holds(n / 256 < n) =>
     proved();
 
 -- A cons taken apart, or `none` for no bytes: one function of the whole value, which congruence needs, and no half invented for the run that has none.
-let uncons(z: Bytes) -> Option({Byte, Bytes}) =
+let uncons(z: Bytes) -> Option({Byte, Bytes}) =>
     match z
     | 0x[] => Option/none()
     | 0x[k, ..p] => Option/some((k, p))
@@ -83,7 +83,7 @@ pub let cons_inj_head(
     @k2: Byte,
     @p2: Bytes,
     e: Eq()(0x[k1, ..p1], 0x[k2, ..p2]),
-) -> Eq()(k1, k2) =
+) -> Eq()(k1, k2) =>
     Eq/cong((halves: {Byte, Bytes}) => halves.0, Option/some_inj(Eq/cong(uncons, e)));
 
 --- A cons is injective in its tail.
@@ -93,11 +93,11 @@ pub let cons_inj_tail(
     @k2: Byte,
     @p2: Bytes,
     e: Eq()(0x[k1, ..p1], 0x[k2, ..p2]),
-) -> Eq()(p1, p2) =
+) -> Eq()(p1, p2) =>
     Eq/cong((halves: {Byte, Bytes}) => halves.1, Option/some_inj(Eq/cong(uncons, e)));
 
 -- `Eql`'s law at `Bytes`, by recursion on both runs, since the comparison of two conses is their heads' and their tails', and of a cons and no bytes is `false`.
-let eq_of_eql(a: Bytes, b: Bytes, h: Holds(eql(a, b))) -> Eq()(a, b) =
+let eq_of_eql(a: Bytes, b: Bytes, h: Holds(eql(a, b))) -> Eq()(a, b) =>
     match a
     | 0x[] =>
         match b
@@ -119,11 +119,11 @@ let eq_of_eql(a: Bytes, b: Bytes, h: Holds(eql(a, b))) -> Eq()(a, b) =
     end;
 
 -- An empty encoding is no encoding of a positive number: the lengths differ, and a length of zero against a successor is refuted by the comparison that decides it.
-let no_empty(k: Byte, p: Bytes, e: Eq()(0x[], 0x[k, ..p])) -> False =
+let no_empty(k: Byte, p: Bytes, e: Eq()(0x[], 0x[k, ..p])) -> False =>
     Eq/subst((m) => Holds(0 == m), Eq/cong(length, e), True/qed());
 
 -- An encoding of zero is the encoding of zero alone: any other is a cons, and an empty encoding is none.
-let encodes_zero_alone(d: Nat, e: Eq()(of_nat(0), of_nat(d))) -> Eq()(0, d) =
+let encodes_zero_alone(d: Nat, e: Eq()(of_nat(0), of_nat(d))) -> Eq()(0, d) =>
     match d
     | 0 => Eq/refl()
     | dp + 1 =>
@@ -136,7 +136,7 @@ let highs_encode_alike(
     x: Nat,
     y: Nat,
     e: Eq()(of_nat(x + 1), of_nat(y + 1)),
-) -> Eq()(of_nat((x + 1) / 256), of_nat((y + 1) / 256)) =
+) -> Eq()(of_nat((x + 1) / 256), of_nat((y + 1) / 256)) =>
     cons_inj_tail(e);
 
 -- The low digits of two positive numbers whose encodings are one agree: the first bytes are one, by the cons's injection of its head, and a byte read back is the digit it was made from.
@@ -144,7 +144,7 @@ let digits_agree(
     x: Nat,
     y: Nat,
     e: Eq()(of_nat(x + 1), of_nat(y + 1)),
-) -> Eq()((x + 1) % 256, (y + 1) % 256) =
+) -> Eq()((x + 1) % 256, (y + 1) % 256) =>
     Eq/cong(Byte/to_nat, cons_inj_head(e));
 
 -- Euclid's recombination: two numbers alike in their quotients and their remainders by 256 are rejoined alike.
@@ -153,7 +153,7 @@ let recombined(
     y: Nat,
     highs: Eq()(x / 256, y / 256),
     digits: Eq()(x % 256, y % 256),
-) -> Eq()(256 * (x / 256) + x % 256, 256 * (y / 256) + y % 256) =
+) -> Eq()(256 * (x / 256) + x % 256, 256 * (y / 256) + y % 256) =>
     Eq/subst(
         (v) => Eq()(256 * (x / 256) + x % 256, 256 * (y / 256) + v),
         digits,
@@ -161,7 +161,7 @@ let recombined(
 
 -- Course-of-values induction, because the recursion divides rather than decrements. Each step takes the encodings apart at their first bytes: zero against anything is `encodes_zero_alone`'s, and two positive numbers rejoin their high parts, alike by the induction hypothesis, with their low digits.
 --- Distinct numbers encode distinctly.
-pub let of_nat_inj(a: Nat, b: Nat, same: Eq()(of_nat(a), of_nat(b))) -> Eq()(a, b) =
+pub let of_nat_inj(a: Nat, b: Nat, same: Eq()(of_nat(a), of_nat(b))) -> Eq()(a, b) =>
     Nat/descend(
         (m: Nat) => m,
         (m) => (d: Nat, e: Eq()(of_nat(m), of_nat(d))) -> Eq()(m, d),
@@ -187,12 +187,12 @@ pub let of_nat_inj(a: Nat, b: Nat, same: Eq()(of_nat(a), of_nat(b))) -> Eq()(a, 
         same);
 
 --- Everything from `k` on, under the evidence that `k` is within the length.
-pub let drop(b: Bytes, k: Nat, @ok: Holds(k <= length(b))) -> Bytes =
+pub let drop(b: Bytes, k: Nat, @ok: Holds(k <= length(b))) -> Bytes =>
     slice(b, k, length(b) - k);
 
 -- An `xor` against a run of all-ones bytes as long as this one, so the width is a fact about the operand rather than a number written here. `Bytes/length` reduces a fill to its own count, so the equal-length bound the `xor` states discharges without a guard.
 --- Every bit of every byte flipped.
-pub let not(b: Bytes) -> Bytes =
+pub let not(b: Bytes) -> Bytes =>
     xor(b, replicate(length(b), 0xFF));
 
 --- `b` moved `count` bytes toward the high end, zero bytes entering at the low end and whatever passes the top discarded.
@@ -200,14 +200,14 @@ pub let not(b: Bytes) -> Bytes =
 --- Read least significant byte first, as `of_nat` writes, it multiplies by `256^count` at the run's own width. A count past the length gives all zeros rather than a shorter run: the width belongs to the value.
 ---
 --- Whole bytes, not bits: a byte string has no finer position, and a bit shift is `Nat`'s.
-pub let shl(b: Bytes, count: Nat) -> Bytes =
+pub let shl(b: Bytes, count: Nat) -> Bytes =>
     match count <= length(b)
     | true => 0x[..replicate(count, 0x00), ..slice(b, 0, length(b) - count)]
     | false => replicate(length(b), 0x00)
     end;
 
 --- `b` moved `count` bytes toward the low end, zero bytes entering at the high end.
-pub let shr(b: Bytes, count: Nat) -> Bytes =
+pub let shr(b: Bytes, count: Nat) -> Bytes =>
     match count <= length(b)
     | true => 0x[..drop(b, count), ..replicate(count, 0x00)]
     | false => replicate(length(b), 0x00)
@@ -215,7 +215,7 @@ pub let shr(b: Bytes, count: Nat) -> Bytes =
 
 -- The count is taken modulo the width, which is what makes this total without a guard on the count itself; the empty run is the one case with no width to take it modulo.
 --- `b` rotated `count` bytes toward the high end, what passes the top re-entering at the bottom; rotating the empty run is the identity.
-pub let rotl(b: Bytes, count: Nat) -> Bytes =
+pub let rotl(b: Bytes, count: Nat) -> Bytes =>
     match 0 < length(b)
     | true =>
         let keep = length(b) - count % length(b);
@@ -224,7 +224,7 @@ pub let rotl(b: Bytes, count: Nat) -> Bytes =
     end;
 
 --- `b` rotated `count` bytes toward the low end.
-pub let rotr(b: Bytes, count: Nat) -> Bytes =
+pub let rotr(b: Bytes, count: Nat) -> Bytes =>
     match 0 < length(b)
     | true =>
         let places = count % length(b);
@@ -233,12 +233,12 @@ pub let rotr(b: Bytes, count: Nat) -> Bytes =
     end;
 
 --- The concatenation, in order.
-pub let flatten(parts: List(Bytes)) -> Bytes =
+pub let flatten(parts: List(Bytes)) -> Bytes =>
     List/fold(parts, 0x[], (b, acc) => 0x[..acc, ..b]);
 
 --- Left to right with `f(byte, acc)`.
-pub let fold(@A: Type, b: Bytes, init: A, f: (Byte, A) -> A) -> A =
-    let go(z: Bytes, acc: A) -> A =
+pub let fold(@A: Type, b: Bytes, init: A, f: (Byte, A) -> A) -> A =>
+    let go(z: Bytes, acc: A) -> A =>
         match z | 0x[] => acc | 0x[h, ..t] => go(t, f(h, acc)) end;
     go(b, init);
 
@@ -246,7 +246,7 @@ pub let fold(@A: Type, b: Bytes, init: A, f: (Byte, A) -> A) -> A =
 pub let find_index(
     b: Bytes,
     pred: (Byte) -> Bool,
-) -> Option({at: Nat, within: Holds(at < length(b))}) =
+) -> Option({at: Nat, within: Holds(at < length(b))}) =>
     Nat/descend(
         (i: Nat) => length(b) - i,
         (_) => Option({at: Nat, within: Holds(at < length(b))}),
@@ -262,19 +262,19 @@ pub let find_index(
         0);
 
 --- Where the first `x` is, with the proof that it lies within `b`, or `none`.
-pub let index_of(b: Bytes, x: Byte) -> Option({at: Nat, within: Holds(at < length(b))}) =
+pub let index_of(b: Bytes, x: Byte) -> Option({at: Nat, within: Holds(at < length(b))}) =>
     find_index(b, (y) => y == x);
 
 --- Whether `x` occurs in `b`.
-pub let contains(b: Bytes, x: Byte) -> Bool =
+pub let contains(b: Bytes, x: Byte) -> Bool =>
     Option/is_some(index_of(b, x));
 
 --- Whether `pred` accepts every byte of `b`; true of the empty run. It recurs on `b` itself, so on a byte followed by more it reduces to that byte's answer and the rest's, which is what a proof about a prepended byte reads.
-pub let all(b: Bytes, pred: (Byte) -> Bool) -> Bool =
+pub let all(b: Bytes, pred: (Byte) -> Bool) -> Bool =>
     match b | 0x[] => true | 0x[h, ..t] => pred(h) && all(t, pred) end;
 
 --- `parts` with `sep` between each pair.
-pub let join(sep: Bytes, parts: List(Bytes)) -> Bytes =
+pub let join(sep: Bytes, parts: List(Bytes)) -> Bytes =>
     List/balanced(
         List/length(parts),
         0x[],
@@ -288,7 +288,7 @@ struct Cutting: Type {
 }
 
 --- The pieces of `b` between each `sep`, in order: one more than the separators it holds.
-pub let split(b: Bytes, sep: Byte) -> List(Bytes) =
+pub let split(b: Bytes, sep: Byte) -> List(Bytes) =>
     Nat/descend(
         (c: Cutting) => length(c.rest),
         (_) => List(Bytes),
@@ -307,12 +307,12 @@ pub let split(b: Bytes, sep: Byte) -> List(Bytes) =
 satisfy Eql(Bytes) {
     eql = eql,
     eq = eq_of_eql,
-    refl(_) = True/qed(),
+    refl(_) => True/qed(),
 }
 
 --- Hexadecimal, two digits per byte.
 satisfy Show(Bytes) {
-    show(b) =
+    show(b) =>
         Str/flatten(
             fold(
                 b,
@@ -326,17 +326,17 @@ satisfy Show(Bytes) {
 }
 
 satisfy Spell(Bytes) {
-    spell(b) =
+    spell(b) =>
         let parts = fold(b, [], (byte, acc) => [..acc, Nat/to_str(Byte/to_nat(byte))]);
         Fmt/render("0x[%]")(Str/join(", ", parts)),
 }
 
 --- The identity encoding.
 satisfy Hash(Bytes) {
-    hash(b) = b,
+    hash(b) => b,
 }
 
 --- The identity encoding, in the order of bytes.
 satisfy Hash/Key(Bytes) {
-    mono(_, _) = Eq/refl(),
+    mono(_, _) => Eq/refl(),
 }

@@ -2,29 +2,29 @@ use /std/{Str, Char, Bool, List, Option, Cli};
 use /std/Cli/{Command, Field, Positional, Positionals, Problem, Spelled, text_of};
 
 -- A character a name may hold: printable, and no space.
-let printable(c: Char) -> Bool =
+let printable(c: Char) -> Bool =>
     let n = Char/to_nat(c);
     Bool/not(Char/is_ascii_whitespace(c)) && ' ' < n && (n < '\u{7F}' || '\u{9F}' < n);
 
 -- A name a line can write after `--`, as a command's word: something, not led by `-`, and no `=`, which would end it early.
-let writable(name: Str) -> Bool =
+let writable(name: Str) -> Bool =>
     Bool/not(Str/is_empty(name)) && Bool/not(Str/starts_with(name, "-"))
         && Str/fold(name, true, (c, held) => held && printable(c) && c != '=');
 
 -- A name help shows a positional or a choice by.
-let shown(name: Str) -> Bool =
+let shown(name: Str) -> Bool =>
     Bool/not(Str/is_empty(name)) && Str/fold(name, true, (c, held) => held && printable(c));
 
 -- A variable a host can set: something, and no `=`, which would end its name early in the `NAME=VALUE` entry it crosses as.
-let variable(name: Str) -> Bool =
+let variable(name: Str) -> Bool =>
     shown(name) && Bool/not(Str/contains(name, '='));
 
 -- A short name a cluster can hold, and no digit, so a negative number reads as a value.
-let clusterable(c: Char) -> Bool =
+let clusterable(c: Char) -> Bool =>
     printable(c) && c != '-' && c != '=' && Bool/not(Char/is_ascii_digit(c));
 
 -- The names an option answers to.
-let spellings(f: Field) -> List(Spelled) =
+let spellings(f: Field) -> List(Spelled) =>
     let longs = List/map([f.long, ..f.aliases], Spelled/long);
     let short =
         match f.short | none() => [] | some(c) => [Spelled/short(c)] end;
@@ -35,7 +35,7 @@ let spellings(f: Field) -> List(Spelled) =
     end;
 
 -- The names every command answers to whatever it declares.
-let builtins(version: Option(Str)) -> List(Spelled) =
+let builtins(version: Option(Str)) -> List(Spelled) =>
     [
         Spelled/long("help"),
         Spelled/short('h'),
@@ -45,7 +45,7 @@ let builtins(version: Option(Str)) -> List(Spelled) =
         end];
 
 -- Each name of `names` a line spells as another before it does, once: a switch's `--no-x` meets an option named `no-x`.
-let clashes(names: List(Spelled)) -> List(Spelled) =
+let clashes(names: List(Spelled)) -> List(Spelled) =>
     match names
     | [] => []
     | [n, ..rest] =>
@@ -59,7 +59,7 @@ let clashes(names: List(Spelled)) -> List(Spelled) =
     end;
 
 -- Each name of `names` written more than once, once.
-let duplicates(names: List(Str)) -> List(Str) =
+let duplicates(names: List(Str)) -> List(Str) =>
     match names
     | [] => []
     | [n, ..rest] =>
@@ -71,7 +71,7 @@ let duplicates(names: List(Str)) -> List(Str) =
     end;
 
 -- What is wrong with one option's own names.
-let field_problems(f: Field) -> List(Problem) =
+let field_problems(f: Field) -> List(Problem) =>
     let longs =
         match f.kind
         | choice(_, alternatives, _) => List/map(alternatives, (a) => a.long)
@@ -92,7 +92,7 @@ let field_problems(f: Field) -> List(Problem) =
         | _ => []
         end];
 
-let every(ps: Positionals) -> List(Positional) =
+let every(ps: Positionals) -> List(Positional) =>
     [
         ..ps.required,
         ..ps.optional,
@@ -104,7 +104,7 @@ let own(
     options: List(Field),
     ps: List(Positional),
     version: Option(Str),
-) -> List(Problem) =
+) -> List(Problem) =>
     [
         ..match writable(name)
         | true => []
@@ -122,7 +122,7 @@ let own(
             Problem/duplicate_slot)];
 
 --- Every problem of `c` and of the commands beneath it, each beneath reported within its command.
-pub let problems(c: Command, version: Option(Str)) -> List(Problem) =
+pub let problems(c: Command, version: Option(Str)) -> List(Problem) =>
     match c
     | leaf(name, _, options, ps) => own(name, options, every(ps), version)
     | group(name, _, options, commands) =>
@@ -131,7 +131,7 @@ pub let problems(c: Command, version: Option(Str)) -> List(Problem) =
             ..List/map(duplicates(List/map(commands, Cli/name)), Problem/duplicate_command),
             ..beneath(commands, version)]
     end
-and beneath(commands: List(Command), version: Option(Str)) -> List(Problem) =
+and beneath(commands: List(Command), version: Option(Str)) -> List(Problem) =>
     match commands
     | [] => []
     | [c, ..more] =>

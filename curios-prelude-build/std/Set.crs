@@ -18,61 +18,61 @@ pub struct Set(K: Type, use Hash/Key(K)): Type {
     map: Map(K, {}),
 }
 
-pub let empty(@K: Type, use Hash/Key(K)) -> Set(K) =
+pub let empty(@K: Type, use Hash/Key(K)) -> Set(K) =>
     Set { map = Map/empty() };
 
 --- How many elements.
-pub let length(@K: Type, use Hash/Key(K), s: Set(K)) -> Nat =
+pub let length(@K: Type, use Hash/Key(K), s: Set(K)) -> Nat =>
     Map/length(s.map);
 
 --- `s` with `k`.
-pub let insert(@K: Type, use Hash/Key(K), s: Set(K), k: K) -> Set(K) =
+pub let insert(@K: Type, use Hash/Key(K), s: Set(K), k: K) -> Set(K) =>
     Set { map = Map/insert(s.map, k, ()) };
 
 --- `s` without `k`; unchanged when absent.
-pub let remove(@K: Type, use Hash/Key(K), s: Set(K), k: K) -> Set(K) =
+pub let remove(@K: Type, use Hash/Key(K), s: Set(K), k: K) -> Set(K) =>
     Set { map = Map/remove(s.map, k) };
 
 --- Over the elements in their order, with `f(elem, acc)`.
-pub let fold(@K: Type, use Hash/Key(K), @A: Type, s: Set(K), init: A, f: (K, A) -> A) -> A =
+pub let fold(@K: Type, use Hash/Key(K), @A: Type, s: Set(K), init: A, f: (K, A) -> A) -> A =>
     Map/fold(s.map, init, (k, (), acc) => f(k, acc));
 
 --- The set of the elements of `l`.
-pub let of_list(@K: Type, use Hash/Key(K), l: List(K)) -> Set(K) =
+pub let of_list(@K: Type, use Hash/Key(K), l: List(K)) -> Set(K) =>
     List/fold(l, empty(), (k, acc) => insert(acc, k));
 
 --- Every element of either.
-pub let union(@K: Type, use Hash/Key(K), a: Set(K), b: Set(K)) -> Set(K) =
+pub let union(@K: Type, use Hash/Key(K), a: Set(K), b: Set(K)) -> Set(K) =>
     Set { map = Map/union(a.map, b.map) };
 
 --- The elements of both.
-pub let intersection(@K: Type, use Hash/Key(K), a: Set(K), b: Set(K)) -> Set(K) =
+pub let intersection(@K: Type, use Hash/Key(K), a: Set(K), b: Set(K)) -> Set(K) =>
     Set { map = Map/intersection(a.map, b.map) };
 
 --- The elements of `a` that are no element of `b`.
-pub let difference(@K: Type, use Hash/Key(K), a: Set(K), b: Set(K)) -> Set(K) =
+pub let difference(@K: Type, use Hash/Key(K), a: Set(K), b: Set(K)) -> Set(K) =>
     Set { map = Map/difference(a.map, b.map) };
 
 --- Two sets are equal where they hold the same elements, which is where their maps are equal.
-satisfy (@K: Type, use Hash/Key(K)) => Eql(Set(K)) {
-    eql(a, b) = a.map == b.map,
+satisfy (@K: Type, use Hash/Key(K)) -> Eql(Set(K)) {
+    eql(a, b) => a.map == b.map,
     -- A congruence written over the fields and applied at the projections, where an equation between two projections solves nothing. The law is applied outside it, at the projections: a field is below its record, so a family nested through this one descends through the law as it does through `eql`.
-    eq(a, b, h) =
+    eq(a, b, h) =>
         let fields(
             m1: Map(K, {}),
             m2: Map(K, {}),
             map: Eq()(m1, m2),
-        ) -> Eq(@Set(K))(Set { map = m1 }, Set { map = m2 }) =
+        ) -> Eq(@Set(K))(Set { map = m1 }, Set { map = m2 }) =>
             let refl() = map;
             Eq/refl();
         fields(a.map, b.map, proved()),
-    refl(a) = Eql/refl(a.map),
+    refl(a) => Eql/refl(a.map),
 }
 
-satisfy (@K: Type, use Hash/Key(K), use Show(K)) => Show(Set(K)) {
-    show(s) = Show/show(to_list(s)),
+satisfy (@K: Type, use Hash/Key(K), use Show(K)) -> Show(Set(K)) {
+    show(s) => Show/show(to_list(s)),
 }
 
-satisfy (@K: Type, use Hash/Key(K), use Spell(K)) => Spell(Set(K)) {
-    spell(s) = Fmt/render("Set/of_list(#)")(to_list(s)),
+satisfy (@K: Type, use Hash/Key(K), use Spell(K)) -> Spell(Set(K)) {
+    spell(s) => Fmt/render("Set/of_list(#)")(to_list(s)),
 }

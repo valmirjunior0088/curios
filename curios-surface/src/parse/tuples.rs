@@ -161,7 +161,7 @@ pub fn parse_tuple_type<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, Te
 // A parsed labeled-field prefix: the label and, for the definition sugar, the written lambda-parameter list.
 type TupleFieldPrefix<D> = (Label, Option<Vec<FuncParam<D>>>);
 
-// The committing prefix of a labeled tuple/struct-literal field: `label =` or the definition sugar `label(params) =`. It fails recoverably, so a positional field that merely starts with an identifier or an application backtracks cleanly; the `=` is guarded against `==` and `=>` via `not_ahead`, mirroring the bind arm's idiom, since `(a == b, 2)` is a positional field whose value begins with a name and must not be read as the label `a`. The sugar's list is a call's as far as its closing parenthesis — `f(@A, use dict, x)` is both — so a member the sugar refuses is held until the `=` and raised past it.
+// The committing prefix of a labeled tuple/struct-literal field: `label =` or the definition sugar `label(params) =>`. It fails recoverably, so a positional field that merely starts with an identifier or an application backtracks cleanly; the `=` is guarded against `==` and `=>` via `not_ahead`, mirroring the bind arm's idiom, since `(a == b, 2)` is a positional field whose value begins with a name and must not be read as the label `a`. The sugar's list is a call's as far as its closing parenthesis — `f(@A, use dict, x)` is both — so a member the sugar refuses is held until the `=` and raised past it.
 pub fn parse_tuple_field_prefix<'a, D: Grammar>(
     state: ParserState<'a>,
 ) -> Parsed<'a, TupleFieldPrefix<D>> {
@@ -172,10 +172,10 @@ pub fn parse_tuple_field_prefix<'a, D: Grammar>(
                     parse_literal(",")
                 }))
                 .and_drop(parse_literal(")"))
+                .and_drop(parse_literal("=>"))
                 .map(Some)
-                .or(pure(None)),
+                .or(parse_field_equals.map(|()| None)),
         )
-        .and_drop(parse_field_equals)
         .flat_map(|(label, func_params): (Label, _)| match func_params {
             Some(params) => members(params)
                 .map(move |params| (label, Some(params)))
@@ -194,7 +194,7 @@ pub fn parse_field_equals<'a>(state: ParserState<'a>) -> Parsed<'a, ()> {
         .parse(state)
 }
 
-// A labeled field's value: a body where the field is written as a function, `label(params) = body`, and a term where it is a value.
+// A labeled field's value: a body where the field is written as a function, `label(params) => body`, and a term where it is a value.
 fn field_value<'a, D: Grammar>(function: bool) -> impl Parser<'a, Term<D>> {
     match function {
         true => parse_body::<D>.boxed(),
@@ -202,7 +202,7 @@ fn field_value<'a, D: Grammar>(function: bool) -> impl Parser<'a, Term<D>> {
     }
 }
 
-// A tuple-literal / struct-literal field: `label = value`, the definition sugar `label(params) = value` — kept as written in the AST node (`func_params`); `into_core` undoes the sugar — or a positional value.
+// A tuple-literal / struct-literal field: `label = value`, the definition sugar `label(params) => value` — kept as written in the AST node (`func_params`); `into_core` undoes the sugar — or a positional value.
 pub fn parse_tuple_field<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, TupleField<D>> {
     parse_tuple_field_prefix
         // Past a guarded `=` the value must follow: no positional field can hold one at its top level, so the field owns the diagnosis rather than falling back to the positional reading and leaving the enclosing `}` or `)` to complain at the label.
@@ -223,7 +223,7 @@ pub fn parse_tuple_field<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, T
 }
 
 pub fn parse_tuple<'a, D: Grammar>(state: ParserState<'a>) -> Parsed<'a, Term<D>> {
-    // Two committing prefixes distinguish a tuple literal from a parenthesized term: a first field followed by a comma (`(x,` / `(a = 1,`), or a named first field alone (`(a = 1)` / `(f(x) = e)` — the `=` already disambiguates, so the one-element form needs no trailing comma).
+    // Two committing prefixes distinguish a tuple literal from a parenthesized term: a first field followed by a comma (`(x,` / `(a = 1,`), or a named first field alone (`(a = 1)` / `(f(x) => e)` — the `=` or the `=>` after a label already disambiguates, so the one-element form needs no trailing comma).
 
     parse_literal("(")
         .and_keep(parse_tuple_field)

@@ -17,7 +17,7 @@ pub struct Scale(n: Nat): pub Type {
 --- A positive `n` taken apart into its factors of two and its odd part, by halving while it is even.
 ---
 --- Zero has no odd part, and the premise excludes it rather than a conventional answer standing in.
-pub let of(n: Nat, @ok: Holds(0 < n)) -> Scale(n) =
+pub let of(n: Nat, @ok: Holds(0 < n)) -> Scale(n) =>
     match 0 < n
     | true =>
         match 0 < n % 2
@@ -45,7 +45,7 @@ pub let unique(
     j: Nat,
     n: Nat,
     e: Eq()(Nat/shl(2 * m + 1, k), Nat/shl(2 * n + 1, j)),
-) -> {count: Eq()(k, j), half: Eq()(m, n)} =
+) -> {count: Eq()(k, j), half: Eq()(m, n)} =>
     match k
     | 0 =>
         match j

@@ -14,16 +14,16 @@ const DENIED: u8 = 3;
 /// What every fixture begins with: the imports, and `verdict`, which turns an outcome into the code the program exits with.
 const PRELUDE: &str = "
 use /std/{Byte, Io, Result, Try, File, Path, fs, Tty, Serial, Proc, tcp};
-let code(e: Io/Error) -> Byte = match e | permission_denied() => 3 | not_found() => 2 | _ => 1 end;
-let verdict(@A: Type, r: Result(Io/Error, A)) -> Byte = match r | success(_) => 0 | failure(e) => code(e) end;
+let code(e: Io/Error) -> Byte => match e | permission_denied() => 3 | not_found() => 2 | _ => 1 end;
+let verdict(@A: Type, r: Result(Io/Error, A)) -> Byte => match r | success(_) => 0 | failure(e) => code(e) end;
 ";
 
 /// Run `subject`, a `Try` over `Io` with no value inside a scope `s`, against `host`, and the code it exits with.
 fn exit_code(subject: &str, host: impl HostOps + Send + Sync + 'static) -> u8 {
     let tail = "
-let subject() -> Try(Io, Io/Error, {}) =
+let subject() -> Try(Io, Io/Error, {}) =>
     Try/scope((s) => SUBJECT);
-let main() -> Io({}) =
+let main() -> Io({}) =>
     let r = Try/run(subject())!;
     Proc/exit(@{}, verdict(r));
 main()
@@ -297,12 +297,12 @@ fn an_empty_variable_is_set_and_an_absent_one_is_not() {
     let compiled = compile(
         r#"
         use /std/{Option, Bytes, Str, print};
-        let said(v: Option(Bytes)) -> Str =
+        let said(v: Option(Bytes)) -> Str =>
             match v
             | some(b) => match Bytes/length(b) == 0 | true => "empty" | false => "set" end
             | none() => "unset"
             end;
-        let main() -> /std/Io({}) =
+        let main() -> /std/Io({}) =>
         let a = /std/Proc/env("EMPTY")!;
         let b = /std/Proc/env("NOPE")!;
         print(Str/flatten([said(a), " ", said(b)]));
@@ -325,7 +325,7 @@ fn a_bytes_payload_arrives_whole() {
     let compiled = compile(
         r#"
         use /std/{Io, Path, Try, Proc};
-        let main() -> Io({}) =
+        let main() -> Io({}) =>
         let r = Try/run(Proc/cwd())!;
         match r | success(p) => Io/bind(Try/run(Io/write(Proc/stdout, Path/to_bytes(p))), (_) => Io/pure(())) | failure(_) => Io/pure(()) end;
         main()

@@ -37,15 +37,15 @@ pub struct Map(K: Type, use Hash/Key(K), V: Type): Type {
     @sound: Node/Sound(root),
 }
 
-pub let empty(@K: Type, use Hash/Key(K), @V: Type) -> Map(K, V) =
+pub let empty(@K: Type, use Hash/Key(K), @V: Type) -> Map(K, V) =>
     Map { root = Node/empty(), @sound = True/qed() };
 
 --- How many entries, counted: the trie holds its entries and nothing beside them, so the count is a walk over every one.
-pub let length(@K: Type, use Hash/Key(K), @V: Type, m: Map(K, V)) -> Nat =
+pub let length(@K: Type, use Hash/Key(K), @V: Type, m: Map(K, V)) -> Nat =>
     fold(m, 0, (_, _, n) => n + 1);
 
 --- Whether `key` has an entry.
-pub let has(@K: Type, use Hash/Key(K), @V: Type, m: Map(K, V), key: K) -> Bool =
+pub let has(@K: Type, use Hash/Key(K), @V: Type, m: Map(K, V), key: K) -> Bool =>
     Option/is_some(try_get(m, key));
 
 --- The value at `key`, under the evidence that it has an entry.
@@ -56,14 +56,14 @@ pub let get(
     m: Map(K, V),
     key: K,
     @ok: Holds(has(m, key)),
-) -> V =
+) -> V =>
     match try_get(m, key)
     | some(v) => v
     | none() => match ok end
     end;
 
 --- `m` with `key` at `v`, replacing an entry under the same key.
-pub let insert(@K: Type, use Hash/Key(K), @V: Type, m: Map(K, V), key: K, v: V) -> Map(K, V) =
+pub let insert(@K: Type, use Hash/Key(K), @V: Type, m: Map(K, V), key: K, v: V) -> Map(K, V) =>
     let k = Hash/hash(key);
     match Node/insert(m.root, key, k, v, @Eq/refl(), @m.sound)
     | vacant(_) => Map { root = Node/leaf(key, v), @sound = True/qed() }
@@ -93,7 +93,7 @@ pub let insert(@K: Type, use Hash/Key(K), @V: Type, m: Map(K, V), key: K, v: V) 
     end;
 
 --- `m` without `key`; unchanged when absent.
-pub let remove(@K: Type, use Hash/Key(K), @V: Type, m: Map(K, V), key: K) -> Map(K, V) =
+pub let remove(@K: Type, use Hash/Key(K), @V: Type, m: Map(K, V), key: K) -> Map(K, V) =>
     match Node/remove(m.root, Hash/hash(key), @m.sound)
     | gone(_) => Map { root = Node/empty(), @sound = True/qed() }
     | kept(n2, @stands, @_, @_) => Map { root = n2, @sound = stands.sound }
@@ -112,23 +112,23 @@ pub let fold(
     m: Map(K, V),
     init: A,
     f: (K, V, A) -> A,
-) -> A =
+) -> A =>
     Node/fold(m.root, init, f);
 
 --- The entries, in the order of their keys.
-pub let to_list(@K: Type, use Hash/Key(K), @V: Type, m: Map(K, V)) -> List({K, V}) =
+pub let to_list(@K: Type, use Hash/Key(K), @V: Type, m: Map(K, V)) -> List({K, V}) =>
     fold(m, [], (k, v, acc) => [..acc, (k, v)]);
 
 --- The values, in the order of their keys.
-pub let values(@K: Type, use Hash/Key(K), @V: Type, m: Map(K, V)) -> List(V) =
+pub let values(@K: Type, use Hash/Key(K), @V: Type, m: Map(K, V)) -> List(V) =>
     fold(m, [], (_, v, acc) => [..acc, v]);
 
 --- The map of the pairs, a later pair replacing an earlier one under the same key.
-pub let of_list(@K: Type, use Hash/Key(K), @V: Type, l: List({K, V})) -> Map(K, V) =
+pub let of_list(@K: Type, use Hash/Key(K), @V: Type, l: List({K, V})) -> Map(K, V) =>
     List/fold(l, empty(), ((k, v), acc) => insert(acc, k, v));
 
 --- The value at `key`, or `default`.
-pub let get_or(@K: Type, use Hash/Key(K), @V: Type, m: Map(K, V), key: K, default: V) -> V =
+pub let get_or(@K: Type, use Hash/Key(K), @V: Type, m: Map(K, V), key: K, default: V) -> V =>
     Option/unwrap_or(try_get(m, key), default);
 
 --- The entry at `key` rewritten by `f`, which sees the current value or `none` and answers the value to keep or `none` to remove.
@@ -139,14 +139,21 @@ pub let update(
     m: Map(K, V),
     key: K,
     f: (Option(V)) -> Option(V),
-) -> Map(K, V) =
+) -> Map(K, V) =>
     match f(try_get(m, key))
     | some(v) => insert(m, key, v)
     | none() => remove(m, key)
     end;
 
 --- `f` on every value. The keys and their dictionary stay, so the trie keeps its shape.
-pub let map(@K: Type, use Hash/Key(K), @V: Type, @W: Type, m: Map(K, V), f: (V) -> W) -> Map(K, W) =
+pub let map(
+    @K: Type,
+    use Hash/Key(K),
+    @V: Type,
+    @W: Type,
+    m: Map(K, V),
+    f: (V) -> W,
+) -> Map(K, W) =>
     Map { root = Node/map(m.root, f), @sound = Node/mapped(m.root, f, m.sound) };
 
 --- The entries `pred` accepts.
@@ -156,7 +163,7 @@ pub let filter(
     @V: Type,
     m: Map(K, V),
     pred: (K, V) -> Bool,
-) -> Map(K, V) =
+) -> Map(K, V) =>
     fold(
         m,
         empty(),
@@ -164,7 +171,7 @@ pub let filter(
             match pred(k, v) | true => insert(acc, k, v) | false => acc end);
 
 --- Every entry of either, `b`'s winning under a shared key. Both are maps of one type, so of one dictionary.
-pub let union(@K: Type, use Hash/Key(K), @V: Type, a: Map(K, V), b: Map(K, V)) -> Map(K, V) =
+pub let union(@K: Type, use Hash/Key(K), @V: Type, a: Map(K, V), b: Map(K, V)) -> Map(K, V) =>
     fold(b, a, (k, v, acc) => insert(acc, k, v));
 
 --- The entries of `a` at a key `b` has an entry at. `b`'s values are not read, so it may hold any.
@@ -175,7 +182,7 @@ pub let intersection(
     @W: Type,
     a: Map(K, V),
     b: Map(K, W),
-) -> Map(K, V) =
+) -> Map(K, V) =>
     filter(a, (k: K, _: V) => has(b, k));
 
 --- The entries of `a` at a key `b` has no entry at. `b`'s values are not read, so it may hold any.
@@ -186,7 +193,7 @@ pub let difference(
     @W: Type,
     a: Map(K, V),
     b: Map(K, W),
-) -> Map(K, V) =
+) -> Map(K, V) =>
     filter(a, (k: K, _: V) => Bool/not(has(b, k)));
 
 --- `m`, built under the dictionary `from`, as a map under the one in scope. Every entry is inserted again, since the shape of a trie is its dictionary's.
@@ -196,14 +203,14 @@ pub let rekey(
     use Hash/Key(K),
     @V: Type,
     m: Map(K, use from, V),
-) -> Map(K, V) =
+) -> Map(K, V) =>
     fold(@K, use from, m, empty(), (k, v, acc) => insert(acc, k, v));
 
 --- Entry by entry: a trie is a function of its entries, so two maps hold the same keys at equal values exactly where their tries are alike ([`try_get/inj`]).
-satisfy (@K: Type, use Hash/Key(K), @V: Type, use Eql(V)) => Eql(Map(K, V)) {
-    eql(a, b) = Node/same(a.root, b.root),
+satisfy (@K: Type, use Hash/Key(K), @V: Type, use Eql(V)) -> Eql(Map(K, V)) {
+    eql(a, b) => Node/same(a.root, b.root),
     -- A congruence written over the fields and applied at the projections, where an equation between two projections solves nothing: once the roots are one, the two proofs that they are sound are.
-    eq(a, b, h) =
+    eq(a, b, h) =>
         let fields(
             root1: Node(K, V),
             sound1: Node/Sound(root1),
@@ -212,22 +219,22 @@ satisfy (@K: Type, use Hash/Key(K), @V: Type, use Eql(V)) => Eql(Map(K, V)) {
             root: Eq()(root1, root2),
         ) -> Eq(@Map(K, V))(
             Map { root = root1, @sound = sound1 },
-            Map { root = root2, @sound = sound2 }) =
+            Map { root = root2, @sound = sound2 }) =>
             let refl() = root;
             Eq/refl();
         fields(a.root, a.sound, b.root, b.sound, Node/eq_of_same(a.root, b.root, h)),
-    refl(a) = Node/same_refl(a.root),
+    refl(a) => Node/same_refl(a.root),
 }
 
-satisfy (@K: Type, use Hash/Key(K), @V: Type, use Show(K), use Show(V)) => Show(Map(K, V)) {
-    show(m) =
+satisfy (@K: Type, use Hash/Key(K), @V: Type, use Show(K), use Show(V)) -> Show(Map(K, V)) {
+    show(m) =>
         Fmt/render("{%}")(
             Str/join(", ", List/map(to_list(m), ((k, v)) => Fmt/render("%: %")(k)(v)))),
 }
 
 --- As `Map/of_list` over the entries.
-satisfy (@K: Type, use Hash/Key(K), @V: Type, use Spell(K), use Spell(V)) => Spell(Map(K, V)) {
-    spell(m) =
+satisfy (@K: Type, use Hash/Key(K), @V: Type, use Spell(K), use Spell(V)) -> Spell(Map(K, V)) {
+    spell(m) =>
         Fmt/render("Map/of_list([%])")(
             Str/join(", ", List/map(to_list(m), ((k, v)) => Fmt/render("(#, #)")(k)(v)))),
 }

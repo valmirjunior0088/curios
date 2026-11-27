@@ -12,8 +12,8 @@ fn derived_order_ranks_constructors_then_payloads() {
         induct Tree: pub Type | leaf(Nat) | node(Tree, Tree) end
         satisfy Eql(Tree) { .. }
         satisfy Ord(Tree) { .. }
-        let show(t: Tree, u: Tree) -> Str = Str/concat(Show/show(Ord/ord(t, u)), " ");
-        let entry() -> /std/Io({}) =
+        let show(t: Tree, u: Tree) -> Str => Str/concat(Show/show(Ord/ord(t, u)), " ");
+        let entry() -> /std/Io({}) =>
             let _ = print(show(Tree/leaf(1), Tree/node(Tree/leaf(1), Tree/leaf(1))))!;
             let _ = print(show(Tree/node(Tree/leaf(1), Tree/leaf(1)), Tree/leaf(9)))!;
             let _ = print(show(Tree/leaf(1), Tree/leaf(2)))!;
@@ -38,9 +38,9 @@ fn every_order_answers_the_comparison_operators() {
         induct Tree: pub Type | leaf(Nat) | node(Tree, Tree) end
         satisfy Eql(Tree) { .. }
         satisfy Ord(Tree) { .. }
-        let show(b: Bool) -> Str = Str/concat(Bool/to_str(b), " ");
+        let show(b: Bool) -> Str => Str/concat(Bool/to_str(b), " ");
         let pair: {Nat, Nat} = (1, 2);
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let _ = print(show(Tree/leaf(2) < Tree/leaf(2)))!;
             let _ = print(show(Month/march() <= Month/february()))!;
             let _ = print(show(Ordering/gt() > Ordering/eq()))!;
@@ -61,10 +61,10 @@ fn a_struct_and_a_parameterized_family_order_fieldwise() {
         induct Box(A: Type): pub Type | boxed(A) end
         satisfy Eql(Point) { .. }
         satisfy Ord(Point) { .. }
-        satisfy (@A: Type, use Eql(A)) => Eql(Box(A)) { .. }
-        satisfy (@A: Type, use Ord(A)) => Ord(Box(A)) { .. }
-        let show(@A: Type, use Ord(A), a: A, b: A) -> Str = Str/concat(Show/show(Ord/ord(a, b)), " ");
-        let entry() -> /std/Io({}) =
+        satisfy (@A: Type, use Eql(A)) -> Eql(Box(A)) { .. }
+        satisfy (@A: Type, use Ord(A)) -> Ord(Box(A)) { .. }
+        let show(@A: Type, use Ord(A), a: A, b: A) -> Str => Str/concat(Show/show(Ord/ord(a, b)), " ");
+        let entry() -> /std/Io({}) =>
             let _ = print(show(Point { x = 1, y = 2 }, Point { x = 1, y = 3 }))!;
             let _ = print(show(Point { x = 2, y = 0 }, Point { x = 1, y = 9 }))!;
             let _ = print(show(Point { x = 1, y = 2 }, Point { x = 1, y = 2 }))!;
@@ -82,10 +82,10 @@ fn a_parameterized_family_with_a_constructor_of_no_fields_derives_its_order() {
         use /std/{Nat, Str, Show, print};
         use /std/ops/{Eql, Ord};
         induct T(A: Type): pub Type | a() | b(A) end
-        satisfy (@A: Type, use Eql(A)) => Eql(T(A)) { .. }
-        satisfy (@A: Type, use Ord(A)) => Ord(T(A)) { .. }
-        let show(a: T(Nat), b: T(Nat)) -> Str = Str/concat(Show/show(Ord/ord(a, b)), " ");
-        let entry() -> /std/Io({}) =
+        satisfy (@A: Type, use Eql(A)) -> Eql(T(A)) { .. }
+        satisfy (@A: Type, use Ord(A)) -> Ord(T(A)) { .. }
+        let show(a: T(Nat), b: T(Nat)) -> Str => Str/concat(Show/show(Ord/ord(a, b)), " ");
+        let entry() -> /std/Io({}) =>
             let _ = print(show(T/a(), T/b(1)))!;
             let _ = print(show(T/b(2), T/b(1)))!;
             print(show(T/a(), T/a()));
@@ -103,12 +103,12 @@ fn a_family_nested_through_a_witness_over_its_order_alone_derives_its_order() {
         use /std/ops/{Eql, Ord};
         induct Box(A: Type): pub Type | boxed(A) end
         induct Forest: pub Type | none() | some(Box(Forest)) end
-        satisfy (@A: Type, use Eql(A)) => Eql(Box(A)) { .. }
-        satisfy (@A: Type, use Ord(A)) => Ord(Box(A)) { .. }
+        satisfy (@A: Type, use Eql(A)) -> Eql(Box(A)) { .. }
+        satisfy (@A: Type, use Ord(A)) -> Ord(Box(A)) { .. }
         satisfy Eql(Forest) { .. }
         satisfy Ord(Forest) { .. }
-        let show(a: Forest, b: Forest) -> Str = Str/concat(Show/show(Ord/ord(a, b)), " ");
-        let entry() -> /std/Io({}) =
+        let show(a: Forest, b: Forest) -> Str => Str/concat(Show/show(Ord/ord(a, b)), " ");
+        let entry() -> /std/Io({}) =>
             let _ = print(show(Forest/none(), Forest/some(Box/boxed(Forest/none()))))!;
             print(show(Forest/some(Box/boxed(Forest/none())), Forest/some(Box/boxed(Forest/none()))));
         entry()
@@ -126,8 +126,8 @@ fn proofs_and_implicit_payloads_take_no_part_in_ordering() {
         induct Certified: pub Type | cert(n: Nat, proof: Eq()(n, n)) end
         satisfy Eql(Certified) { .. }
         satisfy Ord(Certified) { .. }
-        let show(a: Certified, b: Certified) -> Str = Str/concat(Show/show(Ord/ord(a, b)), " ");
-        let entry() -> /std/Io({}) =
+        let show(a: Certified, b: Certified) -> Str => Str/concat(Show/show(Ord/ord(a, b)), " ");
+        let entry() -> /std/Io({}) =>
             let _ = print(show(Certified/cert(1, Eq/refl()), Certified/cert(2, Eq/refl())))!;
             print(show(Certified/cert(2, Eq/refl()), Certified/cert(2, Eq/refl())));
         entry()
@@ -161,8 +161,8 @@ fn the_standard_library_derives_order_for_ordering() {
     // `/std/Ordering` carries the one derived `Ord` witness in the prelude, which is what exercises the derivation's scheduler edges: they matter only within a unit, and a program compiled against `/std` is a unit of its own.
     let source = r#"
         use /std/{Str, Ordering, Show, print}; use /std/ops/{Ord};
-        let show(a: Ordering, b: Ordering) -> Str = Str/concat(Show/show(Ord/ord(a, b)), " ");
-        let entry() -> /std/Io({}) =
+        let show(a: Ordering, b: Ordering) -> Str => Str/concat(Show/show(Ord/ord(a, b)), " ");
+        let entry() -> /std/Io({}) =>
             let _ = print(show(Ordering/lt(), Ordering/eq()))!;
             let _ = print(show(Ordering/gt(), Ordering/eq()))!;
             print(show(Ordering/eq(), Ordering/eq()));
@@ -193,7 +193,7 @@ fn a_derived_witness_proves_the_orders_laws() {
 
         satisfy Eql(Tree) { .. }
         satisfy Eql(Doc) { .. }
-        satisfy (@A: Type, use Eql(A)) => Eql(Rose(A)) { .. }
+        satisfy (@A: Type, use Eql(A)) -> Eql(Rose(A)) { .. }
         satisfy Eql(Certified) { .. }
         satisfy Eql(Day) { .. }
         satisfy Eql(Small) { .. }
@@ -201,13 +201,13 @@ fn a_derived_witness_proves_the_orders_laws() {
 
         satisfy Ord(Tree) { .. }
         satisfy Ord(Doc) { .. }
-        satisfy (@A: Type, use Ord(A)) => Ord(Rose(A)) { .. }
+        satisfy (@A: Type, use Ord(A)) -> Ord(Rose(A)) { .. }
         satisfy Ord(Certified) { .. }
         satisfy Ord(Day) { .. }
         satisfy Ord(Small) { .. }
         satisfy Ord(Span) { .. }
 
-        let flips(@A: Type, use Ord(A), a: A, b: A) -> Eq()(Ord/ord(b, a), Ordering/flip(Ord/ord(a, b))) =
+        let flips(@A: Type, use Ord(A), a: A, b: A) -> Eq()(Ord/ord(b, a), Ordering/flip(Ord/ord(a, b))) =>
             Ord/flips(a, b);
         let carries(
             @A: Type,
@@ -217,20 +217,20 @@ fn a_derived_witness_proves_the_orders_laws() {
             c: A,
             p: Holds(Ordering/is_le(Ord/ord(a, b))),
             q: Holds(Ordering/is_le(Ord/ord(b, c))),
-        ) -> Holds(Ordering/is_le(Ord/ord(a, c))) =
+        ) -> Holds(Ordering/is_le(Ord/ord(a, c))) =>
             Ord/trans(a, b, c, p, q);
-        let tied(@A: Type, use Ord(A), a: A, b: A, h: Eq()(Ord/ord(a, b), Ordering/eq())) -> Eq()(a, b) =
+        let tied(@A: Type, use Ord(A), a: A, b: A, h: Eq()(Ord/ord(a, b), Ordering/eq())) -> Eq()(a, b) =>
             Ord/eq(a, b, h);
-        let below(@A: Type, use Ord(A), a: A, b: A) -> Eq()(a < b, Ordering/is_lt(Ord/ord(a, b))) =
+        let below(@A: Type, use Ord(A), a: A, b: A) -> Eq()(a < b, Ordering/is_lt(Ord/ord(a, b))) =>
             Ord/is_lt(a, b);
-        let at_most(@A: Type, use Ord(A), a: A, b: A) -> Eq()(a <= b, Ordering/is_le(Ord/ord(a, b))) =
+        let at_most(@A: Type, use Ord(A), a: A, b: A) -> Eq()(a <= b, Ordering/is_le(Ord/ord(a, b))) =>
             Ord/is_le(a, b);
 
-        let _trees(a: Tree, b: Tree) -> Eq()(Ord/ord(b, a), Ordering/flip(Ord/ord(a, b))) = flips(a, b);
-        let _docs(a: Doc, b: Doc) -> Eq()(Ord/ord(b, a), Ordering/flip(Ord/ord(a, b))) = flips(a, b);
-        let _roses(a: Rose(Doc), b: Rose(Doc)) -> Eq()(Ord/ord(b, a), Ordering/flip(Ord/ord(a, b))) = flips(a, b);
-        let _days(a: Day, b: Day) -> Eq()(Ord/ord(b, a), Ordering/flip(Ord/ord(a, b))) = flips(a, b);
-        let _spans(a: Span, b: Span) -> Eq()(Ord/ord(b, a), Ordering/flip(Ord/ord(a, b))) = flips(a, b);
+        let _trees(a: Tree, b: Tree) -> Eq()(Ord/ord(b, a), Ordering/flip(Ord/ord(a, b))) => flips(a, b);
+        let _docs(a: Doc, b: Doc) -> Eq()(Ord/ord(b, a), Ordering/flip(Ord/ord(a, b))) => flips(a, b);
+        let _roses(a: Rose(Doc), b: Rose(Doc)) -> Eq()(Ord/ord(b, a), Ordering/flip(Ord/ord(a, b))) => flips(a, b);
+        let _days(a: Day, b: Day) -> Eq()(Ord/ord(b, a), Ordering/flip(Ord/ord(a, b))) => flips(a, b);
+        let _spans(a: Span, b: Span) -> Eq()(Ord/ord(b, a), Ordering/flip(Ord/ord(a, b))) => flips(a, b);
 
         let _across_docs(
             a: Doc,
@@ -238,7 +238,7 @@ fn a_derived_witness_proves_the_orders_laws() {
             c: Doc,
             p: Holds(Ordering/is_le(Ord/ord(a, b))),
             q: Holds(Ordering/is_le(Ord/ord(b, c))),
-        ) -> Holds(Ordering/is_le(Ord/ord(a, c))) =
+        ) -> Holds(Ordering/is_le(Ord/ord(a, c))) =>
             carries(a, b, c, p, q);
         let _across_days(
             a: Day,
@@ -246,7 +246,7 @@ fn a_derived_witness_proves_the_orders_laws() {
             c: Day,
             p: Holds(Ordering/is_le(Ord/ord(a, b))),
             q: Holds(Ordering/is_le(Ord/ord(b, c))),
-        ) -> Holds(Ordering/is_le(Ord/ord(a, c))) =
+        ) -> Holds(Ordering/is_le(Ord/ord(a, c))) =>
             carries(a, b, c, p, q);
         let _across_small(
             a: Small,
@@ -254,19 +254,19 @@ fn a_derived_witness_proves_the_orders_laws() {
             c: Small,
             p: Holds(Ordering/is_le(Ord/ord(a, b))),
             q: Holds(Ordering/is_le(Ord/ord(b, c))),
-        ) -> Holds(Ordering/is_le(Ord/ord(a, c))) =
+        ) -> Holds(Ordering/is_le(Ord/ord(a, c))) =>
             carries(a, b, c, p, q);
 
-        let _one_tree(a: Tree, b: Tree, h: Eq()(Ord/ord(a, b), Ordering/eq())) -> Eq()(a, b) = tied(a, b, h);
-        let _one_rose(a: Rose(Doc), b: Rose(Doc), h: Eq()(Ord/ord(a, b), Ordering/eq())) -> Eq()(a, b) =
+        let _one_tree(a: Tree, b: Tree, h: Eq()(Ord/ord(a, b), Ordering/eq())) -> Eq()(a, b) => tied(a, b, h);
+        let _one_rose(a: Rose(Doc), b: Rose(Doc), h: Eq()(Ord/ord(a, b), Ordering/eq())) -> Eq()(a, b) =>
             tied(a, b, h);
-        let _one_certified(a: Certified, b: Certified, h: Eq()(Ord/ord(a, b), Ordering/eq())) -> Eq()(a, b) =
+        let _one_certified(a: Certified, b: Certified, h: Eq()(Ord/ord(a, b), Ordering/eq())) -> Eq()(a, b) =>
             tied(a, b, h);
-        let _one_small(a: Small, b: Small, h: Eq()(Ord/ord(a, b), Ordering/eq())) -> Eq()(a, b) = tied(a, b, h);
-        let _one_span(a: Span, b: Span, h: Eq()(Ord/ord(a, b), Ordering/eq())) -> Eq()(a, b) = tied(a, b, h);
+        let _one_small(a: Small, b: Small, h: Eq()(Ord/ord(a, b), Ordering/eq())) -> Eq()(a, b) => tied(a, b, h);
+        let _one_span(a: Span, b: Span, h: Eq()(Ord/ord(a, b), Ordering/eq())) -> Eq()(a, b) => tied(a, b, h);
 
-        let _below_trees(a: Tree, b: Tree) -> Eq()(a < b, Ordering/is_lt(Ord/ord(a, b))) = below(a, b);
-        let _at_most_spans(a: Span, b: Span) -> Eq()(a <= b, Ordering/is_le(Ord/ord(a, b))) = at_most(a, b);
+        let _below_trees(a: Tree, b: Tree) -> Eq()(a < b, Ordering/is_lt(Ord/ord(a, b))) => below(a, b);
+        let _at_most_spans(a: Span, b: Span) -> Eq()(a <= b, Ordering/is_le(Ord/ord(a, b))) => at_most(a, b);
 
         let _closed: Holds(Tree/leaf(9) < Tree/node(Tree/leaf(0), Tree/leaf(0))) = True/qed();
 
@@ -288,20 +288,20 @@ fn a_witness_whose_order_breaks_a_law_is_refused_where_it_is_declared() {
             use /std/ops/{Eql, Ord};
             induct Side: Type | left() | right() end
             satisfy Eql(Side) { .. }
-            let ord(a: Side, b: Side) -> Ordering =
+            let ord(a: Side, b: Side) -> Ordering =>
                 ${ord};
             satisfy Ord(Side) {
                 ord = ord,
-                lt(a, b) = Ordering/is_lt(ord(a, b)),
-                le(a, b) = Ordering/is_le(ord(a, b)),
-                flips(a, b) =
+                lt(a, b) => Ordering/is_lt(ord(a, b)),
+                le(a, b) => Ordering/is_le(ord(a, b)),
+                flips(a, b) =>
                     ${flips},
-                trans(a, b, c, p, q) =
+                trans(a, b, c, p, q) =>
                     ${carries},
-                eq(a, b, h) =
+                eq(a, b, h) =>
                     ${tied},
-                is_lt(_, _) = Eq/refl(),
-                is_le(_, _) = Eq/refl(),
+                is_lt(_, _) => Eq/refl(),
+                is_le(_, _) => Eq/refl(),
             }
             print("ok")
             "#,
@@ -374,9 +374,9 @@ fn a_witness_whose_order_breaks_a_law_is_refused_where_it_is_declared() {
         induct Side: Type | left() | right() end
         satisfy Eql(Side) { .. }
         satisfy Ord(Side) {
-            ord(a, b) = Ordering/eq(),
-            lt(a, b) = false,
-            le(a, b) = true,
+            ord(a, b) => Ordering/eq(),
+            lt(a, b) => false,
+            le(a, b) => true,
         }
         print("unreachable")
         "#;

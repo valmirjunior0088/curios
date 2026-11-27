@@ -50,7 +50,7 @@ fn the_module_core_elab_prints_for_a_program_reads_back_and_checks_clean() {
 fn a_witness_the_certifier_refuses_is_named_by_the_type_it_is_declared_at() {
     let root = temporary("refused-witness");
     fs::create_dir_all(&root).unwrap();
-    let program = "use /std/{Nat, Show, print};\n\nstruct S: Type {\n    n: Nat,\n}\n\nsatisfy Show(S) {\n    show(_) = \"s\",\n}\n\nprint(Show/show(S { n = 1 }))\n";
+    let program = "use /std/{Nat, Show, print};\n\nstruct S: Type {\n    n: Nat,\n}\n\nsatisfy Show(S) {\n    show(_) => \"s\",\n}\n\nprint(Show/show(S { n = 1 }))\n";
     let dumped = curios(&root, &["wonder", "--stage", "core-elab", "-"], program);
     let (dump, stderr, code) = said(&dumped);
     assert_eq!(code, Some(0), "{stderr}");
@@ -113,7 +113,7 @@ fn dumped(root: &Path) {
     write(
         root,
         "p.crs",
-        "use /std/{Nat, print};\n\nlet double(n: Nat) -> Nat = n + n;\n\nprint(Nat/to_str(double(21)))\n",
+        "use /std/{Nat, print};\n\nlet double(n: Nat) -> Nat => n + n;\n\nprint(Nat/to_str(double(21)))\n",
     );
     let (dump, stderr, code) = said(&curios(
         root,
@@ -155,7 +155,7 @@ fn a_module_of_core_text_is_reprinted_at_core_elab_as_the_module_it_was_dumped_f
     write(
         &root,
         "double.crs",
-        "pub let double(n: /std/Nat) -> /std/Nat =\n    n + n;\n",
+        "pub let double(n: /std/Nat) -> /std/Nat =>\n    n + n;\n",
     );
     let rung =
         |name: &str, file: &str| said(&curios(&root, &["wonder", "--stage", name, file], ""));
@@ -241,7 +241,7 @@ fn the_tests_a_text_writes_are_listed() {
     write(
         &root,
         "t.crsc",
-        "test /t/held = /std/Test/assert(/std/Str/Str { 0x[0x69], /sys/Bool/True/qed() }, true);\n",
+        "test /t/held => /std/Test/assert(/std/Str/Str { 0x[0x69], /sys/Bool/True/qed() }, true);\n",
     );
 
     let (listed, stderr, code) = said(&curios(&root, &["wonder", "--tests", "t.crsc"], ""));

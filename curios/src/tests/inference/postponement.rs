@@ -10,13 +10,13 @@ fn parked_constraints_let_nested_constructor_metas_resolve() {
         induct Eq2(@A : Type) : (x : A, y : A) -> Type
         | refl(@z : A) : (z, z)
         end
-        let sym2(@A : Type, @x : A, @y : A, p : Eq2()(x, y)) -> Eq2()(y, x) =
+        let sym2(@A : Type, @x : A, @y : A, p : Eq2()(x, y)) -> Eq2()(y, x) =>
             match p
             | refl(@z) => Eq2/refl()
             end;
         let direct : Eq2()(2, 2) = sym2(Eq2/refl());
         let chained : Eq2()(3, 3) = sym2(sym2(Eq2/refl()));
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             match chained
             | refl(@z) => let _ = /std/print(Nat/to_str(z))!; /std/Io/pure(())
             end;
@@ -61,7 +61,7 @@ fn parked_constraints_still_reject_the_unsolvable() {
         | refl(@z : A) : (z, z)
         end
         let bad : Eq2()(2, 3) = Eq2/refl();
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let _ = /std/print("no")!;
             /std/Io/pure(());
         entry()
@@ -77,7 +77,7 @@ fn bare_tuple_continuation_tail_infers() {
         use /std/{Parse, Byte, Nat, Bytes, Io};
         let pairer : Parse(Bytes, { Byte, Byte }) =
             Parse/bind(Parse/bytes/byte(), (a) => Parse/pure((a, a)));
-        let with_sugar() -> Parse(Bytes, { Byte, Byte }) =
+        let with_sugar() -> Parse(Bytes, { Byte, Byte }) =>
             let a = Parse/bytes/byte()!;
             Parse/pure((a, 0));
         match Parse/run(pairer, /std/Str/to_bytes("hi"))
@@ -94,10 +94,10 @@ fn checking_problem_parks_until_an_outer_pin_lands() {
     // The constraint store's own window: the inner apply's output expect parks (provisional success), so the postponed tuple re-check meets a still-unsolved expected type — it parks as a *checking problem* (`ParkedWork::Checking`) behind a placeholder metavariable rather than failing as no tuple type, and the outer annotation's pin wakes it.
     let source = r#"
         use /std/{Nat, List, Io};
-        let mk(@A : Type, a : A) -> List(A) = [a];
-        let use_(@B : Type, l : List(B)) -> List(B) = l;
+        let mk(@A : Type, a : A) -> List(A) => [a];
+        let use_(@B : Type, l : List(B)) -> List(B) => l;
         let v : List({ Nat, Nat }) = use_(mk((1, 2)));
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             match v
             | [] => /std/Io/pure(())
             | [p, ..rest] => let _ = /std/print(Nat/to_str(p.1))!; /std/Io/pure(())
@@ -116,7 +116,7 @@ fn postponed_lambda_projecting_by_label_elaborates() {
         struct Boxed : pub Type {
             value : Nat
         }
-        let cong_value(@s : Boxed, @t : Boxed, p : Eq()(s, t)) -> Eq()(s.value, t.value) =
+        let cong_value(@s : Boxed, @t : Boxed, p : Eq()(s, t)) -> Eq()(s.value, t.value) =>
             Eq/cong((b : Boxed) => b.value, p);
         let boxed : Boxed = Boxed { value = 7 };
         let same : Eq()(boxed, boxed) = Eq/refl();
@@ -132,7 +132,7 @@ fn postponed_lambda_projecting_by_label_elaborates() {
 fn an_annotated_lambda_settles_a_bare_implicit() {
     let source = r#"
         use /std/{Nat, Str};
-        let use_it(@A : Type, a : A) -> Nat = 0;
+        let use_it(@A : Type, a : A) -> Nat => 0;
         let z : Nat = use_it((n : Nat) => n + 1);
         /std/print(Nat/to_str(z))
         "#;
@@ -144,7 +144,7 @@ fn an_annotated_lambda_settles_a_bare_implicit() {
 fn a_lambda_body_pins_its_settled_domain() {
     let source = r#"
         use /std/{Nat, Str};
-        let use_it(@A : Type, a : A) -> Nat = 0;
+        let use_it(@A : Type, a : A) -> Nat => 0;
         let z : Nat = use_it((n) => n + 1);
         /std/print(Nat/to_str(z))
         "#;
@@ -158,7 +158,7 @@ fn a_typeless_local_let_still_infers_its_body() {
         use /std/{Nat};
         use /std/Bool/{Holds};
 
-        let g(x : Nat) -> Nat =
+        let g(x : Nat) -> Nat =>
             let f = (n : Nat) => n + 1;
             f(x);
 
@@ -175,7 +175,7 @@ fn a_typeless_local_let_still_infers_its_body() {
 fn a_destructuring_reads_the_product_its_heads_tuple_arms_gave() {
     let source = r#"
         use /std/{Str, List, Nat};
-        let joined(raw: List(Str)) -> Str =
+        let joined(raw: List(Str)) -> Str =>
             let p = match raw | [] => ([], 0) | [_, .._] => ([], 1) end;
             let (xs, n) = p;
             Str/flatten([Nat/to_str(n), "|", Str/join(",", xs)]);
@@ -190,7 +190,7 @@ fn a_destructuring_reads_the_product_its_heads_tuple_arms_gave() {
 fn a_match_reads_the_carrier_a_destructured_field_has() {
     let source = r#"
         use /std/{Str, List, Nat};
-        let first(raw: List(Str)) -> Str =
+        let first(raw: List(Str)) -> Str =>
             let p = match raw | [] => ([], 0) | [_, .._] => (["x"], 1) end;
             let (xs, n) = p;
             match xs | [] => Nat/to_str(n) | [s, .._] => s end;
@@ -207,7 +207,7 @@ fn a_match_reads_the_carrier_a_destructured_field_has() {
 fn reflexivity_at_a_lambda_waits_for_the_type_the_drain_settles() {
     let source = r#"
         use /std/{Eq, Nat};
-        let same(g : (Nat) -> Nat) -> Eq()((x : Nat) => g(0), (x : Nat) => g(0)) = Eq/refl();
+        let same(g : (Nat) -> Nat) -> Eq()((x : Nat) => g(0), (x : Nat) => g(0)) => Eq/refl();
         /std/print(Nat/to_str(1))
         "#;
 
@@ -223,13 +223,13 @@ fn a_written_argument_solves_what_its_calls_type_leaves_open() {
         | box(z : A) : (z)
         end
 
-        let tail_of(@T : Type, @h : T, @l : List(T), p : Eq()([h, ..l], [h, ..l])) -> List(T) =
+        let tail_of(@T : Type, @h : T, @l : List(T), p : Eq()([h, ..l], [h, ..l])) -> List(T) =>
             l;
-        let literal(x : Nat, y : Nat) -> List(Nat) =
+        let literal(x : Nat, y : Nat) -> List(Nat) =>
             tail_of(Eq/refl(@_, @[y, x]));
 
-        let computed(x : Nat) -> Boxed()([x + 0, 2]) = Boxed/box([x, 1 + 1]);
-        let held(@A : Type, @a : A, b : Boxed()(a)) -> A =
+        let computed(x : Nat) -> Boxed()([x + 0, 2]) => Boxed/box([x, 1 + 1]);
+        let held(@A : Type, @a : A, b : Boxed()(a)) -> A =>
             match b | box(z) => z end;
 
         /std/print(Str/join(" ", [
@@ -254,19 +254,19 @@ fn two_stuck_calls_wait_for_the_witness_one_is_stuck_on() {
             again(a: A) -> Holds(same(a, a)),
         }
         satisfy Refl(Nat) {
-            same(a, b) = a == b,
-            again(_) = True/qed(),
+            same(a, b) => a == b,
+            again(_) => True/qed(),
         }
         struct Box(V: Type): Type { item: V }
-        satisfy (@V: Type, use Refl(V)) => Refl(Box(V)) {
-            same(a, b) = Refl/same(a.item, b.item),
-            again(a) = Refl/again(a.item),
+        satisfy (@V: Type, use Refl(V)) -> Refl(Box(V)) {
+            same(a, b) => Refl/same(a.item, b.item),
+            again(a) => Refl/again(a.item),
         }
         "#;
     let held = fill!(
         r#"
         ${declarations}
-        let law(@V: Type, use Refl(V), x: Box(V)) -> Holds(Refl/same(x, x)) = Refl/again(x);
+        let law(@V: Type, use Refl(V), x: Box(V)) -> Holds(Refl/same(x, x)) => Refl/again(x);
         let _held: Holds(Refl/same(Box { item = 2 }, Box { item = 2 })) = law(Box { item = 2 });
         /std/print("ok")
         "#,
@@ -275,7 +275,7 @@ fn two_stuck_calls_wait_for_the_witness_one_is_stuck_on() {
     let apart = fill!(
         r#"
         ${declarations}
-        let law(@V: Type, use Refl(V), x: Box(V), y: Box(V)) -> Holds(Refl/same(x, y)) =
+        let law(@V: Type, use Refl(V), x: Box(V), y: Box(V)) -> Holds(Refl/same(x, y)) =>
             Refl/again(x);
         /std/print("ok")
         "#,

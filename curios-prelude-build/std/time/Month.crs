@@ -40,7 +40,7 @@ satisfy Spell(Month) {
 }
 
 --- The month's number, as ISO 8601 writes it: January is 1 and December 12.
-pub let to_nat(m: Month) -> Nat =
+pub let to_nat(m: Month) -> Nat =>
     match m
     | january() => 1
     | february() => 2
@@ -57,7 +57,7 @@ pub let to_nat(m: Month) -> Nat =
     end;
 
 --- The month numbered `n`, or `none` for a number no month has.
-pub let try_of_nat(n: Nat) -> Option(Month) =
+pub let try_of_nat(n: Nat) -> Option(Month) =>
     match n
     | 1 => Option/some(Month/january())
     | 2 => Option/some(Month/february())

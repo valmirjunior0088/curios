@@ -49,7 +49,7 @@ fn a_public_name_in_a_private_module_is_told_of_the_module() {
                 pub struct T : pub Type { Type }
             end
             use Inner/{T};
-            pub let g(t : T) -> T = t;
+            pub let g(t : T) -> T => t;
         end
         Type
     "#,
@@ -77,7 +77,7 @@ fn a_name_exported_into_a_private_module_is_told_of_that_one() {
                 pub use Inner/{T};
             end
             use Outer/{T};
-            pub let g(t : T) -> T = t;
+            pub let g(t : T) -> T => t;
         end
         Type
     "#,
@@ -99,7 +99,7 @@ fn a_private_name_in_a_private_module_is_told_to_mark_the_name() {
         pub mod M
             mod Inner
                 struct T : Type { Type }
-                pub let make(t : T) -> T = t;
+                pub let make(t : T) -> T => t;
             end
         end
         Type

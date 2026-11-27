@@ -10,16 +10,16 @@ use {
 const PROGRAM: &str = r#"
 use /std/{Str, Nat, Int, Flt, Byte, Bytes, List, Option, Bool, Io, print};
 
-let int(s: Str) -> Int =
+let int(s: Str) -> Int =>
     Option/unwrap_or(Int/of_str(s), +0);
 
-let flag(b: Bool) -> Str =
+let flag(b: Bool) -> Str =>
     match b | true => "1" | false => "0" end;
 
-let bits(f: Flt) -> Str =
+let bits(f: Flt) -> Str =>
     Bytes/fold(Flt/to_le_bytes(f), "", (b, acc) => Str/concat(Str/concat(acc, ":"), Nat/to_str(Byte/to_nat(b))));
 
-let row(pair: Str) -> Str =
+let row(pair: Str) -> Str =>
     let (xs, ys) = Option/unwrap_or(Str/split_once(pair, " "), (pair, "+1"));
     let x = int(xs);
     let y = int(ys);
@@ -52,7 +52,7 @@ let row(pair: Str) -> Str =
         Int/to_str(Option/unwrap_or(Flt/try_to_int(Int/to_flt(x)), +0)),
     ]);
 
-let entry() -> /std/Io({}) =
+let entry() -> /std/Io({}) =>
     let standard_input = /std/Io/Reader/new(/std/Proc/stdin)!;
     let input = /std/Result/unwrap_or(/std/Try/run(/std/Io/Reader/line(standard_input))!, /std/Option/none());
     match input

@@ -72,7 +72,7 @@ fn a_word_that_begins_with_a_digit_cannot_be_a_binder_or_a_label() {
         ("let f : (Nat) -> Nat = (7) => 7 + 1;", "7"),
         ("let f : (Nat) -> Nat = (7: Nat) => 7 + 1;", "7"),
         ("let f : (Nat, Nat) -> Nat = (a, 2b) => a;", "2b"),
-        ("let f(9: Nat) -> Nat = 9;", "9"),
+        ("let f(9: Nat) -> Nat => 9;", "9"),
         ("struct P : Type { 1st : Nat }", "1st"),
         ("induct T : Type | 2nd(Nat) end", "2nd"),
         ("let g : Nat = let 3 = 1; 2;", "3"),
@@ -173,7 +173,11 @@ fn a_letter_the_pinned_database_adds_names_a_binding() {
 #[test]
 fn a_test_takes_no_pub_and_stays_a_contextual_word() {
     // The name is a report line, not an export.
-    assert!("pub test t = Test/assert(true);".parse::<Module>().is_err());
+    assert!(
+        "pub test t => Test/assert(true);"
+            .parse::<Module>()
+            .is_err()
+    );
     // `test` stays a contextual word everywhere else.
     assert!("let test : Type = Type;".parse::<Module>().is_ok());
     assert!("test(1)".parse::<Entrypoint>().is_ok());
@@ -188,7 +192,7 @@ fn a_test_takes_no_pub_and_stays_a_contextual_word() {
 #[test]
 fn a_sort_cannot_name_a_binder() {
     for (source, word) in [
-        ("let f(Type: Nat) -> Nat = 0;", "Type"),
+        ("let f(Type: Nat) -> Nat => 0;", "Type"),
         ("let f: (Nat) -> Nat = (Prop: Nat) => 0;", "Prop"),
         ("let f: (Sort: Nat) -> Nat = (x) => x;", "Sort"),
         ("let f: Nat = match 1 | Type => 0 end;", "Type"),

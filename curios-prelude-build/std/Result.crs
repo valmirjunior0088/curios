@@ -13,23 +13,23 @@ pub induct Result(E: Type, A: Type): pub Type
 end
 
 --- `a` as a success.
-pub let pure(@E: Type, @A: Type, a: A) -> Result(E, A) =
+pub let pure(@E: Type, @A: Type, a: A) -> Result(E, A) =>
     success(a);
 
 --- `e` as a failure: in a `Result` region, the early return.
-pub let raise(@E: Type, @A: Type, e: E) -> Result(E, A) =
+pub let raise(@E: Type, @A: Type, e: E) -> Result(E, A) =>
     failure(e);
 
 --- A failure handed to `handler`; a success passes through.
-pub let rescue(@E: Type, @A: Type, r: Result(E, A), handler: (E) -> Result(E, A)) -> Result(E, A) =
+pub let rescue(@E: Type, @A: Type, r: Result(E, A), handler: (E) -> Result(E, A)) -> Result(E, A) =>
     match r | success(_) => r | failure(e) => handler(e) end;
 
 --- `f` on the value of a success.
-pub let map(@A: Type, @B: Type, @E: Type, r: Result(E, A), f: (A) -> B) -> Result(E, B) =
+pub let map(@A: Type, @B: Type, @E: Type, r: Result(E, A), f: (A) -> B) -> Result(E, B) =>
     match r | success(a) => success(f(a)) | failure(e) => failure(e) end;
 
 --- `f` on the error of a failure.
-pub let map_failure(@A: Type, @E: Type, @F: Type, r: Result(E, A), f: (E) -> F) -> Result(F, A) =
+pub let map_failure(@A: Type, @E: Type, @F: Type, r: Result(E, A), f: (E) -> F) -> Result(F, A) =>
     match r | success(a) => success(a) | failure(e) => failure(f(e)) end;
 
 --- `f` on the value of a success; a failure passes through.
@@ -39,54 +39,54 @@ pub let bind(
     @E: Type,
     m: Result(E, A),
     f: (A) -> Result(E, B),
-) -> Result(E, B) =
+) -> Result(E, B) =>
     match m | success(a) => f(a) | failure(e) => failure(e) end;
 
 --- A result of a result collapsed to one.
-pub let flatten(@A: Type, @E: Type, r: Result(E, Result(E, A))) -> Result(E, A) =
+pub let flatten(@A: Type, @E: Type, r: Result(E, Result(E, A))) -> Result(E, A) =>
     match r | success(inner) => inner | failure(e) => failure(e) end;
 
 --- The value, or `default` on a failure.
-pub let unwrap_or(@A: Type, @E: Type, r: Result(E, A), default: A) -> A =
+pub let unwrap_or(@A: Type, @E: Type, r: Result(E, A), default: A) -> A =>
     match r | success(a) => a | failure(_) => default end;
 
 --- Whether `r` is a success.
-pub let is_success(@A: Type, @E: Type, r: Result(E, A)) -> Bool =
+pub let is_success(@A: Type, @E: Type, r: Result(E, A)) -> Bool =>
     match r | success(_) => true | failure(_) => false end;
 
 --- Whether `r` is a failure.
-pub let is_failure(@A: Type, @E: Type, r: Result(E, A)) -> Bool =
+pub let is_failure(@A: Type, @E: Type, r: Result(E, A)) -> Bool =>
     match r | success(_) => false | failure(_) => true end;
 
 --- The value of a success; a failure is `none`, its error dropped.
-pub let to_option(@A: Type, @E: Type, r: Result(E, A)) -> Option(A) =
+pub let to_option(@A: Type, @E: Type, r: Result(E, A)) -> Option(A) =>
     match r
     | success(a) => Option/some(a)
     | failure(_) => Option/none()
     end;
 
 --- The value, or what `default` answers to the error.
-pub let unwrap_or_else(@A: Type, @E: Type, r: Result(E, A), default: (E) -> A) -> A =
+pub let unwrap_or_else(@A: Type, @E: Type, r: Result(E, A), default: (E) -> A) -> A =>
     match r | success(a) => a | failure(e) => default(e) end;
 
-satisfy (@E: Type) => Monad((A: Type) => Result(E, A)) {
-    pure(@_, a) = pure(a),
-    bind(@_, @_, m, f) = bind(m, f),
+satisfy (@E: Type) -> Monad((A: Type) => Result(E, A)) {
+    pure(@_, a) => pure(a),
+    bind(@_, @_, m, f) => bind(m, f),
 }
 
-satisfy (@A: Type, @E: Type, use Eql(A), use Eql(E)) => Eql(Result(E, A)) {
+satisfy (@A: Type, @E: Type, use Eql(A), use Eql(E)) -> Eql(Result(E, A)) {
     ..
 }
 
-satisfy (@A: Type, @E: Type, use Show(A), use Show(E)) => Show(Result(E, A)) {
-    show(r) =
+satisfy (@A: Type, @E: Type, use Show(A), use Show(E)) -> Show(Result(E, A)) {
+    show(r) =>
         match r
         | success(x) => Fmt/render("success(%)")(x)
         | failure(e) => Fmt/render("failure(%)")(e)
         end,
 }
 
-satisfy (@A: Type, @E: Type, use Spell(A), use Spell(E)) => Spell(Result(E, A)) {
+satisfy (@A: Type, @E: Type, use Spell(A), use Spell(E)) -> Spell(Result(E, A)) {
     ..
 }
 
@@ -98,7 +98,7 @@ pub let ord(
     use Ord(E),
     a: Result(E, A),
     b: Result(E, A),
-) -> Ordering =
+) -> Ordering =>
     match a
     | failure(e) =>
         match b
@@ -113,18 +113,18 @@ pub let ord(
     end;
 
 -- Each law by the cases of its values: two failures by `E`'s own law, two successes by `A`'s, and any other pair by what `ord` answers there.
-satisfy (@A: Type, @E: Type, use Ord(A), use Ord(E)) => Ord(Result(E, A)) {
+satisfy (@A: Type, @E: Type, use Ord(A), use Ord(E)) -> Ord(Result(E, A)) {
     ord = ord,
-    lt(a, b) = Ordering/is_lt(ord(a, b)),
-    le(a, b) = Ordering/is_le(ord(a, b)),
-    flips(a, b) =
+    lt(a, b) => Ordering/is_lt(ord(a, b)),
+    le(a, b) => Ordering/is_le(ord(a, b)),
+    flips(a, b) =>
         match a
         | failure(e) =>
             match b | failure(f) => Ord/flips(e, f) | success(_) => Eq/refl() end
         | success(x) =>
             match b | failure(_) => Eq/refl() | success(y) => Ord/flips(x, y) end
         end,
-    trans(a, b, c, p, q) =
+    trans(a, b, c, p, q) =>
         match a
         | failure(e) =>
             match b
@@ -149,7 +149,7 @@ satisfy (@A: Type, @E: Type, use Ord(A), use Ord(E)) => Ord(Result(E, A)) {
                 end
             end
         end,
-    eq(a, b, h) =
+    eq(a, b, h) =>
         match a
         | failure(e) =>
             match b
@@ -166,6 +166,6 @@ satisfy (@A: Type, @E: Type, use Ord(A), use Ord(E)) => Ord(Result(E, A)) {
                 Eq/refl()
             end
         end,
-    is_lt(_, _) = Eq/refl(),
-    is_le(_, _) = Eq/refl(),
+    is_lt(_, _) => Eq/refl(),
+    is_le(_, _) => Eq/refl(),
 }

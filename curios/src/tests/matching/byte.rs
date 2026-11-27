@@ -7,7 +7,7 @@ use {crate::test_support::*, curios_common::fill};
 fn a_byte_is_dispatched_on_its_literals() {
     let source = r#"
         use /std/{Byte, List, Nat, Str};
-        let kind(b: Byte) -> Nat =
+        let kind(b: Byte) -> Nat =>
             match b
             | 0 => 0
             | 0x0A => 1
@@ -25,7 +25,7 @@ fn a_byte_is_dispatched_on_its_literals() {
 fn a_packed_run_takes_a_bytes_literals() {
     let source = r#"
         use /std/{Bytes, Nat};
-        let escapes(b: Bytes) -> Nat =
+        let escapes(b: Bytes) -> Nat =>
             match b
             | 0x[] => 0
             | 0x['%', _, _, ..rest] => 1 + escapes(rest)
@@ -50,7 +50,7 @@ fn a_bytes_dispatch_refuses_what_no_byte_is() {
         let error = error(&fill!(
             r#"
             use /std/{Byte, Nat};
-            let f(b: Byte) -> Nat = match b ${arms} end;
+            let f(b: Byte) -> Nat => match b ${arms} end;
             /std/print(Nat/to_str(f(0)))
             "#,
             arms
@@ -64,7 +64,7 @@ fn a_bytes_dispatch_refuses_what_no_byte_is() {
 fn a_literal_over_an_integer_names_what_a_literal_takes_apart() {
     let source = r#"
         use /std/{Int, Nat};
-        let f(i: Int) -> Nat = match i | 0 => 1 | _ => 2 end;
+        let f(i: Int) -> Nat => match i | 0 => 1 | _ => 2 end;
         /std/print(Nat/to_str(f(+0)))
         "#;
 
@@ -83,10 +83,10 @@ fn a_bytes_arm_knows_the_byte_it_took() {
     let source = r#"
         use /std/{Bool, Byte, Eq, Nat, Str};
         use /std/Bool/{Holds};
-        let at(b: Byte, @same: Eq()(b, 0x41)) -> Nat = 1;
-        let known(b: Byte) -> Nat = match b | 0x41 => at(b, @Eq/refl()) | _ => 0 end;
-        let need(b: Byte, @ok: Holds(b != 0x41)) -> Nat = 2;
-        let past(b: Byte) -> Nat = match b | 0x41 => 0 | _ => need(b) end;
+        let at(b: Byte, @same: Eq()(b, 0x41)) -> Nat => 1;
+        let known(b: Byte) -> Nat => match b | 0x41 => at(b, @Eq/refl()) | _ => 0 end;
+        let need(b: Byte, @ok: Holds(b != 0x41)) -> Nat => 2;
+        let past(b: Byte) -> Nat => match b | 0x41 => 0 | _ => need(b) end;
         /std/print(Str/join(" ", [Nat/to_str(known(0x41)), Nat/to_str(known(0x42)), Nat/to_str(past(0x42))]))
         "#;
 
@@ -99,18 +99,18 @@ fn a_dispatch_on_a_byte_takes_the_arm_its_keys_tests_decide() {
     let source = r#"
         use /std/{Byte, Bytes, Eq, Nat};
         use /std/Bool/{Holds};
-        let escaped(b: Bytes) -> Bytes =
+        let escaped(b: Bytes) -> Bytes =>
             match b
             | 0x[] => 0x[]
             | 0x[0, ..t] => 0x[0x0, 0xFF, ..escaped(t)]
             | 0x[h, ..t] => 0x[h, ..escaped(t)]
             end;
-        let _kept(h: Byte, t: Bytes, other: Holds(h != 0)) -> Eq()(escaped(0x[h, ..t]), 0x[h, ..escaped(t)]) =
+        let _kept(h: Byte, t: Bytes, other: Holds(h != 0)) -> Eq()(escaped(0x[h, ..t]), 0x[h, ..escaped(t)]) =>
             match h
             | 0 => match other end
             | _ => Eq/refl()
             end;
-        let _doubled(h: Byte, t: Bytes, zero: Holds(h == 0)) -> Eq()(escaped(0x[h, ..t]), 0x[0x0, 0xFF, ..escaped(t)]) =
+        let _doubled(h: Byte, t: Bytes, zero: Holds(h == 0)) -> Eq()(escaped(0x[h, ..t]), 0x[0x0, 0xFF, ..escaped(t)]) =>
             match h == 0
             | true => Eq/refl()
             | false => match zero end

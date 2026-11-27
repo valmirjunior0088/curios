@@ -6,14 +6,14 @@ use {super::test_support::*, curios_core::Sharing, curios_unit::Unit};
 const DECLARATIONS: [&str; 11] = [
     "pub induct Shape: pub Type\n| dot()\n| box(Nat, Nat)\nend",
     "pub struct Pair: pub Type {\n    first: Nat,\n    second: Nat,\n}",
-    "pub let double(n: Nat) -> Nat = n + n;",
+    "pub let double(n: Nat) -> Nat => n + n;",
     "pub let twice: Nat = double(2);",
-    "pub let area(shape: Shape) -> Nat =\n    match shape | dot() => 0 | box(w, h) => w * h end;",
+    "pub let area(shape: Shape) -> Nat =>\n    match shape | dot() => 0 | box(w, h) => w * h end;",
     "pub let pair: Pair = Pair { first = twice, second = area(Shape/box(2, 3)) };",
     "pub let unrelated: Nat = 7;",
     "pub concept Measured(A: Type): pub Type {\n    measure(A) -> Nat,\n}",
-    "satisfy Measured(Shape) {\n    measure(shape) = area(shape),\n}",
-    "satisfy Measured(Pair) {\n    measure(pair) = pair.first + pair.second,\n}",
+    "satisfy Measured(Shape) {\n    measure(shape) => area(shape),\n}",
+    "satisfy Measured(Pair) {\n    measure(pair) => pair.first + pair.second,\n}",
     "pub let measured: Nat = Measured/measure(Shape/box(2, 3)) + Measured/measure(pair);",
 ];
 

@@ -11,36 +11,36 @@ pub struct Boundary(input: Bytes, offset: Nat): Prop {
 
 --- A text parser walks its string's bytes, and its positions are the string's own.
 satisfy Input(Str) {
-    Admits(input, offset) = Boundary(input, offset),
-    bytes(s) = s.bytes,
-    start(s) =
+    Admits(input, offset) => Boundary(input, offset),
+    bytes(s) => s.bytes,
+    start(s) =>
         let first = Str/At/start(s);
         Boundary {},
 }
 
 --- The string a text parser's input is, read back out of a position in it.
-let text(@input: Bytes, at: Pos(Str, input)) -> Str =
+let text(@input: Bytes, at: Pos(Str, input)) -> Str =>
     Str { bytes = input, @valid = at.holds.valid };
 
 --- Where a text parser stands, as a position of that string.
-let position(@input: Bytes, at: Pos(Str, input)) -> Str/At(text(at)) =
+let position(@input: Bytes, at: Pos(Str, input)) -> Str/At(text(at)) =>
     Str/At { offset = at.offset, @within = at.holds.within, @boundary = at.holds.boundary };
 
 --- A position of the string, as one a text parser may stand at.
-let back(@input: Bytes, at: Pos(Str, input), p: Str/At(text(at))) -> Pos(Str, input) =
+let back(@input: Bytes, at: Pos(Str, input), p: Str/At(text(at))) -> Pos(Str, input) =>
     At { offset = p.offset, holds = Boundary { @valid = at.holds.valid } };
 
 --- The next character; declines at the end of the input.
-pub let char() -> Parse(Str, Char) =
+pub let char() -> Parse(Str, Char) =>
     Of {
-        run(_, at) =
+        run(_, at) =>
             match Str/At/try_next(text(at), position(at))
             | none() => Result/failure(Error/declined("unexpected end of input", at.offset))
             | some(n) => Result/success((back(at, n.past), n.char))
             end };
 
 --- The next character when `pred` accepts it; declines otherwise, consuming nothing.
-pub let char_if(pred: (Char) -> Bool) -> Parse(Str, Char) =
+pub let char_if(pred: (Char) -> Bool) -> Parse(Str, Char) =>
     Parse/bind(
         char(),
         (c) =>
@@ -50,10 +50,10 @@ pub let char_if(pred: (Char) -> Bool) -> Parse(Str, Char) =
             end);
 
 --- The character `expected`; declines on any other.
-pub let expect(expected: Char) -> Parse(Str, Char) =
+pub let expect(expected: Char) -> Parse(Str, Char) =>
     let message = Fmt/render("expected '%'")(expected);
     Of {
-        run(_, at) =
+        run(_, at) =>
             match Str/At/try_next(text(at), position(at))
             | none() => Result/failure(Error/declined("unexpected end of input", at.offset))
             | some(n) =>
@@ -64,28 +64,28 @@ pub let expect(expected: Char) -> Parse(Str, Char) =
             end };
 
 --- The characters of `lit`, exactly; declines on anything else.
-pub let literal(lit: Str) -> Parse(Str, {}) =
+pub let literal(lit: Str) -> Parse(Str, {}) =>
     let message = Fmt/render("expected \"%\"")(lit);
     Of {
-        run(_, at) =
+        run(_, at) =>
             match Str/follows(text(at), position(at), lit)
             | some(met) => Result/success((back(at, met.past), ()))
             | none() => Result/failure(Error/declined(message, at.offset))
             end };
 
 --- The longest run of characters `pred` accepts, possibly empty, as the piece of the input it is.
-pub let take_while(pred: (Char) -> Bool) -> Parse(Str, Str) =
+pub let take_while(pred: (Char) -> Bool) -> Parse(Str, Str) =>
     Of {
-        run(_, at) =
+        run(_, at) =>
             let taken = Str/span(text(at), position(at), pred);
             Result/success((
                 back(at, taken.past),
                 Str/between(text(at), position(at), taken.past, @taken.reach))) };
 
 --- Everything before the next occurrence of `lit`, or to the end of the input where it does not occur, as the piece of the input it is. `lit` itself is left unconsumed.
-pub let until(lit: Str) -> Parse(Str, Str) =
+pub let until(lit: Str) -> Parse(Str, Str) =>
     Of {
-        run(_, at) =
+        run(_, at) =>
             let rest = Str/after(text(at), position(at));
             match Str/index_of_substr(rest, lit)
             | some(found) =>
@@ -96,17 +96,17 @@ pub let until(lit: Str) -> Parse(Str, Str) =
             end };
 
 --- The next character without consuming it, or `none` at the end of the input.
-pub let peek() -> Parse(Str, Option(Char)) =
+pub let peek() -> Parse(Str, Option(Char)) =>
     Of {
-        run(_, at) =
+        run(_, at) =>
             Result/success((
                 at,
                 Option/map(Str/At/try_next(text(at), position(at)), (n) => n.char))) };
 
 --- Everything from the current position to the end of the input.
-pub let rest() -> Parse(Str, Str) =
+pub let rest() -> Parse(Str, Str) =>
     Of {
-        run(_, at) =
+        run(_, at) =>
             Result/success((
                 back(at, Str/At/finish(text(at))),
                 Str/after(text(at), position(at)))) };

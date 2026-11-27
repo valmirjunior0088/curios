@@ -11,8 +11,8 @@ fn opaque_inductive_is_usable_through_declaring_module_api() {
             pub induct T : Type
             | wrap(Nat)
             end
-            pub let make(n : Nat) -> T = T/wrap(n);
-            pub let reveal(t : T) -> Nat =
+            pub let make(n : Nat) -> T => T/wrap(n);
+            pub let reveal(t : T) -> Nat =>
                 match t
                 | wrap(n) => n
                 end;
@@ -32,9 +32,9 @@ fn opaque_inductive_empty_elimination_is_private() {
             pub induct T : Type
             | wrap(Nat)
             end
-            pub let make(n : Nat) -> T = T/wrap(n);
+            pub let make(n : Nat) -> T => T/wrap(n);
         end
-        let reveal(t : Secret/T) -> Nat = match t end;
+        let reveal(t : Secret/T) -> Nat => match t end;
         /std/print(Nat/to_str(reveal(Secret/make(7))))
         "#;
 
@@ -50,7 +50,7 @@ fn opaque_inductive_empty_elimination_is_private() {
 fn tuple_match_target_projects_fields() {
     let source = r#"
         use /std/{Nat};
-        let f(p : { Nat, Nat }) -> Nat =
+        let f(p : { Nat, Nat }) -> Nat =>
             match p
             | (x, y) => x + y
             end;
@@ -66,7 +66,7 @@ fn struct_match_target_projects_fields() {
     let source = r#"
         use /std/{Nat};
         pub struct Pair(A : Type, B : Type) : pub Type { fst : A, snd : B }
-        let f(p : Pair(Nat, Nat)) -> Nat =
+        let f(p : Pair(Nat, Nat)) -> Nat =>
             match p
             | Pair { fst, snd } => fst + snd
             end;
@@ -84,7 +84,7 @@ fn struct_arm_privacy_is_enforced() {
         mod Celsius
             use /std/{Nat};
             pub struct Celsius : Type { Nat }
-            pub let of_nat(n : Nat) -> Celsius = Celsius { n };
+            pub let of_nat(n : Nat) -> Celsius => Celsius { n };
         end
         let c : Celsius/Celsius = Celsius/of_nat(42);
         match c
@@ -103,7 +103,7 @@ fn struct_arm_privacy_is_enforced() {
 fn effectful_match_scrutinee_runs_once() {
     let source = r#"
         use /std/{File, Path, Try, Io};
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             match Try/run(Try/scope((s) => Try/bind(File/open(s, Path/of_str("log.txt"), File/Mode/append()), (f) => Io/write(f, /std/Str/to_bytes("x")))))!
             | success(_) => /std/print("ok")
             | failure(_) => /std/print("error")
@@ -124,12 +124,12 @@ fn effectful_match_scrutinee_runs_once() {
 fn inductive_match_catch_all_covers_unenumerated_constructors() {
     let source = r#"
         use /std/{Option, Nat, Bytes, rand};
-        let f(o : Option(Nat)) -> Nat =
+        let f(o : Option(Nat)) -> Nat =>
             match o
             | some(x) => x + 10
             | _ => 99
             end;
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let z = Bytes/length(rand/bytes(0)!);
             /std/print(Nat/to_str((f(Option/some(5)) + f(Option/none())) + z));
         entry()
@@ -145,7 +145,7 @@ fn an_arm_naming_no_constructor_is_told_which_there_are() {
     let nullary = error(
         r#"
         use /std/{Nat, Ordering};
-        let f(o : Ordering) -> Nat = match o | less() => 0 end;
+        let f(o : Ordering) -> Nat => match o | less() => 0 end;
         /std/print(Nat/to_str(f(Ordering/lt())))
         "#,
     );
@@ -162,7 +162,7 @@ fn an_arm_naming_no_constructor_is_told_which_there_are() {
         | empty() : (0)
         | push(@n : Nat, head : T, tail : Sized(T)(n)) : (n + 1)
         end
-        let f(@n : Nat, s : Sized(Nat)(n)) -> Nat = match s | cons(@m, h, t) => h end;
+        let f(@n : Nat, s : Sized(Nat)(n)) -> Nat => match s | cons(@m, h, t) => h end;
         /std/print("no")
         "#,
     );
@@ -178,7 +178,7 @@ fn a_match_with_no_arms_over_a_carrier_says_what_it_eliminates() {
     let error = error(
         r#"
         use /std/{Nat};
-        let f(n : Nat) -> Nat = match n end;
+        let f(n : Nat) -> Nat => match n end;
         /std/print(Nat/to_str(f(1)))
         "#,
     );
@@ -195,7 +195,7 @@ fn a_family_reached_through_an_alias_of_its_former_is_matched() {
     let source = r#"
         use /std/{Nat, Option, print};
         let Opt: (Type) -> Type = Option;
-        let unwrap(o: Opt(Nat)) -> Nat = match o | some(x) => x | none() => 0 end;
+        let unwrap(o: Opt(Nat)) -> Nat => match o | some(x) => x | none() => 0 end;
         print(Nat/to_str(unwrap(Option/some(5)) + unwrap(Option/none())))
         "#;
 

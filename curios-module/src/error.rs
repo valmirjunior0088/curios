@@ -86,6 +86,8 @@ pub enum Error {
     RecursiveBangBinding {
         label: String,
     },
+    /// A `!` in a match's guard. A guard decides which arm is taken, so it holds no action: one is bound inside the arm that tests it.
+    GuardHoldsAction,
     ModuleLoadFailed {
         label: String,
         cause: Box<LoadError>,
@@ -335,6 +337,13 @@ impl Error {
                     "if an outer `{label}` was meant, the new binding shadows it"
                 ));
                 f.stating("rename one of them");
+            }
+            Error::GuardHoldsAction => {
+                f.text("action in a guard");
+                f.stating("a guard decides which arm is taken and holds no `!`");
+                f.stating(
+                    "bind the action inside the arm that tests it, `| p => let held = action!; match | held => … | _ => … end`",
+                );
             }
             Error::RecursiveBangBinding { label } => {
                 f.text("recursive action");

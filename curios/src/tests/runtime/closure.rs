@@ -19,14 +19,14 @@ fn nullary_closure_survives_erasure_and_codegen() {
         | now(A)
         | later(() -> Susp(A))
         end
-        let force(@A : Type, s : Susp(A)) -> A =
+        let force(@A : Type, s : Susp(A)) -> A =>
             match s
             | now(a) => a
             | later(k) => force(k())
             end;
         let prog : Susp(/std/Io({})) =
             Susp/later(() => Susp/now(/std/print("ok")));
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let r = force(prog);
             let _ = r!;
             let _ = /std/print("!")!;
@@ -50,7 +50,7 @@ fn end_to_end() {
             | left(_) => +42
             | right(_) => +7
             end;
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let _ = /std/print(std/Int/to_str(score(pair)))!;
             /std/Io/pure(());
         entry()
@@ -73,7 +73,7 @@ fn local_binders_shadow_module_bindings_without_leaking() {
                 let probe : /std/Nat = (() => let go : /std/Nat = 3; go)();
                 go;
         end
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let _ = /std/print(Nat/to_str(Nat/add(Nat/mul(Foo/shadowed, 10), Foo/sibling)))!;
             /std/Io/pure(());
         entry()
@@ -86,13 +86,13 @@ fn local_binders_shadow_module_bindings_without_leaking() {
 #[test]
 fn triangular_sum() {
     let source = r#"
-        let triangle(n : std/Nat) -> std/Nat =
+        let triangle(n : std/Nat) -> std/Nat =>
             match n
             | 0 => 0
             | pred + 1 => std/Nat/add(triangle(pred), pred)
             end;
         let result : std/Nat = triangle(5);
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let _ = /std/print(std/Nat/to_str(result))!;
             /std/Io/pure(());
         entry()
@@ -105,7 +105,7 @@ fn triangular_sum() {
 fn multi_arg_function() {
     let source = r#"
         let add : (std/Int, std/Int) -> std/Int = (x, y) => std/Int/add(x, y);
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let _ = /std/print(std/Int/to_str(add(+3, +4)))!;
             /std/Io/pure(());
         entry()
@@ -118,7 +118,7 @@ fn multi_arg_function() {
 fn curried_function() {
     let source = r#"
         let add : (std/Int) -> (std/Int) -> std/Int = (x) => (y) => std/Int/add(x, y);
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let _ = /std/print(std/Int/to_str(add(+3)(+4)))!;
             /std/Io/pure(());
         entry()
@@ -132,7 +132,7 @@ fn folds_constant_arg_through_let_function() {
     // `let f(x) = Nat/add(x, 1); f(3)` must fold end-to-end to a literal `4`. The observation point is the host call that consumes it rather than main's return continuation: a program's tail is a description yielding unit, so no user value reaches that continuation at all. `proc_exit` is the shortest host operation, reached here through the narrowing to its `Byte` that the literal discharges, and its operand is erased at the construction site, so a surviving `NatAdd` would mean the fold did not happen.
     let source = r#"
         use /std/{Nat};
-        let f(x : Nat) -> Nat = Nat/add(x, 1);
+        let f(x : Nat) -> Nat => Nat/add(x, 1);
         /std/Proc/exit(Nat/to_byte(f(3)))
         "#;
 
@@ -171,14 +171,14 @@ fn nested_local_rec_runs_correctly() {
     assert_eq!(
         run(r#"
         use /std/{Nat, Str, Bytes, Io};
-        let f(n : Nat) -> Nat =
-            (() => let go(i : Nat) -> Nat =
+        let f(n : Nat) -> Nat =>
+            (() => let go(i : Nat) -> Nat =>
                 match i
                 | 0 => 0
                 | k + 1 => go(k) + 1
                 end;
              go(n))();
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             /std/print(Nat/to_str(f(Bytes/length(/std/rand/bytes(4)!))));
         entry()
         "#),
@@ -192,14 +192,14 @@ fn local_rec_calls_enclosing_rec_member() {
     assert_eq!(
         run(r#"
         use /std/{Nat, Str, Bytes, Io};
-        let f(n : Nat) -> Nat =
-            (() => let go(i : Nat) -> Nat =
+        let f(n : Nat) -> Nat =>
+            (() => let go(i : Nat) -> Nat =>
                 match i
                 | 0 => 0
                 | k + 1 => f(k) + go(k)
                 end;
              go(n))();
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             /std/print(Nat/to_str(f(Bytes/length(/std/rand/bytes(3)!))));
         entry()
         "#),
@@ -213,10 +213,10 @@ fn self_referential_value_rec_never_forced_compiles_and_runs() {
     assert_eq!(
         run(r#"
         use /std/{Nat, Str, Bytes, Io};
-        let make(n : Nat) -> Nat =
+        let make(n : Nat) -> Nat =>
             let loop : Nat = loop;
             n;
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             /std/print(Nat/to_str(make(Bytes/length(/std/rand/bytes(5)!))));
         entry()
         "#),
@@ -230,9 +230,9 @@ fn recursive_group_signature_reduces_concrete_type_family() {
     assert_eq!(
         run(r#"
         use /std/{Nat, Str, Bytes, Io};
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let taint = Bytes/length(/std/rand/bytes(3)!);
-            let T(n : Nat) -> Type =
+            let T(n : Nat) -> Type =>
                 match n
                 | 0 => Nat
                 | k + 1 => T(k)
@@ -263,7 +263,7 @@ fn a_padded_variant_survives_a_split_join_at_run_time() {
         | many(List(Thing(E)))
         end
 
-        let flatten(@E: Type, c: Thing(E)) -> {quit: Bool, pending: List(Io(E))} =
+        let flatten(@E: Type, c: Thing(E)) -> {quit: Bool, pending: List(Io(E))} =>
             match c
             | nothing() => (quit = false, pending = [])
             | stop() => (quit = true, pending = [])
@@ -277,7 +277,7 @@ fn a_padded_variant_survives_a_split_join_at_run_time() {
                         (quit = acc.quit || f.quit, pending = [..acc.pending, ..f.pending]))
             end;
 
-        let step(model: Nat, tag: Nat) -> {Nat, Thing(Nat)} =
+        let step(model: Nat, tag: Nat) -> {Nat, Thing(Nat)} =>
             match
             | tag == 1 => (model + 1, Thing/nothing())
             | tag == 2 => (model, Thing/stop())
@@ -285,7 +285,7 @@ fn a_padded_variant_survives_a_split_join_at_run_time() {
             | _ => (model, Thing/nothing())
             end;
 
-        let drive(start: Nat, tags: List(Nat)) -> {model: Nat, quit: Bool, pending: List(Io(Nat))} =
+        let drive(start: Nat, tags: List(Nat)) -> {model: Nat, quit: Bool, pending: List(Io(Nat))} =>
             List/fold(
                 tags,
                 (model = start, quit = false, pending = []),
@@ -298,7 +298,7 @@ fn a_padded_variant_survives_a_split_join_at_run_time() {
                         (model = next.0, quit = f.quit, pending = [..acc.pending, ..f.pending])
                     end);
 
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let n = List/length(Proc/args()!);
             let d = drive(n + 6, [1, 3]);
             /std/print(Str/flatten([Nat/to_str(d.model), ":", Nat/to_str(List/length(d.pending))]));
@@ -316,16 +316,16 @@ fn a_closure_whose_arity_a_value_decides_is_called_at_each() {
     assert_eq!(
         run(r#"
         use /std/{Nat, Bool, Str, List};
-        let Shape(b : Bool) -> Type =
+        let Shape(b : Bool) -> Type =>
             match b | true => (Nat) -> Nat | false => (Nat, Nat) -> Nat end;
-        let pick(b : Bool) -> Shape(b) =
+        let pick(b : Bool) -> Shape(b) =>
             match b | true => (x) => x + 1 | false => (x, y) => x + y end;
-        let apply(b : Bool, f : Shape(b)) -> Nat =
+        let apply(b : Bool, f : Shape(b)) -> Nat =>
             match b
             | true => f(10)
             | false => f(10, 20)
             end;
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let args = /std/Proc/args()!;
             let b = List/length(args) == 0;
             /std/print(

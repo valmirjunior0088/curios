@@ -11,10 +11,10 @@ fn reads(tail: &str) -> String {
     fill!(
         r#"
         use /std/{Str, Bytes, Option, Result, Show, Try, Io, print, Proc};
-        let text(b: Bytes) -> Str = Result/unwrap_or(Str/of_bytes(b), "?");
-        let line(found: Option(Bytes)) -> Str =
+        let text(b: Bytes) -> Str => Result/unwrap_or(Str/of_bytes(b), "?");
+        let line(found: Option(Bytes)) -> Str =>
             match found | some(b) => text(b) | none() => "<end>" end;
-        let reads(input: Io/Reader(Proc/Input)) -> Try(Io, Io/Error, Str) =
+        let reads(input: Io/Reader(Proc/Input)) -> Try(Io, Io/Error, Str) =>
             let a = Io/Reader/line(input)!;
             let b = Io/Reader/line(input)!;
             let c = Io/Reader/until(input, ',')!;
@@ -26,9 +26,9 @@ fn reads(tail: &str) -> String {
                 Str/join(
                     "|",
                     [line(a), line(b), text(c.bytes), text(d.bytes), line(e), text(f), line(g)]));
-        let said(outcome: Result(Io/Error, Str)) -> Io({}) =
+        let said(outcome: Result(Io/Error, Str)) -> Io({}) =>
             match outcome | success(read) => print(read) | failure(why) => print(Show/show(why)) end;
-        let main() -> Io({}) =
+        let main() -> Io({}) =>
             ${tail};
         main()
         "#,
@@ -41,7 +41,7 @@ const WIRE: &str = r#"
     use /std/{Str, Bytes, Bool, Option, Result, Show, Try, Io, print, Channel};
     use /std/time/{Duration};
     struct Wire: Type { Channel(Bytes) }
-    let next(w: Wire) -> Try(Io, Io/Error, Io/Chunk) =
+    let next(w: Wire) -> Try(Io, Io/Error, Io/Chunk) =>
         let got = Channel/take(w.0)!;
         match got
         | none() => Try/pure(Io/Chunk/ended())
@@ -52,10 +52,10 @@ const WIRE: &str = r#"
             end
         end;
     satisfy Io/Read(Wire) {
-        read(w, n) = next(w),
+        read(w, n) => next(w),
     }
-    let text(b: Bytes) -> Str = Result/unwrap_or(Str/of_bytes(b), "?");
-    let line(read: Result(Io/Error, Option(Bytes))) -> Str =
+    let text(b: Bytes) -> Str => Result/unwrap_or(Str/of_bytes(b), "?");
+    let line(read: Result(Io/Error, Option(Bytes))) -> Str =>
         match read
         | success(some(b)) => text(b)
         | success(none()) => "<end>"
@@ -98,7 +98,7 @@ fn the_named_reads_answer_alike_over_every_cut_of_their_input() {
 fn a_line_a_deadline_abandons_is_read_whole_by_the_next_read() {
     let source = fill!(
         r#"${WIRE}
-        let program() -> Io({}) =
+        let program() -> Io({}) =>
             let sent = Channel/new(@Bytes, 4)!;
             let input = Io/Reader/new(Wire { sent })!;
             let _ = Channel/try_push(sent, Str/to_bytes("ab"))!;
@@ -126,8 +126,8 @@ fn a_line_a_deadline_abandons_is_read_whole_by_the_next_read() {
 fn a_refusal_past_the_bound_leaves_the_bytes_held() {
     let source = r#"
         use /std/{Str, Bytes, Option, Result, Show, Try, Io, print, Proc};
-        let text(b: Bytes) -> Str = Result/unwrap_or(Str/of_bytes(b), "?");
-        let entry() -> /std/Io({}) =
+        let text(b: Bytes) -> Str => Result/unwrap_or(Str/of_bytes(b), "?");
+        let entry() -> /std/Io({}) =>
             let input = Io/Reader/within(Proc/stdin, 4)!;
             let refused = Try/run(Io/Reader/line(input))!;
             let _ = print(match refused | success(_) => "read" | failure(why) => Show/show(why) end)!;
@@ -152,10 +152,10 @@ fn a_refusal_past_the_bound_leaves_the_bytes_held() {
 fn two_branches_on_one_reader_each_get_a_whole_line() {
     let source = fill!(
         r#"${WIRE}
-        let reading(input: Io/Reader(Wire)) -> Io({}) =
+        let reading(input: Io/Reader(Wire)) -> Io({}) =>
             let read = Try/run(Io/Reader/line(input))!;
             print(Str/flatten(["<", line(read), ">"]));
-        let both_read(s: Io/Scope) -> Io({}) =
+        let both_read(s: Io/Scope) -> Io({}) =>
             let sent = Channel/new(@Bytes, 4)!;
             let input = Io/Reader/new(Wire { sent })!;
             let _ = Channel/try_push(sent, Str/to_bytes("aaaaaa"))!;
@@ -193,13 +193,13 @@ fn a_line_is_read_as_text_or_refused_where_it_is_none() {
     run_text(
         r#"
         use /std/{Str, Option, Result, Show, Try, Io, print, Proc};
-        let said(read: Result(Io/Error, Option(Str))) -> Str =
+        let said(read: Result(Io/Error, Option(Str))) -> Str =>
             match read
             | success(some(text)) => text
             | success(none()) => "<end>"
             | failure(why) => Show/show(why)
             end;
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let input = Io/Reader/new(Proc/stdin)!;
             let a = Try/run(Io/Reader/line_text(input))!;
             let b = Try/run(Io/Reader/line_text(input))!;

@@ -44,9 +44,9 @@ fn a_search_answers_where_rust_finds() {
         r#"
         use /std/{Str, Nat, List, Option, Char};
 
-        let offset(@s: Str, found: Option(Str/At(s))) -> Str =
+        let offset(@s: Str, found: Option(Str/At(s))) -> Str =>
             match found | some(at) => Nat/to_str(Str/At/to_offset(at)) | none() => "-" end;
-        let row(text: Str) -> Str =
+        let row(text: Str) -> Str =>
             Str/flatten([
                 offset(Str/index_of(text, 'b')),
                 ",",
@@ -92,11 +92,11 @@ fn text_cuts_where_rust_cuts_it() {
         r#"
         use /std/{Str, List, Option};
 
-        let piece(found: Option(Str)) -> Str =
+        let piece(found: Option(Str)) -> Str =>
             match found | some(s) => Str/concat(s, "|") | none() => "-|" end;
-        let pieces(parts: List(Str)) -> Str =
+        let pieces(parts: List(Str)) -> Str =>
             Str/concat(Str/join("/", parts), "|");
-        let cuts(text: Str, needle: Str) -> Str =
+        let cuts(text: Str, needle: Str) -> Str =>
             Str/flatten([
                 match Str/split_once(text, needle) | some((a, b)) => Str/flatten([a, "/", b, "|"]) | none() => "-|" end,
                 pieces(Str/split(text, needle)),
@@ -105,7 +105,7 @@ fn text_cuts_where_rust_cuts_it() {
                 Str/replace(text, needle, "_"),
                 ";",
             ]);
-        let row(text: Str) -> Str =
+        let row(text: Str) -> Str =>
             Str/flatten([
                 Str/trim_start(text), "|", Str/trim_end(text), "|", Str/trim(text), "|",
                 pieces(Str/lines(text)),

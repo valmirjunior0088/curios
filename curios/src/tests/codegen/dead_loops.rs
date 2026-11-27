@@ -39,23 +39,23 @@ const WALKS: &str = r#"
     pub struct Ops: pub Type {
         f: (Nat) -> Nat,
     }
-    let through_field(ops: Ops, l: List(Nat)) -> Nat =
+    let through_field(ops: Ops, l: List(Nat)) -> Nat =>
         match l
         | [] => 0
         | [h, ..r] => match h | 0 => through_field(ops, r) | _ => ops.f(h) end
         end;
-    let through_param(f: (Nat) -> Nat, l: List(Nat)) -> Nat =
+    let through_param(f: (Nat) -> Nat, l: List(Nat)) -> Nat =>
         match l
         | [] => 0
         | [h, ..r] => match h | 0 => through_param(f, r) | _ => f(h) end
         end;
-    let dead_field(ops: Ops, l: List(Nat), n: Nat) -> Nat =
+    let dead_field(ops: Ops, l: List(Nat), n: Nat) -> Nat =>
         let a = through_field(ops, l);
         n + 1;
-    let dead_param(f: (Nat) -> Nat, l: List(Nat), n: Nat) -> Nat =
+    let dead_param(f: (Nat) -> Nat, l: List(Nat), n: Nat) -> Nat =>
         let a = through_param(f, l);
         n + 2;
-    let entry() -> /std/Io({}) =
+    let entry() -> /std/Io({}) =>
         let arguments = Proc/args()!;
         let n = List/length(arguments);
         let l = [n, 0, n + 1];
@@ -81,12 +81,12 @@ fn a_total_walk_whose_partial_step_cycles_through_a_total_loop_stays() {
     let module = optimized(
         r#"
         use /std/{Nat, Proc, List};
-        let f(k: (Nat) -> Nat, n: Nat) -> Nat =
-            let go(m: Nat, acc: Nat) -> Nat = match m | 0 => acc | p + 1 => go(p, k(acc)) end;
+        let f(k: (Nat) -> Nat, n: Nat) -> Nat =>
+            let go(m: Nat, acc: Nat) -> Nat => match m | 0 => acc | p + 1 => go(p, k(acc)) end;
             go(n, 1);
-        let h(n: Nat) -> Nat = match n | 0 => 0 | k + 1 => h(k) + 1 end;
-        let g(n: Nat) -> Nat = match h(n) == 0 | true => 0 | false => g(n + 1) end;
-        let entry() -> /std/Io({}) =
+        let h(n: Nat) -> Nat => match n | 0 => 0 | k + 1 => h(k) + 1 end;
+        let g(n: Nat) -> Nat => match h(n) == 0 | true => 0 | false => g(n + 1) end;
+        let entry() -> /std/Io({}) =>
             let arguments = Proc/args()!;
             let _ = f(g, List/length(arguments) + 3);
             /std/print("done");
@@ -102,8 +102,8 @@ fn a_walk_not_known_to_terminate_stays() {
     let module = optimized(
         r#"
         use /std/{Nat, List, Proc};
-        let settle(n: Nat) -> Nat = match n | 0 => 0 | 1 => 1 | _ => settle(match n % 2 | 0 => n / 2 | _ => 3 * n + 1 end) end;
-        let entry() -> /std/Io({}) =
+        let settle(n: Nat) -> Nat => match n | 0 => 0 | 1 => 1 | _ => settle(match n % 2 | 0 => n / 2 | _ => 3 * n + 1 end) end;
+        let entry() -> /std/Io({}) =>
             let arguments = Proc/args()!;
             let a = settle(List/length(arguments) + 7);
             /std/print("done");

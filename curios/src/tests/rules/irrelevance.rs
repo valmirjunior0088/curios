@@ -20,7 +20,7 @@ fn a_function_into_a_type_is_not_discharged_uncompared() {
         r#"
         use /std/{Eq, Nat};
 
-        let same(g : (Nat) -> Eq()(0, 0), h : (Nat) -> Eq()(0, 0)) -> Eq()(g, h) = Eq/refl();
+        let same(g : (Nat) -> Eq()(0, 0), h : (Nat) -> Eq()(0, 0)) -> Eq()(g, h) => Eq/refl();
 
         /std/print("ok")
         "#,
@@ -51,7 +51,7 @@ fn still_compares_a_records_relevant_component() {
         r#"
         use /std/{Eq, Nat};
 
-        let same(p : {Nat, Eq()(0, 0)}) -> Eq()(p, (p.0, p.1)) = Eq/refl();
+        let same(p : {Nat, Eq()(0, 0)}) -> Eq()(p, (p.0, p.1)) => Eq/refl();
 
         /std/print("ok")
         "#,

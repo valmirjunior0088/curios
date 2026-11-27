@@ -25,7 +25,7 @@ pub let head(
     @h: T,
     @t: List(T),
     whole: Pairwise(le)([h, ..t]),
-) -> (y: T, Member()(y, t)) -> Holds(le(h, y)) =
+) -> (y: T, Member()(y, t)) -> Holds(le(h, y)) =>
     let cons(head, _) = whole;
     head;
 
@@ -36,7 +36,7 @@ pub let tail(
     @h: T,
     @t: List(T),
     whole: Pairwise(le)([h, ..t]),
-) -> Pairwise(le)(t) =
+) -> Pairwise(le)(t) =>
     match whole | cons(_, rest) => rest end;
 
 -- An element that leads a list in order stands in a transitive `le` to each of its members.
@@ -50,7 +50,7 @@ let below(
     given: Holds(ordered(l, le)),
     y: T,
     i: Member()(y, l),
-) -> Holds(le(a, y)) =
+) -> Holds(le(a, y)) =>
     match l
     | [] => match Member/absent(i) end
     | [k, ..r] =>
@@ -81,7 +81,7 @@ pub let of_ordered(
     trans: Ord/Trans(le),
     l: List(T),
     given: Holds(ordered(l, le)),
-) -> Pairwise(le)(l) =
+) -> Pairwise(le)(l) =>
     match l
     | [] => Pairwise/empty()
     | [h, ..t] =>
@@ -105,7 +105,7 @@ pub let everywhere(
     @le: (T, T) -> Bool,
     holds: (a: T, b: T) -> Holds(le(a, b)),
     l: List(T),
-) -> Pairwise(le)(l) =
+) -> Pairwise(le)(l) =>
     match l
     | [] => Pairwise/empty()
     | [h, ..t] => Pairwise/cons((y, _) => holds(h, y), everywhere(holds, t))
@@ -120,7 +120,7 @@ pub let joined(
     first: Pairwise(le)(a),
     second: Pairwise(le)(b),
     across: (x: T, y: T, Member()(x, a), Member()(y, b)) -> Holds(le(x, y)),
-) -> Pairwise(le)([..a, ..b]) =
+) -> Pairwise(le)([..a, ..b]) =>
     match a
     | [] => second
     | [h, ..t] =>
@@ -140,7 +140,7 @@ pub let adjacent(
     le: (T, T) -> Bool,
     l: List(T),
     whole: Pairwise(le)(l),
-) -> Holds(ordered(l, le)) =
+) -> Holds(ordered(l, le)) =>
     match l
     | [] => True/qed()
     | [h, ..t] =>

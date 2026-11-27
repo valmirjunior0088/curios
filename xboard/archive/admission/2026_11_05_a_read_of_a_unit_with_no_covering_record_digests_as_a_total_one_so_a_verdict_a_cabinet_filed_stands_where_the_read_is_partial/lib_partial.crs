@@ -6,5 +6,5 @@ use /base/{Box};
 pub let Q: Prop =
     False;
 
-pub let w(n: Nat) -> Box(Q) =
+pub let w(n: Nat) -> Box(Q) =>
     w(n);

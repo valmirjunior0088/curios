@@ -51,55 +51,55 @@ use /std/ops/{Add, Sub, Mul, Div, Rem};
 use /std/Bool/{True, Holds};
 
 --- That `b` is eight bytes long, decided.
-pub let EightBytes(b: Bytes) -> Prop =
+pub let EightBytes(b: Bytes) -> Prop =>
     Holds(Bytes/length(b) == 8);
 
 --- Whether `f` is a number: neither infinity nor a NaN.
-pub let is_finite(f: Flt) -> Bool =
+pub let is_finite(f: Flt) -> Bool =>
     gt(f, -inf.0) && lt(f, +inf.0);
 
 --- That `f` is a number, decided: the domain `to_int` states.
-pub let Finite(f: Flt) -> Prop =
+pub let Finite(f: Flt) -> Prop =>
     Holds(lt(-inf.0, f) && lt(f, +inf.0));
 
 --- That `f` is zero or above and a number, decided: the domain `to_nat` states. `-0.0` qualifies.
-pub let NonNeg(f: Flt) -> Prop =
+pub let NonNeg(f: Flt) -> Prop =>
     Holds(le(+0.0, f) && lt(f, +inf.0));
 
 --- Whether `f` is a NaN, of either sign and kind.
-pub let is_nan(f: Flt) -> Bool =
+pub let is_nan(f: Flt) -> Bool =>
     Bool/not(eql(f, f));
 
 --- Whether `f` is a signaling NaN: a NaN whose quiet bit is clear.
-pub let is_signaling(f: Flt) -> Bool =
+pub let is_signaling(f: Flt) -> Bool =>
     is_nan(f) && Nat/is_even(Nat/shr(exact/bits(f), 51));
 
 --- Whether `f`'s sign bit is set, a NaN's and a zero's included.
-pub let is_sign_minus(f: Flt) -> Bool =
+pub let is_sign_minus(f: Flt) -> Bool =>
     exact/bits(f) >= Nat/shl(1, 63);
 
 --- Whether `f` is an infinity of either sign.
-pub let is_infinite(f: Flt) -> Bool =
+pub let is_infinite(f: Flt) -> Bool =>
     eql(f, +inf.0) || eql(f, -inf.0);
 
 --- Whether `f` is a zero of either sign.
-pub let is_zero(f: Flt) -> Bool =
+pub let is_zero(f: Flt) -> Bool =>
     eql(f, +0.0);
 
 --- Whether `f` is subnormal: nonzero and finite with the exponent field clear.
-pub let is_subnormal(f: Flt) -> Bool =
+pub let is_subnormal(f: Flt) -> Bool =>
     Bool/not(is_zero(f)) && Nat/shr(exact/bits(f), 52) % 2048 == 0;
 
 --- Whether `f` is normal: finite, nonzero and not subnormal.
-pub let is_normal(f: Flt) -> Bool =
+pub let is_normal(f: Flt) -> Bool =>
     is_finite(f) && Bool/not(is_zero(f)) && Bool/not(is_subnormal(f));
 
 --- Every binary64 encoding is canonical (§5.7.2): there is one per value.
-pub let is_canonical(_: Flt) -> Bool =
+pub let is_canonical(_: Flt) -> Bool =>
     true;
 
 --- The format's radix.
-pub let radix(_: Flt) -> Nat =
+pub let radix(_: Flt) -> Nat =>
     2;
 
 --- This library follows IEEE 754-2019.
@@ -107,7 +107,7 @@ pub let is_754_version_2019: Bool =
     true;
 
 --- The class `f` falls in.
-pub let class(f: Flt) -> Class =
+pub let class(f: Flt) -> Class =>
     let minus = is_sign_minus(f);
     match
     | is_signaling(f) => Class/signaling_nan()
@@ -135,26 +135,26 @@ pub let class(f: Flt) -> Class =
     end;
 
 --- Whether either is a NaN, so that no order relates them.
-pub let unordered(a: Flt, b: Flt) -> Bool =
+pub let unordered(a: Flt, b: Flt) -> Bool =>
     is_nan(a) || is_nan(b);
 
 --- That `f` is a finite nonzero value, decided: the domain of `log_b`.
-pub let FiniteNonZero(f: Flt) -> Prop =
+pub let FiniteNonZero(f: Flt) -> Prop =>
     Holds(is_finite(f) && Bool/not(is_zero(f)));
 
 --- `f` is finite, read off the evidence that it is finite and nonzero: the decision `Finite` states splits, and where it fails `FiniteNonZero(f)` is `False`.
-let finite_of_non_zero(f: Flt, @ok: FiniteNonZero(f)) -> Finite(f) =
+let finite_of_non_zero(f: Flt, @ok: FiniteNonZero(f)) -> Finite(f) =>
     match lt(-inf.0, f) && lt(f, +inf.0)
     | true => True/qed()
     | false => match ok end
     end;
 
 --- The procedure that decides `FiniteNonZero(f)`.
-pub let finite_non_zero(f: Flt) -> Option(FiniteNonZero(f)) =
+pub let finite_non_zero(f: Flt) -> Option(FiniteNonZero(f)) =>
     Bool/holds(is_finite(f) && Bool/not(is_zero(f)));
 
 --- IEEE's `remainder` (§5.3.1): `x - n · y` for the integer `n` nearest `x / y`, ties to even, which is exact. A zero answer has `x`'s sign; an infinite `x` or a zero `y` is invalid, and an infinite `y` leaves `x`. Unlike `rem`, which truncates the quotient, the answer is at most half of `y` in magnitude.
-pub let remainder(x: Flt, y: Flt) -> Flt =
+pub let remainder(x: Flt, y: Flt) -> Flt =>
     match
     | is_nan(x) || is_nan(y) => x + y
     | (some(d), some(v)) = (Dyadic/try_of(x), Dyadic/try_of(y)) =>
@@ -181,35 +181,35 @@ pub let remainder(x: Flt, y: Flt) -> Flt =
     end;
 
 --- IEEE's `sum` (§9.4), rounded ties to even: `rounded/sum` takes the direction.
-pub let sum(p: List(Flt)) -> Flt =
+pub let sum(p: List(Flt)) -> Flt =>
     rounded/sum(Rounding/ties_to_even(), p);
 
 --- IEEE's `dot` (§9.4), rounded ties to even.
-pub let dot(@n: Nat, p: Vec(Flt, n), q: Vec(Flt, n)) -> Flt =
+pub let dot(@n: Nat, p: Vec(Flt, n), q: Vec(Flt, n)) -> Flt =>
     rounded/dot(Rounding/ties_to_even(), p, q);
 
 --- IEEE's `sumSquare` (§9.4), rounded ties to even.
-pub let sum_square(p: List(Flt)) -> Flt =
+pub let sum_square(p: List(Flt)) -> Flt =>
     rounded/sum_square(Rounding/ties_to_even(), p);
 
 --- IEEE's `sumAbs` (§9.4), rounded ties to even.
-pub let sum_abs(p: List(Flt)) -> Flt =
+pub let sum_abs(p: List(Flt)) -> Flt =>
     rounded/sum_abs(Rounding/ties_to_even(), p);
 
 --- IEEE's `scaledProd` (§9.4), rounded ties to even.
-pub let scaled_prod(p: List(Flt)) -> {Flt, Int} =
+pub let scaled_prod(p: List(Flt)) -> {Flt, Int} =>
     rounded/scaled_prod(Rounding/ties_to_even(), p);
 
 --- IEEE's `scaledProdSum` (§9.4), rounded ties to even.
-pub let scaled_prod_sum(@n: Nat, p: Vec(Flt, n), q: Vec(Flt, n)) -> {Flt, Int} =
+pub let scaled_prod_sum(@n: Nat, p: Vec(Flt, n), q: Vec(Flt, n)) -> {Flt, Int} =>
     rounded/scaled_prod_sum(Rounding/ties_to_even(), p, q);
 
 --- IEEE's `scaledProdDiff` (§9.4), rounded ties to even.
-pub let scaled_prod_diff(@n: Nat, p: Vec(Flt, n), q: Vec(Flt, n)) -> {Flt, Int} =
+pub let scaled_prod_diff(@n: Nat, p: Vec(Flt, n), q: Vec(Flt, n)) -> {Flt, Int} =>
     rounded/scaled_prod_diff(Rounding/ties_to_even(), p, q);
 
 --- The pair §9.5's augmented operations answer for a nonzero exact value `v`: `a`, `v` rounded ties toward zero, and `b`, what `a` leaves of `v` rounded the same way, which is exact unless it underflows. An `a` that overflows answers itself twice, and a zero `b` takes `a`'s sign.
-let augmented(v: Dyadic) -> {Flt, Flt} =
+let augmented(v: Dyadic) -> {Flt, Flt} =>
     let a = exact/ties_toward_zero(v.mantissa, v.exponent);
     match Dyadic/try_of(a)
     | none() => (a, a)
@@ -220,7 +220,7 @@ let augmented(v: Dyadic) -> {Flt, Flt} =
     end;
 
 --- IEEE's `augmentedAddition` (§9.5): `x + y` as the pair `(a, b)` of its value rounded ties toward zero and the error that rounding made, so that `a + b` is the exact sum whenever `b` does not underflow. An exact zero sum answers the zero `x + y` does, twice; a NaN or an infinity answers the sum twice.
-pub let augmented_add(x: Flt, y: Flt) -> {Flt, Flt} =
+pub let augmented_add(x: Flt, y: Flt) -> {Flt, Flt} =>
     let s = x + y;
     match (Dyadic/try_of(x), Dyadic/try_of(y))
     | (some(a), some(b)) =>
@@ -230,11 +230,11 @@ pub let augmented_add(x: Flt, y: Flt) -> {Flt, Flt} =
     end;
 
 --- IEEE's `augmentedSubtraction` (§9.5): `augmented_add(x, neg(y))`.
-pub let augmented_sub(x: Flt, y: Flt) -> {Flt, Flt} =
+pub let augmented_sub(x: Flt, y: Flt) -> {Flt, Flt} =>
     augmented_add(x, neg(y));
 
 --- IEEE's `augmentedMultiplication` (§9.5): `x · y` as the pair `augmented_add` answers for a sum, a zero product signed as the operands are.
-pub let augmented_mul(x: Flt, y: Flt) -> {Flt, Flt} =
+pub let augmented_mul(x: Flt, y: Flt) -> {Flt, Flt} =>
     let p = x * y;
     match (Dyadic/try_of(x), Dyadic/try_of(y))
     | (some(a), some(b)) =>
@@ -244,7 +244,7 @@ pub let augmented_mul(x: Flt, y: Flt) -> {Flt, Flt} =
     end;
 
 --- IEEE's `nextUp` (§5.3.1): the least float above `f`. `-0` and `+0` step to the least subnormal, the negative least subnormal to `-0`, `-inf` to the negative largest finite value, and `+inf` stays; a NaN answers itself quieted.
-pub let next_up(f: Flt) -> Flt =
+pub let next_up(f: Flt) -> Flt =>
     let b = exact/bits(f);
     match
     | is_nan(f) => f + f
@@ -255,27 +255,27 @@ pub let next_up(f: Flt) -> Flt =
     end;
 
 --- IEEE's `nextDown`: the greatest float below `f`, `neg(next_up(neg(f)))`.
-pub let next_down(f: Flt) -> Flt =
+pub let next_down(f: Flt) -> Flt =>
     neg(next_up(neg(f)));
 
 --- IEEE's `scaleB` (§5.3.3): `f · 2^n`, rounded once, ties to even. `rounded/scale` takes the direction.
-pub let scale(f: Flt, n: Int) -> Flt =
+pub let scale(f: Flt, n: Int) -> Flt =>
     rounded/scale(Rounding/ties_to_even(), f, n);
 
 --- IEEE's `logB` (§5.3.3): the exponent of `f`'s leading bit, `⌊log₂|f|⌋`, subnormals included. A zero, an infinity or a NaN has none, which the bound excludes.
-pub let log_b(f: Flt, @ok: FiniteNonZero(f)) -> Int =
+pub let log_b(f: Flt, @ok: FiniteNonZero(f)) -> Int =>
     let finite = finite_of_non_zero(f, @ok);
     exponent(f, @finite) + Nat/to_int(exact/bit_length(Int/abs(mantissa(f, @finite)))) - +1;
 
 --- `log_b(f)`, or `none` for a zero, an infinity or a NaN.
-pub let try_log_b(f: Flt) -> Option(Int) =
+pub let try_log_b(f: Flt) -> Option(Int) =>
     match finite_non_zero(f)
     | some(ok) => Option/some(log_b(f, @ok))
     | none() => Option/none()
     end;
 
 --- IEEE's `minimumNumber` (§9.6): the lesser of the two, a NaN giving way to a number and `-0` below `+0`; two NaNs answer a NaN.
-pub let minimum_number(a: Flt, b: Flt) -> Flt =
+pub let minimum_number(a: Flt, b: Flt) -> Flt =>
     match
     | is_nan(a) && is_nan(b) => a + b
     | is_nan(a) => b
@@ -284,7 +284,7 @@ pub let minimum_number(a: Flt, b: Flt) -> Flt =
     end;
 
 --- IEEE's `maximumNumber`, the twin of `minimum_number`.
-pub let maximum_number(a: Flt, b: Flt) -> Flt =
+pub let maximum_number(a: Flt, b: Flt) -> Flt =>
     match
     | is_nan(a) && is_nan(b) => a + b
     | is_nan(a) => b
@@ -293,7 +293,7 @@ pub let maximum_number(a: Flt, b: Flt) -> Flt =
     end;
 
 --- IEEE's `minimumMagnitude`: the one of lesser magnitude, `min` at equal magnitudes; a NaN propagates.
-pub let minimum_magnitude(a: Flt, b: Flt) -> Flt =
+pub let minimum_magnitude(a: Flt, b: Flt) -> Flt =>
     match
     | is_nan(a) || is_nan(b) => a + b
     | lt(abs(a), abs(b)) => a
@@ -302,7 +302,7 @@ pub let minimum_magnitude(a: Flt, b: Flt) -> Flt =
     end;
 
 --- IEEE's `maximumMagnitude`, the twin of `minimum_magnitude`.
-pub let maximum_magnitude(a: Flt, b: Flt) -> Flt =
+pub let maximum_magnitude(a: Flt, b: Flt) -> Flt =>
     match
     | is_nan(a) || is_nan(b) => a + b
     | gt(abs(a), abs(b)) => a
@@ -311,7 +311,7 @@ pub let maximum_magnitude(a: Flt, b: Flt) -> Flt =
     end;
 
 --- IEEE's `minimumMagnitudeNumber`: `minimum_magnitude`, a NaN giving way to a number.
-pub let minimum_magnitude_number(a: Flt, b: Flt) -> Flt =
+pub let minimum_magnitude_number(a: Flt, b: Flt) -> Flt =>
     match
     | is_nan(a) && is_nan(b) => a + b
     | is_nan(a) => b
@@ -320,7 +320,7 @@ pub let minimum_magnitude_number(a: Flt, b: Flt) -> Flt =
     end;
 
 --- IEEE's `maximumMagnitudeNumber`, the twin of `minimum_magnitude_number`.
-pub let maximum_magnitude_number(a: Flt, b: Flt) -> Flt =
+pub let maximum_magnitude_number(a: Flt, b: Flt) -> Flt =>
     match
     | is_nan(a) && is_nan(b) => a + b
     | is_nan(a) => b
@@ -333,14 +333,14 @@ let payload_room: Nat =
     Nat/shl(1, 51);
 
 --- IEEE's `getPayload` (§9.7): a NaN's payload as a non-negative integral float, and `-1` for anything else.
-pub let payload(f: Flt) -> Flt =
+pub let payload(f: Flt) -> Flt =>
     match is_nan(f)
     | true => Nat/to_flt(exact/bits(f) % payload_room)
     | false => -1.0
     end;
 
 --- `p` as a payload, when it is an integral float in `[low, 2^51)`.
-let admissible(p: Flt, low: Nat) -> Option(Nat) =
+let admissible(p: Flt, low: Nat) -> Option(Nat) =>
     let n = try_to_nat(p)!;
     match eql(Nat/to_flt(n), p) && n >= low && n < payload_room
     | true => Option/some(n)
@@ -348,43 +348,43 @@ let admissible(p: Flt, low: Nat) -> Option(Nat) =
     end;
 
 --- IEEE's `setPayload` (§9.7): the positive quiet NaN whose payload is `p`, or `+0` when `p` is not an integral float in `[0, 2^51)`.
-pub let quiet_nan(p: Flt) -> Flt =
+pub let quiet_nan(p: Flt) -> Flt =>
     match admissible(p, 0)
     | some(n) => exact/of_bits(0x7FF8000000000000 + n)
     | none() => +0.0
     end;
 
 --- IEEE's `setPayloadSignaling` (§9.7): the positive signaling NaN whose payload is `p`, or `+0` when `p` is not an integral float in `[1, 2^51)` — a zero payload with the quiet bit clear is an infinity.
-pub let signaling_nan(p: Flt) -> Flt =
+pub let signaling_nan(p: Flt) -> Flt =>
     match admissible(p, 1)
     | some(n) => exact/of_bits(0x7FF0000000000000 + n)
     | none() => +0.0
     end;
 
 --- The float whose little-endian bytes these are, or `none` unless there are exactly eight.
-pub let try_of_le_bytes(b: Bytes) -> Option(Flt) =
+pub let try_of_le_bytes(b: Bytes) -> Option(Flt) =>
     match Bytes/length(b) == 8
     | true => Option/some(of_le_bytes(b, @True/qed()))
     | false => Option/none()
     end;
 
 --- The procedure that decides `Finite(f)`: the evidence when `f` is a number, `none` otherwise.
-pub let finite(f: Flt) -> Option(Finite(f)) =
+pub let finite(f: Flt) -> Option(Finite(f)) =>
     Bool/holds(lt(-inf.0, f) && lt(f, +inf.0));
 
 --- The procedure that decides `NonNeg(f)`: the evidence when `f` is a non-negative number, `none` otherwise. `-0.0` qualifies.
-pub let non_neg(f: Flt) -> Option(NonNeg(f)) =
+pub let non_neg(f: Flt) -> Option(NonNeg(f)) =>
     Bool/holds(ge(f, +0.0) && lt(f, +inf.0));
 
 --- `f` truncated toward zero, or `none` unless it is a non-negative number.
-pub let try_to_nat(f: Flt) -> Option(Nat) =
+pub let try_to_nat(f: Flt) -> Option(Nat) =>
     match non_neg(f)
     | some(ok) => Option/some(to_nat(f, @ok))
     | none() => Option/none()
     end;
 
 --- `f` truncated toward zero, or `none` unless it is a number.
-pub let try_to_int(f: Flt) -> Option(Int) =
+pub let try_to_int(f: Flt) -> Option(Int) =>
     match finite(f)
     | some(ok) => Option/some(to_int(f, @ok))
     | none() => Option/none()
@@ -395,7 +395,7 @@ pub let try_to_int(f: Flt) -> Option(Int) =
 --- [`eql`] and [`lt`] stay IEEE's comparisons, which call the two zeros equal and leave a NaN unordered. This is the order a sort of floats names, `List/sort_by(xs, Flt/ord)`, since `Flt` has no `==` and so no `Ord`, and the identity `Hash` already reads. It is also how this library spells IEEE's `totalOrder(x, y)`, as `ord(x, y) != gt`, and `totalOrderMag(x, y)`, as `ord(abs(x), abs(y)) != gt`.
 ---
 --- It compares [`total_key`]s, an injective encoding ([`total_key_inj`]), so the order is total and answers `eq` exactly at equality, by `Nat/ord`'s laws. That `ord` agrees with that order at every pair, including the comparisons it starts with, is not proved: no law ties [`lt`] to the bits.
-pub let ord(x: Flt, y: Flt) -> Ordering =
+pub let ord(x: Flt, y: Flt) -> Ordering =>
     match
     | lt(x, y) => Ordering/lt()
     | lt(y, x) => Ordering/gt()
@@ -403,7 +403,7 @@ pub let ord(x: Flt, y: Flt) -> Ordering =
     end;
 
 --- `f`'s bits as the natural whose order is the total one: a negative pattern complemented below `2⁶³`, a positive one lifted above it. In [`ord`] only equal numbers and NaNs reach it, since a comparison decides every other pair.
-pub let total_key(f: Flt) -> Nat =
+pub let total_key(f: Flt) -> Nat =>
     let bits = Bytes/to_nat(to_le_bytes(f));
     let top = pow2(63);
     match bits >= top
@@ -413,20 +413,20 @@ pub let total_key(f: Flt) -> Nat =
 
 -- [`to_le_bytes`] is injective because `of_le_bytes` undoes it, which is what makes the bytes a float's identity: the two zeros and every NaN pattern are apart, as their encodings are.
 --- A float is its bytes: two floats with one encoding are one float.
-pub let eq_of_le_bytes(a: Flt, b: Flt, same: Eq()(to_le_bytes(a), to_le_bytes(b))) -> Eq()(a, b) =
+pub let eq_of_le_bytes(a: Flt, b: Flt, same: Eq()(to_le_bytes(a), to_le_bytes(b))) -> Eq()(a, b) =>
     Option/some_inj(Eq/cong(try_of_le_bytes, same));
 
 --- Whether `a` and `b` are one float, bit for bit: the relation `Eq` is, which tells `+0.0` from `-0.0` and holds of a NaN and itself, where [`eql`] is IEEE's equality and does neither. Java's `Double.equals` and Julia's `===`.
-pub let identical(a: Flt, b: Flt) -> Bool =
+pub let identical(a: Flt, b: Flt) -> Bool =>
     to_le_bytes(a) == to_le_bytes(b);
 
 --- Two identical floats are one float.
-pub let eq_of_identical(a: Flt, b: Flt, same: Holds(identical(a, b))) -> Eq()(a, b) =
+pub let eq_of_identical(a: Flt, b: Flt, same: Holds(identical(a, b))) -> Eq()(a, b) =>
     eq_of_le_bytes(a, b, proved());
 
 -- So the order `Nat/ord` reads through the key is a total order that answers `eq` exactly at an equation, by `Nat/ord`'s own laws. A key at or above `2^63` is a pattern with its sign clear, lifted, and one below it a pattern with its sign set, complemented, and neither map folds two patterns into one below `2^64`, where eight bytes keep every pattern.
 --- Two floats with one [`total_key`] are one float: the key tells every pattern apart.
-pub let total_key_inj(a: Flt, b: Flt, e: Eq()(total_key(a), total_key(b))) -> Eq()(a, b) =
+pub let total_key_inj(a: Flt, b: Flt, e: Eq()(total_key(a), total_key(b))) -> Eq()(a, b) =>
     let la: Holds(Bytes/to_nat(to_le_bytes(a)) < 18446744073709551616) =
         Bytes/to_nat/below(to_le_bytes(a));
     let lb: Holds(Bytes/to_nat(to_le_bytes(b)) < 18446744073709551616) =
@@ -455,10 +455,10 @@ pub let total_key_inj(a: Flt, b: Flt, e: Eq()(total_key(a), total_key(b))) -> Eq
     eq_of_le_bytes(a, b, Bytes/to_nat_inj(to_le_bytes(a), to_le_bytes(b), Eq/refl(), bits));
 
 --- The shortest decimal that reads back as `f`, always signed: `+2.5`, `-0`, `+inf`, `-inf`. A NaN writes its sign, its kind and its payload where that is not the kind's own — `+nan`, `-snan`, `+nan(0x5)` — so every NaN reads back as the pattern it is.
-pub let to_str(f: Flt) -> Str =
+pub let to_str(f: Flt) -> Str =>
     let b = to_le_bytes(f);
     -- `to_le_bytes`'s length reduces to eight, so every index below discharges its bound by reduction.
-    let at(i: Nat, @ok: Holds(i < 8)) -> Nat = Byte/to_nat(Bytes/get(b, i, @ok));
+    let at(i: Nat, @ok: Holds(i < 8)) -> Nat => Byte/to_nat(Bytes/get(b, i, @ok));
     let b6 = at(6);
     let b7 = at(7);
     let exp_field = b7 % 0x80 * 16 + b6 / 0x10;
@@ -494,26 +494,26 @@ pub let to_str(f: Flt) -> Str =
     end;
 
 --- Ten to the power `n`, as a float.
-pub let pow10(n: Nat) -> Flt =
+pub let pow10(n: Nat) -> Flt =>
     match n | 0 => +1.0 | k + 1 => pow10(k) * +10.0 end;
 
 --- The float nearest to `d` times ten to the `e`, correctly rounded with ties to even, negated when `negative`. `digits` is how many decimal digits spelled `d`, leading zeros included.
-pub let of_decimal(negative: Bool, d: Nat, e: Int, digits: Nat) -> Flt =
+pub let of_decimal(negative: Bool, d: Nat, e: Int, digits: Nat) -> Flt =>
     of_decimal_in(Rounding/ties_to_even(), negative, d, e, digits);
 
 --- The float a decimal or hex text spells, correctly rounded: an optional sign, then digits with an optional point and an optional `e` exponent, or `0x` and hex digits with an optional point and an optional `p` exponent. An optional sign before `inf`, `infinity`, `nan` or `snan`, in any case, reads as that value of that sign, and a NaN may carry a payload as `nan(0x5)`: every spelling `to_str` and `to_hex_str` write, and what IEEE 754 §5.12.1 requires a reader to accept. `none` for any other text.
-pub let of_str(s: Str) -> Option(Flt) =
+pub let of_str(s: Str) -> Option(Flt) =>
     of_str_in(Rounding/ties_to_even(), s);
 
 --- `n`'s hex digits, most significant first and lowercase, `0` for zero.
-let hex_str(n: Nat) -> Str =
-    let go(n: Nat, acc: Str) -> Str =
+let hex_str(n: Nat) -> Str =>
+    let go(n: Nat, acc: Str) -> Str =>
         let written = Str/concat(Str/of_char(Char/hex_digit(n % 16)), acc);
         match n < 16 | true => written | false => go(n / 16, written) end;
     go(n, "");
 
 --- `f` as a hex significand and a binary exponent (§5.12.3), always signed and exact, since the digits are the significand's own bits: `+0x1.8p+1` for `3`, `+0x0.0000000000001p-1022` for the least subnormal, `+0x0p+0` and `-0x0p+0` for the zeros, and the infinities and NaNs as `to_str` spells them.
-pub let to_hex_str(f: Flt) -> Str =
+pub let to_hex_str(f: Flt) -> Str =>
     let b = exact/bits(f);
     let sign = match is_sign_minus(f) | true => "-" | false => "+" end;
     let field = Nat/shr(b, 52) % 2048;
@@ -538,7 +538,7 @@ pub let to_hex_str(f: Flt) -> Str =
     end;
 
 --- `n` as `count` hex digits with its trailing zero digits dropped: what is left and how many digits it spans.
-let trimmed(n: Nat, count: Nat) -> {Nat, Nat} =
+let trimmed(n: Nat, count: Nat) -> {Nat, Nat} =>
     match count
     | 0 => (n, 0)
     | pred + 1 =>
@@ -549,11 +549,11 @@ let trimmed(n: Nat, count: Nat) -> {Nat, Nat} =
     end;
 
 --- The float hex text spells, `0x` and all: an optional sign, `0x`, hex digits with an optional point, and an optional `p` exponent, rounded once — and the infinities and NaNs by the names `to_hex_str` writes for them. `none` for any other text.
-pub let of_hex_str(s: Str) -> Option(Flt) =
+pub let of_hex_str(s: Str) -> Option(Flt) =>
     of_hex_str_in(Rounding/ties_to_even(), s);
 
 --- `f` written with exactly `n` significant digits, rounded to nearest with ties to even, and laid out as `to_str` lays out digits (§5.12.2). `rounded/to_str_significant` takes the direction.
-pub let to_str_significant(f: Flt, n: Nat, @ok: Holds(0 < n)) -> Str =
+pub let to_str_significant(f: Flt, n: Nat, @ok: Holds(0 < n)) -> Str =>
     match n
     | 0 => match ok end
     | k + 1 => to_str_significant_in(Rounding/ties_to_even(), f, k + 1)
@@ -573,14 +573,14 @@ satisfy Mul(Flt) {
 
 --- No precondition: IEEE division is total.
 satisfy Div(Flt) {
-    Ok(_) = True,
-    div(a, b) = div(a, b),
+    Ok(_) => True,
+    div(a, b) => div(a, b),
 }
 
 --- No precondition: IEEE remainder is total.
 satisfy Rem(Flt) {
-    Ok(_) = True,
-    rem(a, b) = rem(a, b),
+    Ok(_) => True,
+    rem(a, b) => rem(a, b),
 }
 
 satisfy Show(Flt) {
@@ -589,7 +589,7 @@ satisfy Show(Flt) {
 
 --- A finite value spells as a literal, the sign dropped and a point added where `to_str` wrote none; the infinities and the default NaN of either sign spell as their literals, and any other NaN as the eight bytes that build it, so what reads back is the same pattern.
 satisfy Spell(Flt) {
-    spell(f) =
+    spell(f) =>
         match is_finite(f)
         | false =>
             match

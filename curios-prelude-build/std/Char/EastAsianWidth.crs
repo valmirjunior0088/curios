@@ -26,7 +26,7 @@ satisfy Spell(EastAsianWidth) {
 }
 
 -- The class `/sys/east_asian_width` gives `code`.
-let of_code(code: Nat) -> EastAsianWidth =
+let of_code(code: Nat) -> EastAsianWidth =>
     match
     | code == /sys/east_asian_width/ambiguous => ambiguous()
     | code == /sys/east_asian_width/halfwidth => halfwidth()
@@ -43,5 +43,5 @@ let _every_code_the_database_names_is_a_case: Holds(
     True/qed();
 
 --- `c`'s class.
-pub let of_char(c: Char) -> EastAsianWidth =
+pub let of_char(c: Char) -> EastAsianWidth =>
     of_code(unicode/class(/sys/unicode/east_asian_width, /sys/east_asian_width/missing, c));

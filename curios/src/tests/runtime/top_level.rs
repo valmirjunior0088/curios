@@ -8,7 +8,7 @@ fn reading_boom(tail: &str) -> String {
         r#"
         use /std/{Nat, Io, print};
 
-        let spin(n: Nat, k: Nat) -> Nat =
+        let spin(n: Nat, k: Nat) -> Nat =>
             match n < 1
             | true => spin(n + 1, k)
             | false => spin(Nat/shl(1, k), k)
@@ -35,7 +35,7 @@ fn a_value_is_computed_where_it_is_first_read() {
     let error = run_text(
         &reading_boom(
             r#"
-            let main() -> Io({}) =
+            let main() -> Io({}) =>
                 let () = print("before")!;
                 print(Nat/to_str(boom));
 

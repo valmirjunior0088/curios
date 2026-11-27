@@ -93,9 +93,9 @@ fn an_unannotated_local_let_is_pinned_through_a_type_alias() {
         "induct Box(A : Type) : Type | empty() | wrap(A) end \
          induct Job : Type | job() end \
          let Slot : Type = Box(Job); \
-         let outer(@A : Type, x : A) -> A = \
+         let outer(@A : Type, x : A) -> A => \
              let slot = Box/empty(); \
-             let force(b : Slot) -> {} = (); \
+             let force(b : Slot) -> {} => (); \
              let _ = force(slot); \
              x; \
          outer",
@@ -115,7 +115,7 @@ fn a_local_binding_that_names_itself_lowers_to_a_rec() {
     assert_eq!(
         closed_group(
             r#"
-            let f(n : Type) -> Type = f(n);
+            let f(n : Type) -> Type => f(n);
             f
             "#
         ),
@@ -136,8 +136,8 @@ fn a_local_group_lowers_to_one_rec() {
     assert_eq!(
         closed_group(
             r#"
-            let a(x : Type) -> Type = b(x)
-            and b(x : Type) -> Type = a(x);
+            let a(x : Type) -> Type => b(x)
+            and b(x : Type) -> Type => a(x);
             a
             "#
         ),
@@ -179,7 +179,7 @@ fn a_recursive_local_action_binding_is_refused() {
 #[test]
 fn a_nominal_head_that_resolves_to_a_local_names_no_structure() {
     let shadowing = r#"
-        let f(Box : Type, v : Box) -> Type =
+        let f(Box : Type, v : Box) -> Type =>
             let Box { it } = v;
             Type;
         f
@@ -187,7 +187,7 @@ fn a_nominal_head_that_resolves_to_a_local_names_no_structure() {
     let declared = r#"
         struct Box(A : Type) : Type { it : A }
 
-        let f(Box : Type, v : Box) -> Type =
+        let f(Box : Type, v : Box) -> Type =>
             let Box { it } = v;
             Type;
         f
@@ -209,7 +209,7 @@ fn a_nominal_head_that_resolves_to_a_local_names_no_structure() {
 fn a_test_declaration_registers_by_kind_in_declaration_order() {
     // A lowered module's tests keep declaration order across module nesting — the order the synthesized tail schedules each module's in — while the definition itself is an ordinary item of kind `Test`, pinned through the registry-built `() -> /std/Test`.
     let definitions =
-        lowered_definitions("mod Inner\ntest inner_holds = x;\nend\ntest outer_holds = y;\n()");
+        lowered_definitions("mod Inner\ntest inner_holds => x;\nend\ntest outer_holds => y;\n()");
     assert_eq!(
         definitions.tests(),
         vec![global_name("Inner/inner_holds"), global_name("outer_holds")],
@@ -242,9 +242,9 @@ fn a_test_declaration_registers_by_kind_in_declaration_order() {
 #[test]
 fn nothing_names_a_test() {
     // A test binds nothing, so a name written for one resolves as a name nothing declares does, bare or through its module.
-    let bare = run_err("test t = Type;\nt");
+    let bare = run_err("test t => Type;\nt");
     assert!(bare.contains("`t` is not in scope"), "{bare}");
-    let qualified = run_err("mod Inner\ntest t = Type;\nend\nInner/t");
+    let qualified = run_err("mod Inner\ntest t => Type;\nend\nInner/t");
     assert!(qualified.contains("has no `t`"), "{qualified}");
 }
 
@@ -252,9 +252,9 @@ fn nothing_names_a_test() {
 fn a_test_takes_its_name_among_its_modules_declarations() {
     // A test's path is its report line and what a filter selects, so its name is as unique as a binding's, whichever of the two is written first.
     for source in [
-        "test t = Type;\nlet t: Type = Type;\n()",
-        "let t: Type = Type;\ntest t = Type;\n()",
-        "test t = Type;\ntest t = Type;\n()",
+        "test t => Type;\nlet t: Type = Type;\n()",
+        "let t: Type = Type;\ntest t => Type;\n()",
+        "test t => Type;\ntest t => Type;\n()",
     ] {
         let report = run_err(source);
         assert!(
@@ -267,7 +267,7 @@ fn a_test_takes_its_name_among_its_modules_declarations() {
 #[test]
 fn a_built_unit_holds_no_test_and_a_tested_one_holds_each() {
     // A build passes every test as if it were not written, nested ones included: none is registered and none lowers to an item. The same source tested holds each, in declaration order.
-    let entrypoint = "test outer = Type;\nmod Inner\ntest inner = Type;\nend\n()"
+    let entrypoint = "test outer => Type;\nmod Inner\ntest inner => Type;\nend\n()"
         .parse::<curios_surface::Entrypoint>()
         .unwrap();
     let lowered = |loader: &crate::RootSource| {
@@ -297,7 +297,7 @@ fn a_built_unit_holds_no_test_and_a_tested_one_holds_each() {
 #[test]
 fn a_test_lowers_to_the_thunk_its_surface_no_longer_spells() {
     // A test takes no parameters, but it is still a `() -> Test({})` in Core: `/test/main` holds the whole schedule and forces only the one it selected, so the body cannot be a bare value, and the empty telescope is the thunk.
-    let definitions = lowered_definitions("test t = Type;\n()");
+    let definitions = lowered_definitions("test t => Type;\n()");
     let definition = definitions
         .items
         .iter()

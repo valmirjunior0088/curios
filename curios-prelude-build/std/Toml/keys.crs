@@ -2,7 +2,7 @@ use /std/{Str, List, Parse};
 use /std/Toml/scan/{is_bare_char, ws};
 use /std/Toml/strings/{str_basic, str_literal};
 
-let key_bare() -> Parse(Str, Str) =
+let key_bare() -> Parse(Str, Str) =>
     let chunk = Parse/str/take_while(is_bare_char)!;
     match Str/is_empty(chunk)
     | true => Parse/fail("expected key")
@@ -10,14 +10,14 @@ let key_bare() -> Parse(Str, Str) =
     end;
 
 --- One key: bare, or quoted as a basic or a literal string.
-pub let key_part() -> Parse(Str, Str) =
+pub let key_part() -> Parse(Str, Str) =>
     Parse/or(key_bare(), Parse/or(str_basic(), str_literal()));
 
-let dot() -> Parse(Str, {}) =
+let dot() -> Parse(Str, {}) =>
     let () = ws()!;
     let _ = Parse/str/expect('.')!;
     ws();
 
 --- A dotted key as its parts, in the order they were written.
-pub let key_dotted() -> Parse(Str, List(Str)) =
+pub let key_dotted() -> Parse(Str, List(Str)) =>
     Parse/sep_by1(key_part(), dot());

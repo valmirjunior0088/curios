@@ -2,11 +2,11 @@ use /std/{Bool, Eq, Show, Spell, Fmt, Ordering, Hash, Str, List, proved};
 use /std/ops/{Ord, Eql};
 use /std/Bool/{True};
 
-let parens(parts: List(Str)) -> Str =
+let parens(parts: List(Str)) -> Str =>
     Fmt/render("(%)")(Str/join(", ", parts));
 
 -- `Ordering/then` with its second answer computed only where the first is `eq`. It is written with an arm for each answer, as that step is, so conversion holds the two one and the step's laws are this one's.
-let then(first: Ordering, rest: ({}) -> Ordering) -> Ordering =
+let then(first: Ordering, rest: ({}) -> Ordering) -> Ordering =>
     match first
     | lt() => Ordering/lt()
     | eq() => rest(())
@@ -14,19 +14,19 @@ let then(first: Ordering, rest: ({}) -> Ordering) -> Ordering =
     end;
 
 satisfy Show({}) {
-    show(()) = "()",
+    show(()) => "()",
 }
 
-satisfy (@A: Type, use Show(A)) => Show({A}) {
-    show(t) = Fmt/render("(%,)")(t.0),
+satisfy (@A: Type, use Show(A)) -> Show({A}) {
+    show(t) => Fmt/render("(%,)")(t.0),
 }
 
-satisfy (@A: Type, @B: Type, use Show(A), use Show(B)) => Show({A, B}) {
-    show(t) = parens([Show/show(t.0), Show/show(t.1)]),
+satisfy (@A: Type, @B: Type, use Show(A), use Show(B)) -> Show({A, B}) {
+    show(t) => parens([Show/show(t.0), Show/show(t.1)]),
 }
 
-satisfy (@A: Type, @B: Type, @C: Type, use Show(A), use Show(B), use Show(C)) => Show({A, B, C}) {
-    show(t) = parens([Show/show(t.0), Show/show(t.1), Show/show(t.2)]),
+satisfy (@A: Type, @B: Type, @C: Type, use Show(A), use Show(B), use Show(C)) -> Show({A, B, C}) {
+    show(t) => parens([Show/show(t.0), Show/show(t.1), Show/show(t.2)]),
 }
 
 satisfy (
@@ -38,8 +38,8 @@ satisfy (
     use Show(B),
     use Show(C),
     use Show(D),
-) => Show({A, B, C, D}) {
-    show(t) = parens([Show/show(t.0), Show/show(t.1), Show/show(t.2), Show/show(t.3)]),
+) -> Show({A, B, C, D}) {
+    show(t) => parens([Show/show(t.0), Show/show(t.1), Show/show(t.2), Show/show(t.3)]),
 }
 
 satisfy (
@@ -53,8 +53,8 @@ satisfy (
     use Show(C),
     use Show(D),
     use Show(E),
-) => Show({A, B, C, D, E}) {
-    show(t) =
+) -> Show({A, B, C, D, E}) {
+    show(t) =>
         parens([Show/show(t.0), Show/show(t.1), Show/show(t.2), Show/show(t.3), Show/show(t.4)]),
 }
 
@@ -71,8 +71,8 @@ satisfy (
     use Show(D),
     use Show(E),
     use Show(F),
-) => Show({A, B, C, D, E, F}) {
-    show(t) =
+) -> Show({A, B, C, D, E, F}) {
+    show(t) =>
         parens([
             Show/show(t.0),
             Show/show(t.1),
@@ -97,8 +97,8 @@ satisfy (
     use Show(E),
     use Show(F),
     use Show(G),
-) => Show({A, B, C, D, E, F, G}) {
-    show(t) =
+) -> Show({A, B, C, D, E, F, G}) {
+    show(t) =>
         parens([
             Show/show(t.0),
             Show/show(t.1),
@@ -126,8 +126,8 @@ satisfy (
     use Show(F),
     use Show(G),
     use Show(H),
-) => Show({A, B, C, D, E, F, G, H}) {
-    show(t) =
+) -> Show({A, B, C, D, E, F, G, H}) {
+    show(t) =>
         parens([
             Show/show(t.0),
             Show/show(t.1),
@@ -140,15 +140,15 @@ satisfy (
 }
 
 satisfy Spell({}) {
-    spell(()) = "()",
+    spell(()) => "()",
 }
 
-satisfy (@A: Type, use Spell(A)) => Spell({A}) {
-    spell(t) = Fmt/render("(#,)")(t.0),
+satisfy (@A: Type, use Spell(A)) -> Spell({A}) {
+    spell(t) => Fmt/render("(#,)")(t.0),
 }
 
-satisfy (@A: Type, @B: Type, use Spell(A), use Spell(B)) => Spell({A, B}) {
-    spell(t) = parens([Spell/spell(t.0), Spell/spell(t.1)]),
+satisfy (@A: Type, @B: Type, use Spell(A), use Spell(B)) -> Spell({A, B}) {
+    spell(t) => parens([Spell/spell(t.0), Spell/spell(t.1)]),
 }
 
 satisfy (
@@ -158,8 +158,8 @@ satisfy (
     use Spell(A),
     use Spell(B),
     use Spell(C),
-) => Spell({A, B, C}) {
-    spell(t) = parens([Spell/spell(t.0), Spell/spell(t.1), Spell/spell(t.2)]),
+) -> Spell({A, B, C}) {
+    spell(t) => parens([Spell/spell(t.0), Spell/spell(t.1), Spell/spell(t.2)]),
 }
 
 satisfy (
@@ -171,8 +171,8 @@ satisfy (
     use Spell(B),
     use Spell(C),
     use Spell(D),
-) => Spell({A, B, C, D}) {
-    spell(t) = parens([Spell/spell(t.0), Spell/spell(t.1), Spell/spell(t.2), Spell/spell(t.3)]),
+) -> Spell({A, B, C, D}) {
+    spell(t) => parens([Spell/spell(t.0), Spell/spell(t.1), Spell/spell(t.2), Spell/spell(t.3)]),
 }
 
 satisfy (
@@ -186,8 +186,8 @@ satisfy (
     use Spell(C),
     use Spell(D),
     use Spell(E),
-) => Spell({A, B, C, D, E}) {
-    spell(t) =
+) -> Spell({A, B, C, D, E}) {
+    spell(t) =>
         parens([
             Spell/spell(t.0),
             Spell/spell(t.1),
@@ -209,8 +209,8 @@ satisfy (
     use Spell(D),
     use Spell(E),
     use Spell(F),
-) => Spell({A, B, C, D, E, F}) {
-    spell(t) =
+) -> Spell({A, B, C, D, E, F}) {
+    spell(t) =>
         parens([
             Spell/spell(t.0),
             Spell/spell(t.1),
@@ -235,8 +235,8 @@ satisfy (
     use Spell(E),
     use Spell(F),
     use Spell(G),
-) => Spell({A, B, C, D, E, F, G}) {
-    spell(t) =
+) -> Spell({A, B, C, D, E, F, G}) {
+    spell(t) =>
         parens([
             Spell/spell(t.0),
             Spell/spell(t.1),
@@ -264,8 +264,8 @@ satisfy (
     use Spell(F),
     use Spell(G),
     use Spell(H),
-) => Spell({A, B, C, D, E, F, G, H}) {
-    spell(t) =
+) -> Spell({A, B, C, D, E, F, G, H}) {
+    spell(t) =>
         parens([
             Spell/spell(t.0),
             Spell/spell(t.1),
@@ -278,7 +278,7 @@ satisfy (
 }
 
 -- Two tuples whose fields are one by one equal are one tuple, for each number of fields: a congruence written over field variables and applied at the projections, where an equation between two projections solves nothing. A law is applied outside it, at the projections: a field is below its record, so a family nested through a tuple descends through the law as it does through the method. `Eql`'s law and `Ord`'s both read it, each from its own equations of the fields.
-let same1(@A: Type, x0: A, y0: A, e0: Eq()(x0, y0)) -> Eq()((x0,), (y0,)) =
+let same1(@A: Type, x0: A, y0: A, e0: Eq()(x0, y0)) -> Eq()((x0,), (y0,)) =>
     let refl() = e0;
     Eq/refl();
 
@@ -291,7 +291,7 @@ let same2(
     y1: B,
     e0: Eq()(x0, y0),
     e1: Eq()(x1, y1),
-) -> Eq()((x0, x1), (y0, y1)) =
+) -> Eq()((x0, x1), (y0, y1)) =>
     let refl() = e0;
     let refl() = e1;
     Eq/refl();
@@ -309,7 +309,7 @@ let same3(
     e0: Eq()(x0, y0),
     e1: Eq()(x1, y1),
     e2: Eq()(x2, y2),
-) -> Eq()((x0, x1, x2), (y0, y1, y2)) =
+) -> Eq()((x0, x1, x2), (y0, y1, y2)) =>
     let refl() = e0;
     let refl() = e1;
     let refl() = e2;
@@ -332,7 +332,7 @@ let same4(
     e1: Eq()(x1, y1),
     e2: Eq()(x2, y2),
     e3: Eq()(x3, y3),
-) -> Eq()((x0, x1, x2, x3), (y0, y1, y2, y3)) =
+) -> Eq()((x0, x1, x2, x3), (y0, y1, y2, y3)) =>
     let refl() = e0;
     let refl() = e1;
     let refl() = e2;
@@ -360,7 +360,7 @@ let same5(
     e2: Eq()(x2, y2),
     e3: Eq()(x3, y3),
     e4: Eq()(x4, y4),
-) -> Eq()((x0, x1, x2, x3, x4), (y0, y1, y2, y3, y4)) =
+) -> Eq()((x0, x1, x2, x3, x4), (y0, y1, y2, y3, y4)) =>
     let refl() = e0;
     let refl() = e1;
     let refl() = e2;
@@ -393,7 +393,7 @@ let same6(
     e3: Eq()(x3, y3),
     e4: Eq()(x4, y4),
     e5: Eq()(x5, y5),
-) -> Eq()((x0, x1, x2, x3, x4, x5), (y0, y1, y2, y3, y4, y5)) =
+) -> Eq()((x0, x1, x2, x3, x4, x5), (y0, y1, y2, y3, y4, y5)) =>
     let refl() = e0;
     let refl() = e1;
     let refl() = e2;
@@ -431,7 +431,7 @@ let same7(
     e4: Eq()(x4, y4),
     e5: Eq()(x5, y5),
     e6: Eq()(x6, y6),
-) -> Eq()((x0, x1, x2, x3, x4, x5, x6), (y0, y1, y2, y3, y4, y5, y6)) =
+) -> Eq()((x0, x1, x2, x3, x4, x5, x6), (y0, y1, y2, y3, y4, y5, y6)) =>
     let refl() = e0;
     let refl() = e1;
     let refl() = e2;
@@ -474,7 +474,7 @@ let same8(
     e5: Eq()(x5, y5),
     e6: Eq()(x6, y6),
     e7: Eq()(x7, y7),
-) -> Eq()((x0, x1, x2, x3, x4, x5, x6, x7), (y0, y1, y2, y3, y4, y5, y6, y7)) =
+) -> Eq()((x0, x1, x2, x3, x4, x5, x6, x7), (y0, y1, y2, y3, y4, y5, y6, y7)) =>
     let refl() = e0;
     let refl() = e1;
     let refl() = e2;
@@ -486,28 +486,28 @@ let same8(
     Eq/refl();
 
 satisfy Eql({}) {
-    eql((), ()) = true,
+    eql((), ()) => true,
     -- The unit has one value, so any two are one.
-    eq((), (), _) = Eq/refl(),
-    refl(()) = True/qed(),
+    eq((), (), _) => Eq/refl(),
+    refl(()) => True/qed(),
 }
 
-satisfy (@A: Type, use Eql(A)) => Eql({A}) {
-    eql(a, b) = a.0 == b.0,
-    eq(a, b, h) = same1(a.0, b.0, proved()),
-    refl(a) = Eql/refl(a.0),
+satisfy (@A: Type, use Eql(A)) -> Eql({A}) {
+    eql(a, b) => a.0 == b.0,
+    eq(a, b, h) => same1(a.0, b.0, proved()),
+    refl(a) => Eql/refl(a.0),
 }
 
-satisfy (@A: Type, @B: Type, use Eql(A), use Eql(B)) => Eql({A, B}) {
-    eql(a, b) = a.0 == b.0 && a.1 == b.1,
-    eq(a, b, h) = same2(a.0, a.1, b.0, b.1, proved(), proved()),
-    refl(a) = Bool/and/both(a.0 == a.0, a.1 == a.1, Eql/refl(a.0), Eql/refl(a.1)),
+satisfy (@A: Type, @B: Type, use Eql(A), use Eql(B)) -> Eql({A, B}) {
+    eql(a, b) => a.0 == b.0 && a.1 == b.1,
+    eq(a, b, h) => same2(a.0, a.1, b.0, b.1, proved(), proved()),
+    refl(a) => Bool/and/both(a.0 == a.0, a.1 == a.1, Eql/refl(a.0), Eql/refl(a.1)),
 }
 
-satisfy (@A: Type, @B: Type, @C: Type, use Eql(A), use Eql(B), use Eql(C)) => Eql({A, B, C}) {
-    eql(a, b) = a.0 == b.0 && a.1 == b.1 && a.2 == b.2,
-    eq(a, b, h) = same3(a.0, a.1, a.2, b.0, b.1, b.2, proved(), proved(), proved()),
-    refl(a) =
+satisfy (@A: Type, @B: Type, @C: Type, use Eql(A), use Eql(B), use Eql(C)) -> Eql({A, B, C}) {
+    eql(a, b) => a.0 == b.0 && a.1 == b.1 && a.2 == b.2,
+    eq(a, b, h) => same3(a.0, a.1, a.2, b.0, b.1, b.2, proved(), proved(), proved()),
+    refl(a) =>
         Bool/and/both(
             a.0 == a.0 && a.1 == a.1,
             a.2 == a.2,
@@ -524,11 +524,11 @@ satisfy (
     use Eql(B),
     use Eql(C),
     use Eql(D),
-) => Eql({A, B, C, D}) {
-    eql(a, b) = a.0 == b.0 && a.1 == b.1 && a.2 == b.2 && a.3 == b.3,
-    eq(a, b, h) =
+) -> Eql({A, B, C, D}) {
+    eql(a, b) => a.0 == b.0 && a.1 == b.1 && a.2 == b.2 && a.3 == b.3,
+    eq(a, b, h) =>
         same4(a.0, a.1, a.2, a.3, b.0, b.1, b.2, b.3, proved(), proved(), proved(), proved()),
-    refl(a) =
+    refl(a) =>
         Bool/and/both(
             a.0 == a.0 && a.1 == a.1 && a.2 == a.2,
             a.3 == a.3,
@@ -551,9 +551,9 @@ satisfy (
     use Eql(C),
     use Eql(D),
     use Eql(E),
-) => Eql({A, B, C, D, E}) {
-    eql(a, b) = a.0 == b.0 && a.1 == b.1 && a.2 == b.2 && a.3 == b.3 && a.4 == b.4,
-    eq(a, b, h) =
+) -> Eql({A, B, C, D, E}) {
+    eql(a, b) => a.0 == b.0 && a.1 == b.1 && a.2 == b.2 && a.3 == b.3 && a.4 == b.4,
+    eq(a, b, h) =>
         same5(
             a.0,
             a.1,
@@ -570,7 +570,7 @@ satisfy (
             proved(),
             proved(),
             proved()),
-    refl(a) =
+    refl(a) =>
         Bool/and/both(
             a.0 == a.0 && a.1 == a.1 && a.2 == a.2 && a.3 == a.3,
             a.4 == a.4,
@@ -599,9 +599,9 @@ satisfy (
     use Eql(D),
     use Eql(E),
     use Eql(F),
-) => Eql({A, B, C, D, E, F}) {
-    eql(a, b) = a.0 == b.0 && a.1 == b.1 && a.2 == b.2 && a.3 == b.3 && a.4 == b.4 && a.5 == b.5,
-    eq(a, b, h) =
+) -> Eql({A, B, C, D, E, F}) {
+    eql(a, b) => a.0 == b.0 && a.1 == b.1 && a.2 == b.2 && a.3 == b.3 && a.4 == b.4 && a.5 == b.5,
+    eq(a, b, h) =>
         same6(
             a.0,
             a.1,
@@ -621,7 +621,7 @@ satisfy (
             proved(),
             proved(),
             proved()),
-    refl(a) =
+    refl(a) =>
         Bool/and/both(
             a.0 == a.0 && a.1 == a.1 && a.2 == a.2 && a.3 == a.3 && a.4 == a.4,
             a.5 == a.5,
@@ -656,11 +656,11 @@ satisfy (
     use Eql(E),
     use Eql(F),
     use Eql(G),
-) => Eql({A, B, C, D, E, F, G}) {
-    eql(a, b) =
+) -> Eql({A, B, C, D, E, F, G}) {
+    eql(a, b) =>
         a.0 == b.0 && a.1 == b.1 && a.2 == b.2 && a.3 == b.3 && a.4 == b.4 && a.5 == b.5
             && a.6 == b.6,
-    eq(a, b, h) =
+    eq(a, b, h) =>
         same7(
             a.0,
             a.1,
@@ -683,7 +683,7 @@ satisfy (
             proved(),
             proved(),
             proved()),
-    refl(a) =
+    refl(a) =>
         Bool/and/both(
             a.0 == a.0 && a.1 == a.1 && a.2 == a.2 && a.3 == a.3 && a.4 == a.4 && a.5 == a.5,
             a.6 == a.6,
@@ -724,12 +724,12 @@ satisfy (
     use Eql(F),
     use Eql(G),
     use Eql(H),
-) => Eql({A, B, C, D, E, F, G, H}) {
-    eql(a, b) =
+) -> Eql({A, B, C, D, E, F, G, H}) {
+    eql(a, b) =>
         a.0 == b.0 && a.1 == b.1 && a.2 == b.2 && a.3 == b.3 && a.4 == b.4 && a.5 == b.5
             && a.6 == b.6
             && a.7 == b.7,
-    eq(a, b, h) =
+    eq(a, b, h) =>
         same8(
             a.0,
             a.1,
@@ -755,7 +755,7 @@ satisfy (
             proved(),
             proved(),
             proved()),
-    refl(a) =
+    refl(a) =>
         Bool/and/both(
             a.0 == a.0 && a.1 == a.1 && a.2 == a.2 && a.3 == a.3 && a.4 == a.4 && a.5 == a.5
                 && a.6 == a.6,
@@ -785,38 +785,38 @@ satisfy (
 }
 
 satisfy Ord({}) {
-    ord((), ()) = Ordering/eq(),
-    lt((), ()) = false,
-    le((), ()) = true,
-    flips((), ()) = Eq/refl(),
-    trans((), (), (), _, _) = True/qed(),
+    ord((), ()) => Ordering/eq(),
+    lt((), ()) => false,
+    le((), ()) => true,
+    flips((), ()) => Eq/refl(),
+    trans((), (), (), _, _) => True/qed(),
     -- The unit has one value, so any two are one.
-    eq((), (), _) = Eq/refl(),
-    is_lt((), ()) = Eq/refl(),
-    is_le((), ()) = Eq/refl(),
+    eq((), (), _) => Eq/refl(),
+    is_lt((), ()) => Eq/refl(),
+    is_le((), ()) => Eq/refl(),
 }
 
-satisfy (@A: Type, use Ord(A)) => Ord({A}) {
-    ord(a, b) = Ord/ord(a.0, b.0),
-    lt(a, b) = Ordering/is_lt(Ord/ord(a.0, b.0)),
-    le(a, b) = Ordering/is_le(Ord/ord(a.0, b.0)),
-    flips(a, b) = Ord/flips(a.0, b.0),
-    trans(a, b, c, p, q) = Ord/trans(a.0, b.0, c.0, p, q),
-    eq(a, b, h) = same1(a.0, b.0, Ord/eq(a.0, b.0, h)),
-    is_lt(_, _) = Eq/refl(),
-    is_le(_, _) = Eq/refl(),
+satisfy (@A: Type, use Ord(A)) -> Ord({A}) {
+    ord(a, b) => Ord/ord(a.0, b.0),
+    lt(a, b) => Ordering/is_lt(Ord/ord(a.0, b.0)),
+    le(a, b) => Ordering/is_le(Ord/ord(a.0, b.0)),
+    flips(a, b) => Ord/flips(a.0, b.0),
+    trans(a, b, c, p, q) => Ord/trans(a.0, b.0, c.0, p, q),
+    eq(a, b, h) => same1(a.0, b.0, Ord/eq(a.0, b.0, h)),
+    is_lt(_, _) => Eq/refl(),
+    is_le(_, _) => Eq/refl(),
 }
 
 -- The order of two tuples of each number of fields past one: by the first field, and by the rest where it ties. Each is a function of its own, so its witness states `lt` and `le` over it and the laws read all three by reduction. The laws are the step's ([`Ordering/then`]), a field at a time: `flips` and the chaining `trans` closes on through each field's own, each step's answers written at its call, and the two tuples one where each step's two answers are `eq`.
-let ord2(@A: Type, @B: Type, use Ord(A), use Ord(B), a: {A, B}, b: {A, B}) -> Ordering =
+let ord2(@A: Type, @B: Type, use Ord(A), use Ord(B), a: {A, B}, b: {A, B}) -> Ordering =>
     then(Ord/ord(a.0, b.0), (()) => Ord/ord(a.1, b.1));
 
-satisfy (@A: Type, @B: Type, use Ord(A), use Ord(B)) => Ord({A, B}) {
+satisfy (@A: Type, @B: Type, use Ord(A), use Ord(B)) -> Ord({A, B}) {
     ord = ord2,
-    lt(a, b) = Ordering/is_lt(ord2(a, b)),
-    le(a, b) = Ordering/is_le(ord2(a, b)),
-    flips(a, b) = Ordering/then/flips(Ord/flips(a.0, b.0), (_) => Ord/flips(a.1, b.1)),
-    trans(a, b, c, p, q) =
+    lt(a, b) => Ordering/is_lt(ord2(a, b)),
+    le(a, b) => Ordering/is_le(ord2(a, b)),
+    flips(a, b) => Ordering/then/flips(Ord/flips(a.0, b.0), (_) => Ord/flips(a.1, b.1)),
+    trans(a, b, c, p, q) =>
         Ordering/chains/le(
             ord2(a, b),
             ord2(b, c),
@@ -824,7 +824,7 @@ satisfy (@A: Type, @B: Type, use Ord(A), use Ord(B)) => Ord({A, B}) {
             Ordering/chains/then(Ord/chains(a.0, b.0, c.0), (_, _) => Ord/chains(a.1, b.1, c.1)),
             p,
             q),
-    eq(a, b, h) =
+    eq(a, b, h) =>
         let h1 = Ordering/then/second(Ord/ord(a.0, b.0), Ord/ord(a.1, b.1), h);
         same2(
             a.0,
@@ -833,8 +833,8 @@ satisfy (@A: Type, @B: Type, use Ord(A), use Ord(B)) => Ord({A, B}) {
             b.1,
             Ord/eq(a.0, b.0, Ordering/then/first(Ord/ord(a.0, b.0), Ord/ord(a.1, b.1), h)),
             Ord/eq(a.1, b.1, h1)),
-    is_lt(_, _) = Eq/refl(),
-    is_le(_, _) = Eq/refl(),
+    is_lt(_, _) => Eq/refl(),
+    is_le(_, _) => Eq/refl(),
 }
 
 let ord3(
@@ -846,18 +846,18 @@ let ord3(
     use Ord(C),
     a: {A, B, C},
     b: {A, B, C},
-) -> Ordering =
+) -> Ordering =>
     then(Ord/ord(a.0, b.0), (()) => then(Ord/ord(a.1, b.1), (()) => Ord/ord(a.2, b.2)));
 
-satisfy (@A: Type, @B: Type, @C: Type, use Ord(A), use Ord(B), use Ord(C)) => Ord({A, B, C}) {
+satisfy (@A: Type, @B: Type, @C: Type, use Ord(A), use Ord(B), use Ord(C)) -> Ord({A, B, C}) {
     ord = ord3,
-    lt(a, b) = Ordering/is_lt(ord3(a, b)),
-    le(a, b) = Ordering/is_le(ord3(a, b)),
-    flips(a, b) =
+    lt(a, b) => Ordering/is_lt(ord3(a, b)),
+    le(a, b) => Ordering/is_le(ord3(a, b)),
+    flips(a, b) =>
         Ordering/then/flips(
             Ord/flips(a.0, b.0),
             (_) => Ordering/then/flips(Ord/flips(a.1, b.1), (_) => Ord/flips(a.2, b.2))),
-    trans(a, b, c, p, q) =
+    trans(a, b, c, p, q) =>
         Ordering/chains/le(
             ord3(a, b),
             ord3(b, c),
@@ -870,7 +870,7 @@ satisfy (@A: Type, @B: Type, @C: Type, use Ord(A), use Ord(B), use Ord(C)) => Or
                         (_, _) => Ord/chains(a.2, b.2, c.2))),
             p,
             q),
-    eq(a, b, h) =
+    eq(a, b, h) =>
         let h1 =
             Ordering/then/second(
                 Ord/ord(a.0, b.0),
@@ -893,8 +893,8 @@ satisfy (@A: Type, @B: Type, @C: Type, use Ord(A), use Ord(B), use Ord(C)) => Or
                     h)),
             Ord/eq(a.1, b.1, Ordering/then/first(Ord/ord(a.1, b.1), Ord/ord(a.2, b.2), h1)),
             Ord/eq(a.2, b.2, h2)),
-    is_lt(_, _) = Eq/refl(),
-    is_le(_, _) = Eq/refl(),
+    is_lt(_, _) => Eq/refl(),
+    is_le(_, _) => Eq/refl(),
 }
 
 let ord4(
@@ -908,7 +908,7 @@ let ord4(
     use Ord(D),
     a: {A, B, C, D},
     b: {A, B, C, D},
-) -> Ordering =
+) -> Ordering =>
     then(
         Ord/ord(a.0, b.0),
         (()) =>
@@ -923,18 +923,18 @@ satisfy (
     use Ord(B),
     use Ord(C),
     use Ord(D),
-) => Ord({A, B, C, D}) {
+) -> Ord({A, B, C, D}) {
     ord = ord4,
-    lt(a, b) = Ordering/is_lt(ord4(a, b)),
-    le(a, b) = Ordering/is_le(ord4(a, b)),
-    flips(a, b) =
+    lt(a, b) => Ordering/is_lt(ord4(a, b)),
+    le(a, b) => Ordering/is_le(ord4(a, b)),
+    flips(a, b) =>
         Ordering/then/flips(
             Ord/flips(a.0, b.0),
             (_) =>
                 Ordering/then/flips(
                     Ord/flips(a.1, b.1),
                     (_) => Ordering/then/flips(Ord/flips(a.2, b.2), (_) => Ord/flips(a.3, b.3)))),
-    trans(a, b, c, p, q) =
+    trans(a, b, c, p, q) =>
         Ordering/chains/le(
             ord4(a, b),
             ord4(b, c),
@@ -950,7 +950,7 @@ satisfy (
                                 (_, _) => Ord/chains(a.3, b.3, c.3)))),
             p,
             q),
-    eq(a, b, h) =
+    eq(a, b, h) =>
         let h1 =
             Ordering/then/second(
                 Ord/ord(a.0, b.0),
@@ -991,8 +991,8 @@ satisfy (
                     h1)),
             Ord/eq(a.2, b.2, Ordering/then/first(Ord/ord(a.2, b.2), Ord/ord(a.3, b.3), h2)),
             Ord/eq(a.3, b.3, h3)),
-    is_lt(_, _) = Eq/refl(),
-    is_le(_, _) = Eq/refl(),
+    is_lt(_, _) => Eq/refl(),
+    is_le(_, _) => Eq/refl(),
 }
 
 let ord5(
@@ -1008,7 +1008,7 @@ let ord5(
     use Ord(E),
     a: {A, B, C, D, E},
     b: {A, B, C, D, E},
-) -> Ordering =
+) -> Ordering =>
     then(
         Ord/ord(a.0, b.0),
         (()) =>
@@ -1030,11 +1030,11 @@ satisfy (
     use Ord(C),
     use Ord(D),
     use Ord(E),
-) => Ord({A, B, C, D, E}) {
+) -> Ord({A, B, C, D, E}) {
     ord = ord5,
-    lt(a, b) = Ordering/is_lt(ord5(a, b)),
-    le(a, b) = Ordering/is_le(ord5(a, b)),
-    flips(a, b) =
+    lt(a, b) => Ordering/is_lt(ord5(a, b)),
+    le(a, b) => Ordering/is_le(ord5(a, b)),
+    flips(a, b) =>
         Ordering/then/flips(
             Ord/flips(a.0, b.0),
             (_) =>
@@ -1047,7 +1047,7 @@ satisfy (
                                 Ordering/then/flips(
                                     Ord/flips(a.3, b.3),
                                     (_) => Ord/flips(a.4, b.4))))),
-    trans(a, b, c, p, q) =
+    trans(a, b, c, p, q) =>
         Ordering/chains/le(
             ord5(a, b),
             ord5(b, c),
@@ -1066,7 +1066,7 @@ satisfy (
                                         (_, _) => Ord/chains(a.4, b.4, c.4))))),
             p,
             q),
-    eq(a, b, h) =
+    eq(a, b, h) =>
         let h1 =
             Ordering/then/second(
                 Ord/ord(a.0, b.0),
@@ -1129,8 +1129,8 @@ satisfy (
                     h2)),
             Ord/eq(a.3, b.3, Ordering/then/first(Ord/ord(a.3, b.3), Ord/ord(a.4, b.4), h3)),
             Ord/eq(a.4, b.4, h4)),
-    is_lt(_, _) = Eq/refl(),
-    is_le(_, _) = Eq/refl(),
+    is_lt(_, _) => Eq/refl(),
+    is_le(_, _) => Eq/refl(),
 }
 
 let ord6(
@@ -1148,7 +1148,7 @@ let ord6(
     use Ord(F),
     a: {A, B, C, D, E, F},
     b: {A, B, C, D, E, F},
-) -> Ordering =
+) -> Ordering =>
     then(
         Ord/ord(a.0, b.0),
         (()) =>
@@ -1175,11 +1175,11 @@ satisfy (
     use Ord(D),
     use Ord(E),
     use Ord(F),
-) => Ord({A, B, C, D, E, F}) {
+) -> Ord({A, B, C, D, E, F}) {
     ord = ord6,
-    lt(a, b) = Ordering/is_lt(ord6(a, b)),
-    le(a, b) = Ordering/is_le(ord6(a, b)),
-    flips(a, b) =
+    lt(a, b) => Ordering/is_lt(ord6(a, b)),
+    le(a, b) => Ordering/is_le(ord6(a, b)),
+    flips(a, b) =>
         Ordering/then/flips(
             Ord/flips(a.0, b.0),
             (_) =>
@@ -1195,7 +1195,7 @@ satisfy (
                                         Ordering/then/flips(
                                             Ord/flips(a.4, b.4),
                                             (_) => Ord/flips(a.5, b.5)))))),
-    trans(a, b, c, p, q) =
+    trans(a, b, c, p, q) =>
         Ordering/chains/le(
             ord6(a, b),
             ord6(b, c),
@@ -1217,7 +1217,7 @@ satisfy (
                                                 (_, _) => Ord/chains(a.5, b.5, c.5)))))),
             p,
             q),
-    eq(a, b, h) =
+    eq(a, b, h) =>
         let h1 =
             Ordering/then/second(
                 Ord/ord(a.0, b.0),
@@ -1306,8 +1306,8 @@ satisfy (
                     h3)),
             Ord/eq(a.4, b.4, Ordering/then/first(Ord/ord(a.4, b.4), Ord/ord(a.5, b.5), h4)),
             Ord/eq(a.5, b.5, h5)),
-    is_lt(_, _) = Eq/refl(),
-    is_le(_, _) = Eq/refl(),
+    is_lt(_, _) => Eq/refl(),
+    is_le(_, _) => Eq/refl(),
 }
 
 let ord7(
@@ -1327,7 +1327,7 @@ let ord7(
     use Ord(G),
     a: {A, B, C, D, E, F, G},
     b: {A, B, C, D, E, F, G},
-) -> Ordering =
+) -> Ordering =>
     then(
         Ord/ord(a.0, b.0),
         (()) =>
@@ -1360,11 +1360,11 @@ satisfy (
     use Ord(E),
     use Ord(F),
     use Ord(G),
-) => Ord({A, B, C, D, E, F, G}) {
+) -> Ord({A, B, C, D, E, F, G}) {
     ord = ord7,
-    lt(a, b) = Ordering/is_lt(ord7(a, b)),
-    le(a, b) = Ordering/is_le(ord7(a, b)),
-    flips(a, b) =
+    lt(a, b) => Ordering/is_lt(ord7(a, b)),
+    le(a, b) => Ordering/is_le(ord7(a, b)),
+    flips(a, b) =>
         Ordering/then/flips(
             Ord/flips(a.0, b.0),
             (_) =>
@@ -1383,7 +1383,7 @@ satisfy (
                                                 Ordering/then/flips(
                                                     Ord/flips(a.5, b.5),
                                                     (_) => Ord/flips(a.6, b.6))))))),
-    trans(a, b, c, p, q) =
+    trans(a, b, c, p, q) =>
         Ordering/chains/le(
             ord7(a, b),
             ord7(b, c),
@@ -1408,7 +1408,7 @@ satisfy (
                                                         (_, _) => Ord/chains(a.6, b.6, c.6))))))),
             p,
             q),
-    eq(a, b, h) =
+    eq(a, b, h) =>
         let h1 =
             Ordering/then/second(
                 Ord/ord(a.0, b.0),
@@ -1527,8 +1527,8 @@ satisfy (
                     h4)),
             Ord/eq(a.5, b.5, Ordering/then/first(Ord/ord(a.5, b.5), Ord/ord(a.6, b.6), h5)),
             Ord/eq(a.6, b.6, h6)),
-    is_lt(_, _) = Eq/refl(),
-    is_le(_, _) = Eq/refl(),
+    is_lt(_, _) => Eq/refl(),
+    is_le(_, _) => Eq/refl(),
 }
 
 let ord8(
@@ -1550,7 +1550,7 @@ let ord8(
     use Ord(H),
     a: {A, B, C, D, E, F, G, H},
     b: {A, B, C, D, E, F, G, H},
-) -> Ordering =
+) -> Ordering =>
     then(
         Ord/ord(a.0, b.0),
         (()) =>
@@ -1590,11 +1590,11 @@ satisfy (
     use Ord(F),
     use Ord(G),
     use Ord(H),
-) => Ord({A, B, C, D, E, F, G, H}) {
+) -> Ord({A, B, C, D, E, F, G, H}) {
     ord = ord8,
-    lt(a, b) = Ordering/is_lt(ord8(a, b)),
-    le(a, b) = Ordering/is_le(ord8(a, b)),
-    flips(a, b) =
+    lt(a, b) => Ordering/is_lt(ord8(a, b)),
+    le(a, b) => Ordering/is_le(ord8(a, b)),
+    flips(a, b) =>
         Ordering/then/flips(
             Ord/flips(a.0, b.0),
             (_) =>
@@ -1616,7 +1616,7 @@ satisfy (
                                                         Ordering/then/flips(
                                                             Ord/flips(a.6, b.6),
                                                             (_) => Ord/flips(a.7, b.7)))))))),
-    trans(a, b, c, p, q) =
+    trans(a, b, c, p, q) =>
         Ordering/chains/le(
             ord8(a, b),
             ord8(b, c),
@@ -1648,7 +1648,7 @@ satisfy (
                                                                         c.7)))))))),
             p,
             q),
-    eq(a, b, h) =
+    eq(a, b, h) =>
         let h1 =
             Ordering/then/second(
                 Ord/ord(a.0, b.0),
@@ -1801,25 +1801,25 @@ satisfy (
                     h5)),
             Ord/eq(a.6, b.6, Ordering/then/first(Ord/ord(a.6, b.6), Ord/ord(a.7, b.7), h6)),
             Ord/eq(a.7, b.7, h7)),
-    is_lt(_, _) = Eq/refl(),
-    is_le(_, _) = Eq/refl(),
+    is_lt(_, _) => Eq/refl(),
+    is_le(_, _) => Eq/refl(),
 }
 
 -- The encoding of a tuple, for each number of fields, as a derived encoding writes a struct's: each field's in order, every one but the last delimited, so a tuple encodes in its order, by the first field and by the rest where it ties.
 satisfy Hash({}) {
-    hash(()) = 0x[],
+    hash(()) => 0x[],
 }
 
-satisfy (@A: Type, use Hash(A)) => Hash({A}) {
-    hash(t) = Hash/hash(t.0),
+satisfy (@A: Type, use Hash(A)) -> Hash({A}) {
+    hash(t) => Hash/hash(t.0),
 }
 
-satisfy (@A: Type, @B: Type, use Hash(A), use Hash(B)) => Hash({A, B}) {
-    hash(t) = 0x[..Hash/delimited(Hash/hash(t.0)), ..Hash/hash(t.1)],
+satisfy (@A: Type, @B: Type, use Hash(A), use Hash(B)) -> Hash({A, B}) {
+    hash(t) => 0x[..Hash/delimited(Hash/hash(t.0)), ..Hash/hash(t.1)],
 }
 
-satisfy (@A: Type, @B: Type, @C: Type, use Hash(A), use Hash(B), use Hash(C)) => Hash({A, B, C}) {
-    hash(t) =
+satisfy (@A: Type, @B: Type, @C: Type, use Hash(A), use Hash(B), use Hash(C)) -> Hash({A, B, C}) {
+    hash(t) =>
         0x[..Hash/delimited(Hash/hash(t.0)), ..Hash/delimited(Hash/hash(t.1)), ..Hash/hash(t.2)],
 }
 
@@ -1832,8 +1832,8 @@ satisfy (
     use Hash(B),
     use Hash(C),
     use Hash(D),
-) => Hash({A, B, C, D}) {
-    hash(t) =
+) -> Hash({A, B, C, D}) {
+    hash(t) =>
         0x[
             ..Hash/delimited(Hash/hash(t.0)),
             ..Hash/delimited(Hash/hash(t.1)),
@@ -1852,8 +1852,8 @@ satisfy (
     use Hash(C),
     use Hash(D),
     use Hash(E),
-) => Hash({A, B, C, D, E}) {
-    hash(t) =
+) -> Hash({A, B, C, D, E}) {
+    hash(t) =>
         0x[
             ..Hash/delimited(Hash/hash(t.0)),
             ..Hash/delimited(Hash/hash(t.1)),
@@ -1875,8 +1875,8 @@ satisfy (
     use Hash(D),
     use Hash(E),
     use Hash(F),
-) => Hash({A, B, C, D, E, F}) {
-    hash(t) =
+) -> Hash({A, B, C, D, E, F}) {
+    hash(t) =>
         0x[
             ..Hash/delimited(Hash/hash(t.0)),
             ..Hash/delimited(Hash/hash(t.1)),
@@ -1901,8 +1901,8 @@ satisfy (
     use Hash(E),
     use Hash(F),
     use Hash(G),
-) => Hash({A, B, C, D, E, F, G}) {
-    hash(t) =
+) -> Hash({A, B, C, D, E, F, G}) {
+    hash(t) =>
         0x[
             ..Hash/delimited(Hash/hash(t.0)),
             ..Hash/delimited(Hash/hash(t.1)),
@@ -1930,8 +1930,8 @@ satisfy (
     use Hash(F),
     use Hash(G),
     use Hash(H),
-) => Hash({A, B, C, D, E, F, G, H}) {
-    hash(t) =
+) -> Hash({A, B, C, D, E, F, G, H}) {
+    hash(t) =>
         0x[
             ..Hash/delimited(Hash/hash(t.0)),
             ..Hash/delimited(Hash/hash(t.1)),
@@ -1945,15 +1945,15 @@ satisfy (
 
 -- A tuple's key, for each number of fields. Its order nests to the right, so its law is the first field's own key's and then the rest's below it, through `Hash/Key/then` with nothing compared before it, the rest's proof under the first field's step, and `Hash/Key/last` at the last field.
 satisfy Hash/Key({}) {
-    mono((), ()) = Eq/refl(),
+    mono((), ()) => Eq/refl(),
 }
 
-satisfy (@A: Type, use Hash/Key(A)) => Hash/Key({A}) {
-    mono(a, b) = Hash/Key/mono(a.0, b.0),
+satisfy (@A: Type, use Hash/Key(A)) -> Hash/Key({A}) {
+    mono(a, b) => Hash/Key/mono(a.0, b.0),
 }
 
-satisfy (@A: Type, @B: Type, use Hash/Key(A), use Hash/Key(B)) => Hash/Key({A, B}) {
-    mono(a, b) =
+satisfy (@A: Type, @B: Type, use Hash/Key(A), use Hash/Key(B)) -> Hash/Key({A, B}) {
+    mono(a, b) =>
         Hash/Key/then(
             Ordering/eq(),
             Ord/ord(a.0, b.0),
@@ -1978,8 +1978,8 @@ satisfy (
     use Hash/Key(A),
     use Hash/Key(B),
     use Hash/Key(C),
-) => Hash/Key({A, B, C}) {
-    mono(a, b) =
+) -> Hash/Key({A, B, C}) {
+    mono(a, b) =>
         Hash/Key/then(
             Ordering/eq(),
             Ord/ord(a.0, b.0),
@@ -2017,8 +2017,8 @@ satisfy (
     use Hash/Key(B),
     use Hash/Key(C),
     use Hash/Key(D),
-) => Hash/Key({A, B, C, D}) {
-    mono(a, b) =
+) -> Hash/Key({A, B, C, D}) {
+    mono(a, b) =>
         Hash/Key/then(
             Ordering/eq(),
             Ord/ord(a.0, b.0),
@@ -2081,8 +2081,8 @@ satisfy (
     use Hash/Key(C),
     use Hash/Key(D),
     use Hash/Key(E),
-) => Hash/Key({A, B, C, D, E}) {
-    mono(a, b) =
+) -> Hash/Key({A, B, C, D, E}) {
+    mono(a, b) =>
         Hash/Key/then(
             Ordering/eq(),
             Ord/ord(a.0, b.0),
@@ -2172,8 +2172,8 @@ satisfy (
     use Hash/Key(D),
     use Hash/Key(E),
     use Hash/Key(F),
-) => Hash/Key({A, B, C, D, E, F}) {
-    mono(a, b) =
+) -> Hash/Key({A, B, C, D, E, F}) {
+    mono(a, b) =>
         Hash/Key/then(
             Ordering/eq(),
             Ord/ord(a.0, b.0),
@@ -2294,8 +2294,8 @@ satisfy (
     use Hash/Key(E),
     use Hash/Key(F),
     use Hash/Key(G),
-) => Hash/Key({A, B, C, D, E, F, G}) {
-    mono(a, b) =
+) -> Hash/Key({A, B, C, D, E, F, G}) {
+    mono(a, b) =>
         Hash/Key/then(
             Ordering/eq(),
             Ord/ord(a.0, b.0),
@@ -2456,8 +2456,8 @@ satisfy (
     use Hash/Key(F),
     use Hash/Key(G),
     use Hash/Key(H),
-) => Hash/Key({A, B, C, D, E, F, G, H}) {
-    mono(a, b) =
+) -> Hash/Key({A, B, C, D, E, F, G, H}) {
+    mono(a, b) =>
         Hash/Key/then(
             Ordering/eq(),
             Ord/ord(a.0, b.0),

@@ -273,10 +273,10 @@ fn every_conformance_case_normalizes_through_the_library_as_the_database_states(
         use /std/Str/{Form};
         use /std/Io/{Reader, Error};
 
-        let all_become(columns: List(Str), form: Form, expected: Str) -> Bool =
+        let all_become(columns: List(Str), form: Form, expected: Str) -> Bool =>
             Bool/not(List/any(columns, (column) => Bool/not(Str/normalize(column, form) == expected)));
 
-        let holds(columns: List(Str)) -> Bool =
+        let holds(columns: List(Str)) -> Bool =>
             match columns
             | [source, nfc, nfd, nfkc, nfkd] =>
                 all_become([source, nfc, nfd], Form/nfc(), nfc)
@@ -288,7 +288,7 @@ fn every_conformance_case_normalizes_through_the_library_as_the_database_states(
             | _ => false
             end;
 
-        let otherwise(@S: Type, use Io/Read(S), input: Reader(S), found: List(Str)) -> Try(Io, Error, List(Str)) =
+        let otherwise(@S: Type, use Io/Read(S), input: Reader(S), found: List(Str)) -> Try(Io, Error, List(Str)) =>
             match Reader/line_text(input)!
             | none() => Try/pure(found)
             | some(line) =>
@@ -298,7 +298,7 @@ fn every_conformance_case_normalizes_through_the_library_as_the_database_states(
                 end
             end;
 
-        let execute() -> Try(Io, Error, {}) =
+        let execute() -> Try(Io, Error, {}) =>
             let input = Reader/new(Proc/stdin)!;
             let found = otherwise(input, [])!;
             print(Str/flatten(List/map(found, (case) => Str/concat(case, "\n"))));
@@ -375,7 +375,7 @@ fn answering(head: &str, answer: &str) -> String {
 
         ${answer}
 
-        let each(r: Reader(Proc/Input)) -> Try(Io, Io/Error, {}) =
+        let each(r: Reader(Proc/Input)) -> Try(Io, Io/Error, {}) =>
             let line = Reader/line_text(r)!;
             match line
             | none() => Try/pure(())
@@ -389,7 +389,7 @@ fn answering(head: &str, answer: &str) -> String {
                 each(r)
             end;
 
-        let main() -> Try(Io, Io/Error, {}) =
+        let main() -> Try(Io, Io/Error, {}) =>
             let r = Reader/new(Proc/stdin)!;
             each(r);
 
@@ -455,7 +455,7 @@ fn answered_otherwise(
 const PROPERTIES: [&str; 2] = [
     "use /std/{Spell};\nuse /std/Char/{GraphemeBreak, IndicConjunctBreak, EastAsianWidth};",
     r#"
-    let answer(c: Char) -> Str =
+    let answer(c: Char) -> Str =>
         Str/join(" ", [
             Spell/spell(GraphemeBreak/of_char(c)),
             Spell/spell(IndicConjunctBreak/of_char(c)),
@@ -507,10 +507,10 @@ fn the_library_reads_every_property_as_the_database_does_at_every_run_s_edges() 
 const MAPPINGS: [&str; 2] = [
     "use /std/{List};",
     r#"
-    let spelled(s: Str) -> Str =
+    let spelled(s: Str) -> Str =>
         Str/join(",", List/map(Str/to_list(s), (m) => Nat/to_str(Char/to_nat(m))));
 
-    let answer(c: Char) -> Str =
+    let answer(c: Char) -> Str =>
         Str/join(" ", [
             spelled(Char/to_upper(c)),
             spelled(Char/to_lower(c)),

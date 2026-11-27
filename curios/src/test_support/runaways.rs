@@ -57,100 +57,100 @@ fn pairs(count: u32, turned: bool) -> String {
         false => (first, second),
         true => (second, first),
     };
-    format!("let claim({binders}) -> Eq()({left}, {right})")
+    format!("let claim({binders}) -> Eq()({left}, {right}) =>")
 }
 
 const POWER: &str =
-    "let pw(n: Nat, c: Nat, y: Nat) -> Nat = match n | 0 => c | k + 1 => pw(k, c * y, y) end;";
+    "let pw(n: Nat, c: Nat, y: Nat) -> Nat => match n | 0 => c | k + 1 => pw(k, c * y, y) end;";
 
-/// A runaway as a whole program: its definitions, its one claim closed by `Eq/refl()`, and an entrypoint that reads none of them.
+/// A runaway as a whole program: its definitions, its one claim closed by `Eq/refl()`, and an entrypoint that reads none of them. A claim is written with its separator, `=` after a value's type and `=>` after a function's result.
 pub fn runaway(shape: Runaway) -> String {
     // What reads the claim after it, where a row measures what the certifier made of it: the certifier files what a judgment cost it where it begins the next.
     let mut reader = String::new();
     let (imports, definitions, claim) = match shape {
         Runaway::Spin => (
             "Nat, Eq, Io",
-            "let spin(n: Nat) -> Nat = match n | 0 => 0 | k + 1 => spin(k) end;".to_string(),
-            "let claim: Eq()(spin(100000000), 0)".to_string(),
+            "let spin(n: Nat) -> Nat => match n | 0 => 0 | k + 1 => spin(k) end;".to_string(),
+            "let claim: Eq()(spin(100000000), 0) =".to_string(),
         ),
         Runaway::Sums => (
             "Nat, Eq, Io",
-            "let f(c: Nat, n: Nat) -> Nat = match n | 0 => 0 | k + 1 => f(c + k, k) end;"
+            "let f(c: Nat, n: Nat) -> Nat => match n | 0 => 0 | k + 1 => f(c + k, k) end;"
                 .to_string(),
-            "let claim(x: Nat, y: Nat) -> Eq()(f(x, y), f(2, y))".to_string(),
+            "let claim(x: Nat, y: Nat) -> Eq()(f(x, y), f(2, y)) =>".to_string(),
         ),
         Runaway::SumsApart => (
             "Nat, Eq, Io",
-            "let f(c: Nat, a: Nat, n: Nat) -> Nat = match n | 0 => 0 | k + 1 => f(c, a + k, k) end;"
+            "let f(c: Nat, a: Nat, n: Nat) -> Nat => match n | 0 => 0 | k + 1 => f(c, a + k, k) end;"
                 .to_string(),
-            "let claim(x: Nat, y: Nat) -> Eq()(f(x, 0, y), f(2, 0, y))".to_string(),
+            "let claim(x: Nat, y: Nat) -> Eq()(f(x, 0, y), f(2, 0, y)) =>".to_string(),
         ),
         Runaway::SumsOfCalls => (
             "Nat, Eq, Io",
-            "let g(h: (Nat) -> Nat, s: (Nat) -> Nat, c: Nat, d: Nat, n: Nat) -> Nat =\n    match n == 0 | true => 0 | false => g(h, s, c + h(d), s(d), n / 2) end;"
+            "let g(h: (Nat) -> Nat, s: (Nat) -> Nat, c: Nat, d: Nat, n: Nat) -> Nat =>\n    match n == 0 | true => 0 | false => g(h, s, c + h(d), s(d), n / 2) end;"
                 .to_string(),
-            "let claim(h: (Nat) -> Nat, s: (Nat) -> Nat, x: Nat, d: Nat, y: Nat)\n    -> Eq()(g(h, s, x, d, y), g(h, s, 2, d, y))"
+            "let claim(h: (Nat) -> Nat, s: (Nat) -> Nat, x: Nat, d: Nat, y: Nat)\n    -> Eq()(g(h, s, x, d, y), g(h, s, 2, d, y)) =>"
                 .to_string(),
         ),
         Runaway::Halvings => (
             "Nat, Eq, Io",
-            "let g(c: Nat, n: Nat) -> Nat = match n == 0 | true => 0 | false => g(c, n / 2) end;"
+            "let g(c: Nat, n: Nat) -> Nat => match n == 0 | true => 0 | false => g(c, n / 2) end;"
                 .to_string(),
-            "let claim(x: Nat, y: Nat) -> Eq()(g(x, y), g(2, y))".to_string(),
+            "let claim(x: Nat, y: Nat) -> Eq()(g(x, y), g(2, y)) =>".to_string(),
         ),
         Runaway::Rounds => {
-            reader.push_str("let read(n: Nat) -> Nat = match claim(n) | refl => 0 end;\n\n");
+            reader.push_str("let read(n: Nat) -> Nat => match claim(n) | refl => 0 end;\n\n");
             (
                 "Nat, Eq, Io",
-                "let f(n: Nat) -> Nat = match n | 0 => 0 | k + 1 => f(k) + 2 end;\n\nlet h(n: Nat) -> Nat = match n | 0 => 0 | k + 1 => 2 + h(k) end;"
+                "let f(n: Nat) -> Nat => match n | 0 => 0 | k + 1 => f(k) + 2 end;\n\nlet h(n: Nat) -> Nat => match n | 0 => 0 | k + 1 => 2 + h(k) end;"
                     .to_string(),
-                "let claim(n: Nat) -> Eq()(f(n), h(n))".to_string(),
+                "let claim(n: Nat) -> Eq()(f(n), h(n)) =>".to_string(),
             )
         }
         Runaway::Classes(steps) => (
             "Nat, Eq, Io",
-            "let acc(h: (Nat) -> Nat, n: Nat, c: Nat) -> Nat = match n | 0 => c | k + 1 => acc(h, k, c + h(k)) end;"
+            "let acc(h: (Nat) -> Nat, n: Nat, c: Nat) -> Nat => match n | 0 => c | k + 1 => acc(h, k, c + h(k)) end;"
                 .to_string(),
-            format!("let claim(h: (Nat) -> Nat, x: Nat) -> Eq()(acc(h, {steps}, x), x)"),
+            format!("let claim(h: (Nat) -> Nat, x: Nat) -> Eq()(acc(h, {steps}, x), x) =>"),
         ),
         Runaway::Powers(steps) => (
             "Nat, Eq, Io",
             POWER.to_string(),
-            format!("let claim(a: Nat, b: Nat, y: Nat) -> Eq()(pw({steps}, a + b, y), a)"),
+            format!("let claim(a: Nat, b: Nat, y: Nat) -> Eq()(pw({steps}, a + b, y), a) =>"),
         ),
         Runaway::Images(factors, steps) => (
             "Nat, Eq, Io",
             format!(
-                "{POWER}\n\nlet widen(n: Nat, c: Nat) -> Nat =\n    match n | 0 => 0 | k + 1 => match Nat/to_int(c + k) < +0 | true => 1 | false => widen(k, c) end end;"
+                "{POWER}\n\nlet widen(n: Nat, c: Nat) -> Nat =>\n    match n | 0 => 0 | k + 1 => match Nat/to_int(c + k) < +0 | true => 1 | false => widen(k, c) end end;"
             ),
-            format!("let claim(y: Nat) -> Eq()(widen({steps}, pw({factors}, y, y)), 1)"),
+            format!("let claim(y: Nat) -> Eq()(widen({steps}, pw({factors}, y, y)), 1) =>"),
         ),
         Runaway::Nests(steps) => (
             "Nat, Int, Option, Eq, Io",
-            "let nest(n: Nat, T: Type) -> Type = match n | 0 => T | k + 1 => Option(nest(k, T)) end;"
+            "let nest(n: Nat, T: Type) -> Type => match n | 0 => T | k + 1 => Option(nest(k, T)) end;"
                 .to_string(),
-            format!("let claim: Eq()(nest({steps}, Nat), nest({steps}, Int))"),
+            format!("let claim: Eq()(nest({steps}, Nat), nest({steps}, Int)) ="),
         ),
         Runaway::Stacks(steps) => {
             reader.push_str(
-                "let read(g: (Nat) -> Nat) -> Nat = match claim(g) | refl => 0 end;\n\n",
+                "let read(g: (Nat) -> Nat) -> Nat => match claim(g) | refl => 0 end;\n\n",
             );
             (
                 "Nat, Eq, Io",
-                "let tower(g: (Nat) -> Nat, n: Nat) -> Nat = match n | 0 => 0 | k + 1 => g(tower(g, k)) end;\n\nlet stack(g: (Nat) -> Nat, n: Nat, top: Nat) -> Nat = match n | 0 => top | k + 1 => stack(g, k, g(top)) end;"
+                "let tower(g: (Nat) -> Nat, n: Nat) -> Nat => match n | 0 => 0 | k + 1 => g(tower(g, k)) end;\n\nlet stack(g: (Nat) -> Nat, n: Nat, top: Nat) -> Nat => match n | 0 => top | k + 1 => stack(g, k, g(top)) end;"
                     .to_string(),
-                format!("let claim(g: (Nat) -> Nat) -> Eq()(tower(g, {steps}), stack(g, {steps}, 0))"),
+                format!("let claim(g: (Nat) -> Nat) -> Eq()(tower(g, {steps}), stack(g, {steps}, 0)) =>"),
             )
         }
         Runaway::Walks(steps) => {
             reader.push_str(
-                "let read(g: (Nat) -> Nat, x: Nat) -> Nat = match claim(g, x) | refl => 0 end;\n\n",
+                "let read(g: (Nat) -> Nat, x: Nat) -> Nat => match claim(g, x) | refl => 0 end;\n\n",
             );
             (
                 "Nat, Eq, Io",
-                "let walk(g: (Nat) -> Nat, n: Nat, top: Nat) -> Nat = match n | 0 => g(top) | k + 1 => walk(g, k, top) end;"
+                "let walk(g: (Nat) -> Nat, n: Nat, top: Nat) -> Nat => match n | 0 => g(top) | k + 1 => walk(g, k, top) end;"
                     .to_string(),
-                format!("let claim(g: (Nat) -> Nat, x: Nat) -> Eq()(walk(g, {steps}, x), g(x))"),
+                format!("let claim(g: (Nat) -> Nat, x: Nat) -> Eq()(walk(g, {steps}, x), g(x)) =>"),
             )
         }
         Runaway::Absorption(atoms) => {
@@ -164,7 +164,7 @@ pub fn runaway(shape: Runaway) -> String {
                 "Bool, Eq, Io",
                 String::new(),
                 format!(
-                    "let claim(b: Bool, {binders}) -> Eq()(b || (b && ({})), b)",
+                    "let claim(b: Bool, {binders}) -> Eq()(b || (b && ({})), b) =>",
                     names.join(" && ")
                 ),
             )
@@ -174,7 +174,7 @@ pub fn runaway(shape: Runaway) -> String {
     };
 
     fill!(
-        "use /std/{${imports}};\n\n${definitions}\n\n${claim} = Eq/refl();\n\n${reader}Io/pure(())\n",
+        "use /std/{${imports}};\n\n${definitions}\n\n${claim} Eq/refl();\n\n${reader}Io/pure(())\n",
         imports,
         definitions,
         claim,

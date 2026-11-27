@@ -10,7 +10,7 @@ fn conjunctions(rules: usize) -> String {
     let mut source = String::from(
         "use /std/{Nat, Bool, Eq};\n\n\
          let Pred: Type = (x: Nat) -> Bool;\n\
-         let both(p: Pred, q: Pred) -> Pred = (x) => p(x) && q(x);\n\
+         let both(p: Pred, q: Pred) -> Pred => (x) => p(x) && q(x);\n\
          let base: Pred = (x) => x % 2 == 0;\n\n",
     );
     for rule in 0..rules {
@@ -22,7 +22,7 @@ fn conjunctions(rules: usize) -> String {
     }
     let _ = writeln!(
         source,
-        "\nlet probe(n: Nat) -> Eq()(r{}(n), true) = Eq/refl();\n",
+        "\nlet probe(n: Nat) -> Eq()(r{}(n), true) => Eq/refl();\n",
         rules - 1
     );
     source.push_str(TAIL);
@@ -32,7 +32,7 @@ fn conjunctions(rules: usize) -> String {
 /// [`numerics`]' web against a literal through the comparison fold rather than through `Eq()`: `top(n) < 5` reduces on both sides of a conversion, as a guard's proposition does, and a comparison reads a side against a literal as it stands, so the web is never distributed.
 fn numerics_compared(rules: usize) -> String {
     let mut source = numeric_web(rules, "use /std/{Nat};\nuse /std/Bool/{Holds};\n\n");
-    source.push_str("let probe(n: Nat, h: Holds(top(n) < 5)) -> Holds(top(n) + 0 < 5) = h;\n\n");
+    source.push_str("let probe(n: Nat, h: Holds(top(n) < 5)) -> Holds(top(n) + 0 < 5) => h;\n\n");
     source.push_str(TAIL);
     source
 }

@@ -9,14 +9,14 @@ fn a_variable_forced_twice_is_one_equation_between_its_forcings() {
         r#"
         use /std/{Nat, Eq, Option};
 
-        let injective(@x: Nat, @y: Nat, e: Eq()(Option/some(x), Option/some(y))) -> Eq()(x, y) =
+        let injective(@x: Nat, @y: Nat, e: Eq()(Option/some(x), Option/some(y))) -> Eq()(x, y) =>
             match e | refl() => Eq/refl() end;
 
         /std/print("ok")
         "#,
         b"ok",
     )
-    .refused(&[("-> Eq()(x, y) =", "-> Eq()(x, y + 1) =")])
+    .refused(&[("-> Eq()(x, y) =>", "-> Eq()(x, y + 1) =>")])
     .by_elaborator_in("/injective", |error| {
         matches!(error, Error::TypeMismatch { .. })
     });
@@ -33,7 +33,7 @@ fn an_outer_variable_forced_twice_refines_the_binders_its_forcings_name() {
         | mk(z: Nat, w: Nat): (z + 1, w + 1)
         end
 
-        let same(@n: Nat, t: Two(n, n)) -> Nat =
+        let same(@n: Nat, t: Two(n, n)) -> Nat =>
             match t
             | mk(z, w) =>
                 let _: Eq()(z, w) = Eq/refl();
@@ -63,7 +63,7 @@ fn a_cons_index_is_taken_apart_at_its_known_element() {
             @l: List(T),
             m: Member()(x, [h, ..l]),
             otherwise: Eq()(x, h),
-        ) -> Eq()(x, h) =
+        ) -> Eq()(x, h) =>
             match m
             | here() => Eq/refl()
             | there(_) => otherwise
@@ -86,7 +86,7 @@ fn a_word_with_no_known_element_at_its_head_is_not_taken_apart() {
         r#"
         use /std/{Nat, Eq, List};
 
-        let tails(@x: Nat, @y: Nat, @a: List(Nat), @b: List(Nat), e: Eq()([x, ..a], [y, ..b])) -> Eq()(a, b) =
+        let tails(@x: Nat, @y: Nat, @a: List(Nat), @b: List(Nat), e: Eq()([x, ..a], [y, ..b])) -> Eq()(a, b) =>
             match e | refl() => Eq/refl() end;
 
         /std/print("ok")
@@ -111,7 +111,7 @@ fn an_undecided_component_leaves_its_siblings_solved() {
         | mk(z: Nat): ((z, f(z)))
         end
 
-        let second(@f: (Nat) -> Nat, @a: Nat, @n: Nat, p: Paired(f)((n, f(a)))) -> Nat =
+        let second(@f: (Nat) -> Nat, @a: Nat, @n: Nat, p: Paired(f)((n, f(a)))) -> Nat =>
             match p
             | mk(z) =>
                 let _: Eq()(z, n) = Eq/refl();
@@ -139,7 +139,7 @@ fn a_binder_forced_to_a_projection_is_solved_to_it() {
         | mk(z: Nat): (z)
         end
 
-        let first(p: {Nat, Nat}, s: Single(p.0)) -> Nat =
+        let first(p: {Nat, Nat}, s: Single(p.0)) -> Nat =>
             match s
             | mk(z) =>
                 let _: Eq()(z, p.0) = Eq/refl();
@@ -172,7 +172,7 @@ fn a_solution_does_not_reach_its_variable_through_a_refined_projection() {
         | mk(): (Tree/node(m))
         end
 
-        pub let g(p: {Tree, Tree}, b: (t: Tree) -> Box(p.0)(t)) -> Tree =
+        pub let g(p: {Tree, Tree}, b: (t: Tree) -> Box(p.0)(t)) -> Tree =>
             match p.0
             | leaf() => Tree/leaf()
             | node(t) => match b(t) | mk() => let _: Eq()(t, t) = Eq/refl(); t end
@@ -202,7 +202,7 @@ fn a_solution_does_not_reach_its_variable_through_a_refined_application() {
         | mk(): (Tree/node(m))
         end
 
-        pub let g(f: (Tree) -> Tree, p: Tree, b: (t: Tree) -> Box(f(p))(t)) -> Tree =
+        pub let g(f: (Tree) -> Tree, p: Tree, b: (t: Tree) -> Box(f(p))(t)) -> Tree =>
             match f(p)
             | leaf() => Tree/leaf()
             | node(t) => match b(t) | mk() => let _: Eq()(t, t) = Eq/refl(); t end
@@ -227,7 +227,7 @@ fn a_solution_does_not_reach_its_variable_through_a_refined_variable() {
         | mk(z: List(Nat), e: Eq()(m, [2, ..z])): (z)
         end
 
-        let g(m: List(Nat), b: Box(m)([1, ..m])) -> Nat =
+        let g(m: List(Nat), b: Box(m)([1, ..m])) -> Nat =>
             match b
             | mk(_, e) => match e | refl() => 0 end
             end;
@@ -250,7 +250,7 @@ fn a_natural_met_against_its_own_successor_is_impossible() {
         r#"
         use /std/{Nat, Eq};
 
-        let never(@n: Nat, e: Eq()(n, n + 1)) -> Nat = match e end;
+        let never(@n: Nat, e: Eq()(n, n + 1)) -> Nat => match e end;
 
         /std/print("ok")
         "#,
@@ -269,7 +269,7 @@ fn a_list_met_against_a_longer_list_holding_it_is_impossible() {
         r#"
         use /std/{Nat, Eq, List};
 
-        let never(@l: List(Nat), @m: List(Nat), e: Eq()(l, [1, ..l])) -> Nat = match e end;
+        let never(@l: List(Nat), @m: List(Nat), e: Eq()(l, [1, ..l])) -> Nat => match e end;
 
         /std/print("ok")
         "#,
@@ -293,7 +293,7 @@ fn a_tree_met_against_a_tree_holding_it_is_impossible() {
         | node(Tree, Tree)
         end
 
-        let never(@f: (Tree) -> Tree, @t: Tree, e: Eq()(t, Tree/node(t, t))) -> Nat = match e end;
+        let never(@f: (Tree) -> Tree, @t: Tree, e: Eq()(t, Tree/node(t, t))) -> Nat => match e end;
 
         /std/print("ok")
         "#,
@@ -316,7 +316,7 @@ fn a_proof_met_against_a_constructor_holding_it_is_reachable() {
         | wrap(Wrap)
         end
 
-        let owed(@p: Wrap, e: Eq()(p, Wrap/wrap(p))) -> Nat = match e | refl() => 0 end;
+        let owed(@p: Wrap, e: Eq()(p, Wrap/wrap(p))) -> Nat => match e | refl() => 0 end;
 
         /std/print("ok")
         "#,
@@ -335,7 +335,7 @@ fn a_scrutinee_is_typed_in_its_own_arm_as_its_case_is() {
         r#"
         use /std/{Nat, Eq};
 
-        let kept(g: (Nat) -> Nat, n: Nat, m: Nat, h: Eq()(g(n), g(m) + 1), k: Eq()(g(n), g(m) + 1)) -> Eq()(g(n), g(m) + 1) =
+        let kept(g: (Nat) -> Nat, n: Nat, m: Nat, h: Eq()(g(n), g(m) + 1), k: Eq()(g(n), g(m) + 1)) -> Eq()(g(n), g(m) + 1) =>
             match h | refl() => k end;
 
         /std/print("ok")
@@ -355,7 +355,7 @@ fn a_bound_in_an_arm_follows_from_no_equation_its_scrutinee_was_declared_at() {
         r#"
         use /std/{Nat, Eq, Bool, proved};
 
-        let below(g: (Nat) -> Nat, n: Nat, m: Nat, h: Eq()(g(n), g(m) + 1), k: Eq()(g(n), g(m) + 1)) -> Bool/Holds(g(m) <= g(n)) =
+        let below(g: (Nat) -> Nat, n: Nat, m: Nat, h: Eq()(g(n), g(m) + 1), k: Eq()(g(n), g(m) + 1)) -> Bool/Holds(g(m) <= g(n)) =>
             match h | refl() => proved() end;
 
         /std/print("ok")

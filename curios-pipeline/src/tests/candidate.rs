@@ -128,7 +128,7 @@ fn an_edit_undone_takes_what_it_made_from_the_cabinet() {
 const PROVED: &str = "use /std/{Nat, proved};
 use /std/Bool/{Holds};
 
-pub let below(i: Nat, n: Nat, p: Holds(i < n)) -> Holds(i <= n) = proved();
+pub let below(i: Nat, n: Nat, p: Holds(i < n)) -> Holds(i <= n) => proved();
 ";
 
 /// A declaration a recompile takes from a cabinet keeps what its proofs read: the record the cabinet held carries the binders its proof read, so `p` is credited as a whole compile credits it, with nothing elaborated.

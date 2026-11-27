@@ -51,7 +51,7 @@ end
 
 pub use Error/*;
 
-let rule_message(r: Rule) -> Str =
+let rule_message(r: Rule) -> Str =>
     match r
     | duplicate_key() => "duplicate key"
     | table_defined_twice() => "table defined more than once"
@@ -70,11 +70,11 @@ let rule_message(r: Rule) -> Str =
     end;
 
 --- The reason alone, without where.
-pub let message(e: Error) -> Str =
+pub let message(e: Error) -> Str =>
     match e | syntax(p) => p.message | rule(_, r) => rule_message(r) end;
 
 --- The reason, then where: the byte offset of a syntax refusal, the key path of a broken rule.
-pub let to_str(e: Error) -> Str =
+pub let to_str(e: Error) -> Str =>
     match e
     | syntax(p) => Parse/Error/to_str(p)
     | rule(path, r) => Fmt/render("% at key %")(rule_message(r))(Str/join(".", path))

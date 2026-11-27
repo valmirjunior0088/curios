@@ -17,14 +17,14 @@ fn run_drains_a_real_child_through_the_scheduler() {
     let source = fill!(
         r#"
         use /std/{Str, Bytes, Option, Result, Show, Try, Io, Path, File, Proc};
-        let text(b: Bytes) -> Str = Result/unwrap_or(Str/of_bytes(b), "?");
-        let program() -> Try(Io, Io/Error, {}) =
+        let text(b: Bytes) -> Str => Result/unwrap_or(Str/of_bytes(b), "?");
+        let program() -> Try(Io, Io/Error, {}) =>
             let e = Proc/run(Proc/new("/bin/echo", ["hi"]), 0x[])!;
             let c = Proc/run(Proc/new("/bin/cat", []), Str/to_bytes("fed"))!;
             let first = Str/flatten([text(e.stdout), ":", Show/show(e.exit)]);
             let second = Str/flatten([text(c.stdout), ":", Show/show(c.exit)]);
             File/write_all(Path/of_str("${path}"), Str/to_bytes(Str/flatten([first, "|", second])));
-        let main() -> Io({}) =
+        let main() -> Io({}) =>
             let r = Try/run(program())!;
             match r
             | failure(e) => /std/print(Show/show(e))
@@ -51,10 +51,10 @@ fn a_child_receives_an_argument_that_is_no_text_unchanged() {
     let source = fill!(
         r#"
         use /std/{Show, Try, Io, Path, File, Proc};
-        let program() -> Try(Io, Io/Error, {}) =
+        let program() -> Try(Io, Io/Error, {}) =>
             let e = Proc/run(Proc/of_bytes(Path/of_str("/bin/echo"), [0x[0xFF, 0x61]]), 0x[])!;
             File/write_all(Path/of_str("${path}"), e.stdout);
-        let main() -> Io({}) =
+        let main() -> Io({}) =>
             let r = Try/run(program())!;
             match r
             | failure(e) => /std/print(Show/show(e))
@@ -75,15 +75,15 @@ fn a_child_receives_an_argument_that_is_no_text_unchanged() {
 const PIPED: &str = r#"
     use /std/{Nat, Bytes, Str, Option, Result, Show, Try, Io, Path, File, Proc};
     use /std/time/{Duration};
-    let grown(b: Bytes, n: Nat) -> Bytes = match n | 0 => b | m + 1 => grown(0x[..b, ..b], m) end;
+    let grown(b: Bytes, n: Nat) -> Bytes => match n | 0 => b | m + 1 => grown(0x[..b, ..b], m) end;
     let mebibyte: Bytes = grown(0x[0x61], 20);
-    let started(s: Io/Scope, script: Str, stdin: Proc/Stdio, stdout: Proc/Stdio) -> Try(Io, Io/Error, Proc/Child) =
+    let started(s: Io/Scope, script: Str, stdin: Proc/Stdio, stdout: Proc/Stdio) -> Try(Io, Io/Error, Proc/Child) =>
         Proc/Child/spawn(s, Proc { ..Proc/new("/bin/sh", ["-c", script]), stdin = stdin, stdout = stdout });
-    let input(c: Proc/Child) -> Try(Io, Io/Error, Proc/Output) =
+    let input(c: Proc/Child) -> Try(Io, Io/Error, Proc/Output) =>
         match Proc/Child/stdin(c) | some(i) => Try/pure(i) | none() => Try/raise(Io/Error/not_found()) end;
-    let output(c: Proc/Child) -> Try(Io, Io/Error, Proc/Input) =
+    let output(c: Proc/Child) -> Try(Io, Io/Error, Proc/Input) =>
         match Proc/Child/stdout(c) | some(o) => Try/pure(o) | none() => Try/raise(Io/Error/not_found()) end;
-    let cut(@A: Type, timed: Option(A)) -> Str = match timed | none() => "cut" | some(_) => "whole" end;
+    let cut(@A: Type, timed: Option(A)) -> Str => match timed | none() => "cut" | some(_) => "whole" end;
 "#;
 
 /// What a program over [`PIPED`] whose `program()` reports through `${path}` wrote to its report, run against the real host.
@@ -96,7 +96,7 @@ fn reported(name: &str, program: &str) -> Vec<u8> {
         PIPED,
         fill!(program, path).as_str(),
         r#"
-        let main() -> Io({}) =
+        let main() -> Io({}) =>
             let r = Try/run(program())!;
             match r
             | failure(e) => /std/print(Show/show(e))
@@ -118,13 +118,13 @@ fn a_write_a_timeout_cuts_reaches_its_reader_whole() {
     let written = reported(
         "write-cut",
         r#"
-        let program() -> Try(Io, Io/Error, {}) =
+        let program() -> Try(Io, Io/Error, {}) =>
             Try/scope((s) =>
                 let c = started(s, "sleep 0.5; cat", Proc/Stdio/piped(), Proc/Stdio/piped())!;
                 let into = input(c)!;
                 let back = output(c)!;
                 let echo = Io/Reader/within(back, 2097152)!;
-                let writes() -> Try(Io, Io/Error, Str) =
+                let writes() -> Try(Io, Io/Error, Str) =>
                     let timed = Io/timeout(Duration/of_millis(10), Try/run(Io/write(into, mebibyte)))!;
                     let () = Io/write(into, Str/to_bytes("END"))!;
                     let () = Io/finish(into)!;
@@ -149,7 +149,7 @@ fn a_copy_a_timeout_cuts_loses_nothing() {
     let written = reported(
         "copy-cut",
         r#"
-        let program() -> Try(Io, Io/Error, {}) =
+        let program() -> Try(Io, Io/Error, {}) =>
             Try/scope((s) =>
                 let source = started(s, "head -c 1048576 /dev/zero", Proc/Stdio/null(), Proc/Stdio/piped())!;
                 let sink = started(s, "sleep 0.5; wc -c", Proc/Stdio/piped(), Proc/Stdio/piped())!;
@@ -178,7 +178,7 @@ fn a_drain_that_fails_after_a_cut_write_is_answered_by_the_next_flush() {
     let written = reported(
         "drain-fails",
         r#"
-        let program() -> Try(Io, Io/Error, {}) =
+        let program() -> Try(Io, Io/Error, {}) =>
             Try/scope((s) =>
                 let c = started(s, "sleep 0.3", Proc/Stdio/piped(), Proc/Stdio/null())!;
                 let into = input(c)!;
@@ -199,7 +199,7 @@ fn a_rest_a_timeout_cuts_loses_nothing() {
     let written = reported(
         "rest-cut",
         r#"
-        let program() -> Try(Io, Io/Error, {}) =
+        let program() -> Try(Io, Io/Error, {}) =>
             Try/scope((s) =>
                 let c = started(s, "printf abc; sleep 0.3; printf def", Proc/Stdio/null(), Proc/Stdio/piped())!;
                 let out = output(c)!;
@@ -234,12 +234,12 @@ fn linked(name: &str, body: &str) -> String {
     let source = fill!(
         r#"
         use /std/{Str, List, Show, Try, Io, Path, File, fs};
-        let program() -> Try(Io, Io/Error, {}) =
+        let program() -> Try(Io, Io/Error, {}) =>
             let tree = Path/of_str("${tree}");
             let outside = Path/of_str("${outside}");
             let report = Path/of_str("${report}");
             ${body};
-        let main() -> Io({}) =
+        let main() -> Io({}) =>
             let r = Try/run(program())!;
             match r
             | failure(e) => /std/print(Show/show(e))

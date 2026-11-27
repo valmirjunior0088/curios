@@ -9,7 +9,7 @@ const BUILT_DIRECT: &str = r#"
     use /std/{Nat};
     use /std/Bool/{True};
     struct Box : pub Type { p : True }
-    let build(n : Nat) -> Box = Box { p = True/qed() };
+    let build(n : Nat) -> Box => Box { p = True/qed() };
     let bad : True = build(0).p;
     /std/print("ok")
     "#;
@@ -19,8 +19,8 @@ const BUILT_THROUGH_WITNESS: &str = r#"
     use /std/Bool/{True};
     struct Box : pub Type { p : True }
     concept Make(A : Type) : pub Type { make(A) -> Box, }
-    let build(n : Nat) -> Box = Box { p = True/qed() };
-    satisfy Make(Nat) { make(n) = build(n), }
+    let build(n : Nat) -> Box => Box { p = True/qed() };
+    satisfy Make(Nat) { make(n) => build(n), }
     let bad : True = Make/make(0).p;
     /std/print("ok")
     "#;
@@ -29,8 +29,8 @@ const BUILT_HIGHER_ORDER: &str = r#"
     use /std/{Nat};
     use /std/Bool/{True};
     struct Box : pub Type { p : True }
-    let build(n : Nat) -> Box = Box { p = True/qed() };
-    let apply(f : (Nat) -> Box, n : Nat) -> Box = f(n);
+    let build(n : Nat) -> Box => Box { p = True/qed() };
+    let apply(f : (Nat) -> Box, n : Nat) -> Box => f(n);
     let bad : True = apply(build, 0).p;
     /std/print("ok")
     "#;
@@ -40,7 +40,7 @@ const BUILT_IN_FIELD: &str = r#"
     use /std/Bool/{True};
     struct Box : pub Type { p : True }
     struct Holder : pub Type { run : (Nat) -> Box }
-    let build(n : Nat) -> Box = Box { p = True/qed() };
+    let build(n : Nat) -> Box => Box { p = True/qed() };
     let holder : Holder = Holder { run = build };
     let bad : True = holder.run(0).p;
     /std/print("ok")
@@ -51,7 +51,7 @@ const BUILT_AT_AN_INFERRED_POSITION: &str = r#"
     use /std/{Nat};
     use /std/Bool/{True};
     struct Box : pub Type { p : True }
-    let build(n : Nat) -> Box = Box { p = True/qed() };
+    let build(n : Nat) -> Box => Box { p = True/qed() };
     let conjured : Nat =
         match build(0).p | qed() => 7
         end;
@@ -162,14 +162,14 @@ fn a_type_holding_a_loop_it_writes_is_refused() {
     control(
         r#"
         use /std/{Nat, Vec};
-        let Sized(n : Nat) -> Type =
-            let spin(k : Nat) -> Nat = k;
+        let Sized(n : Nat) -> Type =>
+            let spin(k : Nat) -> Nat => k;
             Vec(Nat, spin(n));
         /std/print("ok")
         "#,
         b"ok",
     )
-    .refused(&[("-> Nat = k;", "-> Nat = spin(k);")])
+    .refused(&[("-> Nat => k;", "-> Nat => spin(k);")])
     .by_elaborator_in("/Sized", |error| {
         matches!(error, curios_elab::Error::PartialInErasedPosition { .. })
     })
@@ -185,7 +185,7 @@ fn saturating_subtraction_is_not_descent() {
         r#"
         use /std/{Nat};
         use /std/Bool/{True};
-        let bogus(n : Nat) -> True = match n | 0 => True/qed() | _ => bogus(n - 1) end;
+        let bogus(n : Nat) -> True => match n | 0 => True/qed() | _ => bogus(n - 1) end;
         let bad : True = bogus(0);
         /std/print("ok")
         "#,
@@ -194,8 +194,8 @@ fn saturating_subtraction_is_not_descent() {
     .refused(&[
         ("{True}", "{False}"),
         (
-            "-> True = match n | 0 => True/qed() | _ => bogus(n - 1) end",
-            "-> False = bogus(n - 1)",
+            "-> True => match n | 0 => True/qed() | _ => bogus(n - 1) end",
+            "-> False => bogus(n - 1)",
         ),
         ("bad : True", "bad : False"),
     ])
@@ -214,7 +214,7 @@ fn permuting_arguments_is_not_descent() {
         r#"
         use /std/{Nat};
         use /std/Bool/{True};
-        let bogus(a : Nat, b : Nat) -> True = match a | 0 => True/qed() | k + 1 => bogus(b, k) end;
+        let bogus(a : Nat, b : Nat) -> True => match a | 0 => True/qed() | k + 1 => bogus(b, k) end;
         let bad : True = bogus(0, 1);
         /std/print("ok")
         "#,
@@ -223,8 +223,8 @@ fn permuting_arguments_is_not_descent() {
     .refused(&[
         ("{True}", "{False}"),
         (
-            "-> True = match a | 0 => True/qed() | k + 1 => bogus(b, k) end",
-            "-> False = bogus(b, a)",
+            "-> True => match a | 0 => True/qed() | k + 1 => bogus(b, k) end",
+            "-> False => bogus(b, a)",
         ),
         ("bad : True", "bad : False"),
     ])
@@ -245,9 +245,9 @@ fn a_field_applied_off_a_structure_is_not_descent() {
 
         induct S: Type | mk(next: () -> S) end
 
-        let l() -> S = S/mk(l);
+        let l() -> S => S/mk(l);
 
-        let f(x: S) -> False = match x | mk(next) => f(next()) end;
+        let f(x: S) -> False => match x | mk(next) => f(next()) end;
 
         let bad = f;
 
@@ -283,16 +283,16 @@ const KNOT: &str = r#"
         | leaf()
         end
 
-        let all(@T: Type, i: Inner(T), s: List(T)) -> True =
+        let all(@T: Type, i: Inner(T), s: List(T)) -> True =>
             match s
             | [] => True/qed()
             | [x, ..rest] => match i.step(x) | qed() => all(i, rest) end
             end;
 
-        let each(@T: Type, o: Outer(T)) -> Inner(List(T)) =
-            Inner { step(s) = all(o.inner, s) };
+        let each(@T: Type, o: Outer(T)) -> Inner(List(T)) =>
+            Inner { step(s) => all(o.inner, s) };
 
-        let w: Outer(Doc) = Outer { inner = Inner { step(_) = True/qed() }, more = each(w) };
+        let w: Outer(Doc) = Outer { inner = Inner { step(_) => True/qed() }, more = each(w) };
 
         print("ok")
         "#;
@@ -330,7 +330,7 @@ fn a_value_that_is_its_own_child_is_not_known_to_terminate() {
         | s(p: () -> N)
         end
 
-        let down(n: N) -> False = match n | s(p) => down(p()) end;
+        let down(n: N) -> False => match n | s(p) => down(p()) end;
 
         let x: N = N/s(() => x);
 
@@ -364,7 +364,7 @@ fn a_recursion_on_a_propositions_case_still_needs_the_arm_it_omits() {
         | cons(v: Wit, inner: Q(v)): (Wit/s(v))
         end
 
-        let drain(v: Wit, q: Q(Wit/s(v))) -> True =
+        let drain(v: Wit, q: Q(Wit/s(v))) -> True =>
             match q | nil() => True/qed()
             | cons(w, inner) => drain(w, inner)
             end;
@@ -377,7 +377,7 @@ fn a_recursion_on_a_propositions_case_still_needs_the_arm_it_omits() {
     )
     .refused(&[
         ("{True, False}", "{False}"),
-        ("-> True =", "-> False ="),
+        ("-> True =>", "-> False =>"),
         ("match q | nil() => True/qed()", "match q"),
         ("bad: True", "bad: False"),
     ])
@@ -400,7 +400,7 @@ const A_RECURSION_AT_AN_INDEX_HOLDING_A_PROOF: &str = r#"
     | step(p: P(${step})): (${step})
     end
 
-    let f(p: P(${step})) -> False =
+    let f(p: P(${step})) -> False =>
         match p
         | step(q) => f(q)
         end;
@@ -535,9 +535,9 @@ fn a_payload_a_cast_reads_off_a_proofs_index_is_no_descent() {
         | mk(v: W): (v)
         end
 
-        let g(i: W, s: S(i)) -> False =
+        let g(i: W, s: S(i)) -> False =>
             h(i)
-        and h(w: W) -> False =
+        and h(w: W) -> False =>
             match w
             | up(u) => g(u, S/mk(u))
             end;
@@ -586,11 +586,11 @@ fn a_call_passing_a_variable_an_arm_solved_is_graded_on_the_variable() {
         | mk(v: W): (v)
         end
 
-        let g(i: W, s: S(i)) -> False =
+        let g(i: W, s: S(i)) -> False =>
             match s
             | mk(v) => h(i)
             end
-        and h(w: W) -> False =
+        and h(w: W) -> False =>
             match w
             | up(u) => g(u, S/mk(u))
             end;
@@ -627,7 +627,7 @@ fn a_type_recursing_through_a_cast_on_the_index_it_reads_does_not_descend() {
         | mk(n: Nat): (n)
         end
 
-        let X(n: Nat, p: S(n)) -> Type =
+        let X(n: Nat, p: S(n)) -> Type =>
             match n
             | 0 => Nat
             | k + 1 => X(k, S/mk(k))
@@ -664,12 +664,12 @@ fn an_accessibility_proof_built_by_self_reference_is_refused() {
         | intro(@x: A, below: (y: A, r: R(y, x)) -> Acc(R)(y)): (x)
         end
 
-        let spin(x: {}, a: Acc((p: {}, q: {}) => True)(x)) -> False =
+        let spin(x: {}, a: Acc((p: {}, q: {}) => True)(x)) -> False =>
             match a
             | intro(@w, below) => spin(w, below(w, True/qed()))
             end;
 
-        let forever(x: {}) -> Acc((p: {}, q: {}) => False)(x) =
+        let forever(x: {}) -> Acc((p: {}, q: {}) => False)(x) =>
             Acc/intro((y, r) => match r end);
 
         let _bad = spin;
@@ -680,8 +680,8 @@ fn an_accessibility_proof_built_by_self_reference_is_refused() {
     )
     .refused(&[
         (
-            "Acc((p: {}, q: {}) => False)(x) =\n            Acc/intro((y, r) => match r end);",
-            "Acc((p: {}, q: {}) => True)(x) =\n            Acc/intro((y, r) => forever(y));",
+            "Acc((p: {}, q: {}) => False)(x) =>\n            Acc/intro((y, r) => match r end);",
+            "Acc((p: {}, q: {}) => True)(x) =>\n            Acc/intro((y, r) => forever(y));",
         ),
         (
             "let _bad = spin;",
@@ -712,8 +712,8 @@ fn a_partial_inhabitant_of_an_impossible_index_proves_nothing() {
         induct Pin : (n : Nat) -> pub Type
         | only() : (0)
         end
-        let spin(n : Nat) -> Pin(n) = spin(n);
-        let bad(n : Nat, pin : Pin(n + 1)) -> False =
+        let spin(n : Nat) -> Pin(n) => spin(n);
+        let bad(n : Nat, pin : Pin(n + 1)) -> False =>
             match pin
             end;
         /std/print("ok")
@@ -747,9 +747,9 @@ fn a_call_at_a_variable_an_index_inversion_solved_starts_no_descending_thread() 
         | mk(v: W): (v)
         end
 
-        let g(i: W, s: S(i)) -> False =
+        let g(i: W, s: S(i)) -> False =>
             h(i)
-        and h(w: W) -> False =
+        and h(w: W) -> False =>
             match w
             | up(u) => g(u, S/mk(u))
             end;
@@ -793,7 +793,7 @@ fn splitting_an_applied_lambdas_binder_grades_the_successor_as_no_descent() {
         r#"
         use /std/{Nat};
         use /std/Bool/{True};
-        pub let below(n: Nat) -> True =
+        pub let below(n: Nat) -> True =>
             ((x: Nat) => match x | 0 => True/qed() | k + 1 => below(k) end)(n);
         /std/print("held")
         "#,
@@ -823,12 +823,12 @@ const A_LAW_THROUGH_ITS_OWN_WITNESS: &str = r#"
     | node(Tree, Tree)
     end
     satisfy Same(Tree) {
-        same(a, b) =
+        same(a, b) =>
             match a
             | leaf() => match b | leaf() => true | _ => false end
             | node(l, r) => match b | node(m, s) => Same/same(l, m) && Same/same(r, s) | _ => false end
             end,
-        sound(a, b, h) =
+        sound(a, b, h) =>
             match a
             | leaf() => match b | leaf() => Eq/refl() end
             | node(l, r) =>
@@ -851,13 +851,13 @@ const A_LAW_THROUGH_A_LISTS_WITNESS: &str = r#"
         same(A, A) -> Bool,
         sound(a : A, b : A, h : Bool/Holds(same(a, b))) -> Eq()(a, b),
     }
-    let list_same(@A : Type, use Same(A), a : List(A), b : List(A)) -> Bool =
+    let list_same(@A : Type, use Same(A), a : List(A), b : List(A)) -> Bool =>
         match (a, b)
         | ([], []) => true
         | ([x, ..xs], [y, ..ys]) => Same/same(x, y) && list_same(xs, ys)
         | _ => false
         end;
-    let list_sound(@A : Type, use Same(A), a : List(A), b : List(A), h : Bool/Holds(list_same(a, b))) -> Eq()(a, b) =
+    let list_sound(@A : Type, use Same(A), a : List(A), b : List(A), h : Bool/Holds(list_same(a, b))) -> Eq()(a, b) =>
         match a
         | [] => match b | [] => Eq/refl() end
         | [x, ..xs] =>
@@ -868,7 +868,7 @@ const A_LAW_THROUGH_A_LISTS_WITNESS: &str = r#"
                 match head | refl() => match tail | refl() => Eq/refl() end end
             end
         end;
-    satisfy (@A : Type, use Same(A)) => Same(List(A)) {
+    satisfy (@A : Type, use Same(A)) -> Same(List(A)) {
         same = list_same,
         sound = list_sound,
     }
@@ -876,8 +876,8 @@ const A_LAW_THROUGH_A_LISTS_WITNESS: &str = r#"
     | node(List(Rose))
     end
     satisfy Same(Rose) {
-        same(a, b) = match a | node(xs) => match b | node(ys) => Same/same(xs, ys) end end,
-        sound(a, b, h) =
+        same(a, b) => match a | node(xs) => match b | node(ys) => Same/same(xs, ys) end end,
+        sound(a, b, h) =>
             match a
             | node(xs) =>
                 match b
@@ -922,8 +922,8 @@ fn a_law_beside_a_method_recursing_through_its_own_witness_descends() {
             "/witness~/Same(/Rose)",
             vec![
                 (
-                    "same(a, b) = match a | node(xs) => match b | node(ys) => Same/same(xs, ys) end end,",
-                    "same(a, b) = Same/same(a, b),",
+                    "same(a, b) => match a | node(xs) => match b | node(ys) => Same/same(xs, ys) end end,",
+                    "same(a, b) => Same/same(a, b),",
                 ),
                 ("let inner : Eq()(xs, ys) = Same/sound(xs, ys, h);\n", ""),
                 (

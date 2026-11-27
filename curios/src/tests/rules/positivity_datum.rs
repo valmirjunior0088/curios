@@ -57,7 +57,7 @@ fn a_proposition_a_stuck_match_computes_over_a_list_is_read_past_its_element() {
         r#"
         use /std/{Nat, List, Option, Bool};
 
-        let Good(@V: Type, r: Option(List(V))) -> Prop =
+        let Good(@V: Type, r: Option(List(V))) -> Prop =>
             match r | none() => Bool/True | some(l) => Bool/Holds(List/length(l) < 9) end;
 
         struct M(V: Type): pub Type { root: Option(List(V)), @ok: Good(root) }
@@ -103,7 +103,7 @@ fn a_parameter_answering_a_type_is_read_past_in_a_datum() {
         r#"
         use /std/{Nat, Eq};
 
-        pub let Measure(@G: (Nat) -> Type, k: Nat) -> Nat =
+        pub let Measure(@G: (Nat) -> Type, k: Nat) -> Nat =>
             match k | 0 => 0 | m + 1 => Measure(@G, m) end;
 
         pub struct Fam(F: (Nat) -> Type, n: Nat): pub Type { k: Nat, @ok: Eq()(Measure(@F, k), n) }

@@ -9,7 +9,7 @@ use /std/Bool/{True, Holds};
 --- Bytewise, a proper prefix first.
 ---
 --- A walk over both runs' structure, so a type may name it and its laws are recursions of the same shape.
-pub let ord(a: Bytes, b: Bytes) -> Ordering =
+pub let ord(a: Bytes, b: Bytes) -> Ordering =>
     match a
     | 0x[] => match b | 0x[] => Ordering/eq() | _ => Ordering/lt() end
     | 0x[h, ..t] =>
@@ -25,12 +25,12 @@ pub let ord(a: Bytes, b: Bytes) -> Ordering =
     end;
 
 --- `ord` answers through a shared prefix as it does past it.
-pub let past(p: Bytes, a: Bytes, b: Bytes) -> Eq()(ord(0x[..p, ..a], 0x[..p, ..b]), ord(a, b)) =
+pub let past(p: Bytes, a: Bytes, b: Bytes) -> Eq()(ord(0x[..p, ..a], 0x[..p, ..b]), ord(a, b)) =>
     match p | 0x[] => Eq/refl() | 0x[_, ..t] => past(t, a, b) end;
 
 -- A recursion over both runs: `ord` at two conses is a step, its heads' answer and then its tails', so both are `eq`, the heads one byte by `Ord/eq` on their values.
 --- `ord(a, b)` is `eq` only where `a` is `b`: the order agrees with equality.
-let eq(a: Bytes, b: Bytes, h: Eq()(ord(a, b), Ordering/eq())) -> Eq()(a, b) =
+let eq(a: Bytes, b: Bytes, h: Eq()(ord(a, b), Ordering/eq())) -> Eq()(a, b) =>
     match a
     | 0x[] =>
         match b
@@ -104,7 +104,7 @@ let flips: Ord/Flips(ord) =
         end;
 
 -- Whether two conses whose heads answer `o` are in order: what `ord` as a relation reduces to once its heads are compared.
-let after(o: Ordering, t: Bytes, r: Bytes) -> Bool =
+let after(o: Ordering, t: Bytes, r: Bytes) -> Bool =>
     Ordering/is_le(
         match o
         | eq() => ord(t, r)
@@ -180,11 +180,11 @@ let trans: Ord/Trans(Ord/le_by(ord)) =
 
 satisfy Ord(Bytes) {
     ord = ord,
-    lt(a, b) = Ordering/is_lt(ord(a, b)),
-    le(a, b) = Ordering/is_le(ord(a, b)),
+    lt(a, b) => Ordering/is_lt(ord(a, b)),
+    le(a, b) => Ordering/is_le(ord(a, b)),
     flips = flips,
     trans = trans,
     eq = eq,
-    is_lt(_, _) = Eq/refl(),
-    is_le(_, _) = Eq/refl(),
+    is_lt(_, _) => Eq/refl(),
+    is_le(_, _) => Eq/refl(),
 }

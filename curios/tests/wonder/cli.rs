@@ -35,7 +35,7 @@ concept Named(T: Type): pub Type {
 }
 
 --- Never returns.
-let spin(n: Nat) -> Nat =
+let spin(n: Nat) -> Nat =>
     spin(n);
 
 --- One is one.
@@ -970,7 +970,7 @@ fn a_library_checked_with_its_tests_is_narrated_as_that() {
 fn a_footprint_is_the_block_then_a_row_of_four_fields_a_function() {
     let root = temporary("footprint");
     fs::create_dir_all(&root).unwrap();
-    let program = "let helper(x : /std/Nat) -> /std/Nat = x + 1;\n/std/print(\"hello\\n\")\n";
+    let program = "let helper(x : /std/Nat) -> /std/Nat => x + 1;\n/std/print(\"hello\\n\")\n";
 
     let answered = curios(
         &root,
@@ -999,7 +999,7 @@ fn a_footprint_is_the_block_then_a_row_of_four_fields_a_function() {
 fn a_stage_beside_a_name_is_the_block_then_the_declarations_part() {
     let root = temporary("named-stage");
     fs::create_dir_all(&root).unwrap();
-    let program = "let helper(x : /std/Nat) -> /std/Nat = x + 1;\n\nlet other(x : /std/Nat) -> /std/Nat = x;\n\n/std/print(\"hello\\n\")\n";
+    let program = "let helper(x : /std/Nat) -> /std/Nat => x + 1;\n\nlet other(x : /std/Nat) -> /std/Nat => x;\n\n/std/print(\"hello\\n\")\n";
 
     let answered = curios(
         &root,
@@ -1020,7 +1020,7 @@ fn a_stage_beside_a_name_is_the_block_then_the_declarations_part() {
         block, "/helper\n│  total\n└─ [declaration] <stdin>:1:5",
         "{stdout}"
     );
-    assert_eq!(part, "let helper(x: /std/Nat) -> /std/Nat =\n    x + 1;\n");
+    assert_eq!(part, "let helper(x: /std/Nat) -> /std/Nat =>\n    x + 1;\n");
 }
 
 /// A place's answer at a bare name a `use` line brought into scope states that line as it is written, an entry closed by where the line writes what brought the name, each name by its own line; an answer at a name the file declares, or at the line itself, states none.
@@ -1030,7 +1030,7 @@ fn a_bare_name_is_answered_with_the_line_that_brought_it() {
     write(
         &root,
         "brought.crs",
-        "use /std/{Nat};\nuse /std/{Bool, print};\n\npub let same(n: Nat) -> Bool =\n    n == n;\n\npub let twice(n: Nat) -> Bool =\n    same(n);\n\nprint(\"\")\n",
+        "use /std/{Nat};\nuse /std/{Bool, print};\n\npub let same(n: Nat) -> Bool =>\n    n == n;\n\npub let twice(n: Nat) -> Bool =>\n    same(n);\n\nprint(\"\")\n",
     );
     let at = |place: &str| stdout(&curios(&root, &["wonder", "--at", place], ""));
 

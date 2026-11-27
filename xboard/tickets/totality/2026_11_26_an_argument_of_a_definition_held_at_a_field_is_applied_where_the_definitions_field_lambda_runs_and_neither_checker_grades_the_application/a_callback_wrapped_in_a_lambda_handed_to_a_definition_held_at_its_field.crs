@@ -10,13 +10,13 @@ struct Outer: Type {
     a: Inner,
 }
 
-let hold(g: (Nat) -> False) -> Inner =
-    Inner { step(k) = g(k) };
+let hold(g: (Nat) -> False) -> Inner =>
+    Inner { step(k) => g(k) };
 
-let m(n: Nat, f: (Nat) -> False) -> Outer =
+let m(n: Nat, f: (Nat) -> False) -> Outer =>
     Outer { a = hold((j) => f(j)) };
 
-let spin(k: Nat) -> False =
+let spin(k: Nat) -> False =>
     m(k, (x) => spin(x)).a.step(k);
 
 spin(0)

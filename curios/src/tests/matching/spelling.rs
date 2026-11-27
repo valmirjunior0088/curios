@@ -3,7 +3,7 @@
 use {crate::test_support::*, curios_common::fill};
 
 /// A recursive predicate over a list of any element type: every written call takes a universe level of its own, so a guard and a statement over it are two calls apart in their instance, which their arguments decide.
-const EVERY: &str = "let every(@T: Type, l: List(T), pred: (T) -> Bool) -> Bool =
+const EVERY: &str = "let every(@T: Type, l: List(T), pred: (T) -> Bool) -> Bool =>
     match l
     | [] => true
     | [h, ..t] => match pred(h) | true => every(t, pred) | false => false end
@@ -20,13 +20,13 @@ pub struct Point: Type { x: Nat }
 
 ${every}
 
-let small(p: Point) -> Bool = p.x < 10;
+let small(p: Point) -> Bool => p.x < 10;
 
-let inferred(l: List(Point), @ok: Holds(every(l, small))) -> Nat = 0;
-let written(l: List(Point), @ok: Holds(every(@Point, l, small))) -> Nat = 0;
+let inferred(l: List(Point), @ok: Holds(every(l, small))) -> Nat => 0;
+let written(l: List(Point), @ok: Holds(every(@Point, l, small))) -> Nat => 0;
 
-pub let f(l: List(Point)) -> Nat = match every(@Point, l, small) | true => inferred(l, @True/qed()) | false => 1 end;
-pub let g(l: List(Point)) -> Nat = match every(l, small) | true => written(l, @True/qed()) | false => 1 end;
+pub let f(l: List(Point)) -> Nat => match every(@Point, l, small) | true => inferred(l, @True/qed()) | false => 1 end;
+pub let g(l: List(Point)) -> Nat => match every(l, small) | true => written(l, @True/qed()) | false => 1 end;
 
 /std/print("held")"#,
         every = EVERY,
@@ -44,14 +44,14 @@ use /std/Bool/{Holds};
 
 ${every}
 
-let small(n: Nat) -> Bool = n < 10;
+let small(n: Nat) -> Bool => n < 10;
 
 pub struct G: Type {
     chars: List(Nat),
     @ok: Holds(every(chars, small)),
 }
 
-pub let of(chars: List(Nat)) -> Option(G) =
+pub let of(chars: List(Nat)) -> Option(G) =>
     match every(@Nat, chars, small)
     | false => Option/none()
     | true => Option/some(G { chars = chars })
@@ -75,11 +75,11 @@ pub struct Point: Type { x: Nat }
 
 ${every}
 
-let small(p: Point) -> Bool = p.x < 10;
+let small(p: Point) -> Bool => p.x < 10;
 
-let inferred(l: List(Point), @ok: Holds(every(l, small))) -> Nat = 0;
+let inferred(l: List(Point), @ok: Holds(every(l, small))) -> Nat => 0;
 
-pub let f(l: List(Point), m: List(Point)) -> Nat = match every(@Point, m, small) | true => inferred(l, @True/qed()) | false => 1 end;
+pub let f(l: List(Point), m: List(Point)) -> Nat => match every(@Point, m, small) | true => inferred(l, @True/qed()) | false => 1 end;
 
 /std/print("held")"#,
         every = EVERY,
@@ -116,11 +116,11 @@ end
 
 ${every}
 
-let always(@T: Type, t: T) -> Bool = true;
+let always(@T: Type, t: T) -> Bool => true;
 
-let inferred(l: List(${element}), @ok: Holds(every(l, (x) => always(x)))) -> Nat = 0;
+let inferred(l: List(${element}), @ok: Holds(every(l, (x) => always(x)))) -> Nat => 0;
 
-pub let f(l: List(${element})) -> Nat = match every(@${element}, l, (x) => always(x)) | true => inferred(l, @True/qed()) | false => 1 end;
+pub let f(l: List(${element})) -> Nat => match every(@${element}, l, (x) => always(x)) | true => inferred(l, @True/qed()) | false => 1 end;
 
 /std/print("held")"#,
             every = EVERY,
@@ -150,17 +150,17 @@ use /std/Bool/{True, Holds};
 
 pub struct Box(A: Type): Type { a: A }
 
-let every(@T: Type, b: Box(T), l: List(Nat)) -> Bool =
+let every(@T: Type, b: Box(T), l: List(Nat)) -> Bool =>
     match l
     | [] => true
     | [_, ..t] => every(b, t)
     end;
 
-let lift(@F: (Type) -> Type, x: F(Nat)) -> Box(F(Nat)) = Box { a = x };
+let lift(@F: (Type) -> Type, x: F(Nat)) -> Box(F(Nat)) => Box { a = x };
 
-let checked(o: Option(Nat), l: List(Nat), @ok: Holds(${statement})) -> Nat = 0;
+let checked(o: Option(Nat), l: List(Nat), @ok: Holds(${statement})) -> Nat => 0;
 
-pub let f(o: Option(Nat), l: List(Nat)) -> Nat =
+pub let f(o: Option(Nat), l: List(Nat)) -> Nat =>
     match ${guard} | true => checked(o, l, @True/qed()) | false => 1 end;
 
 /std/print("held")"#,

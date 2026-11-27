@@ -3,32 +3,32 @@ use /std/tcp/{resolve, Socket, release};
 use /std/internal/{Handle, Status};
 
 satisfy Io/Read(Socket) {
-    read(c, n, @positive) = Io/read(@Handle, c.0, n, @positive),
+    read(c, n, @positive) => Io/read(@Handle, c.0, n, @positive),
 }
 
 satisfy Io/Write(Socket) {
-    write(c, b) = Io/write(c.0, b),
-    flush(c) = Io/flush(c.0),
+    write(c, b) => Io/write(c.0, b),
+    flush(c) => Io/flush(c.0),
 }
 
 --- `c`'s sending half ended, with `c` still reading: the peer reads the end of the stream — a TLS peer its closure alert first — and whatever it sends after is still `c`'s to read. It is how a connection says it has finished, where `close` says nothing and resets a connection that holds unread bytes.
 satisfy Io/Finish(Socket) {
-    finish(c) = Io/finish(c.0),
+    finish(c) => Io/finish(c.0),
 }
 
 --- Close `c` before its scope ends, saying nothing to the peer. The scope's own release then finds nothing to close.
 satisfy Io/Close(Socket) {
-    close(c) = Io/close(c.0),
+    close(c) => Io/close(c.0),
 }
 
-let close_raising(@A: Type, h: Handle, e: Io/Error) -> Try(Io, Io/Error, A) =
+let close_raising(@A: Type, h: Handle, e: Io/Error) -> Try(Io, Io/Error, A) =>
     let () = Io/close(h)!;
     Try/raise(e);
 
 --- Create a socket for the family of this address: `ok` beside its handle, or the status of the failure.
 foreign socket_open(Bytes) -> {status: Nat, handle: Handle};
 
-let opened(addr: Bytes) -> Try(Io, Io/Error, Handle) =
+let opened(addr: Bytes) -> Try(Io, Io/Error, Handle) =>
     let reply = socket_open(addr)!;
     let () = Status/succeeded(reply.status)!;
     Try/pure(reply.handle);
@@ -40,7 +40,7 @@ foreign socket_connect(Handle, Bytes) -> Nat;
 foreign socket_finish_connect(Handle) -> Nat;
 
 --- The connect under way on `h` ended, once a watch of it for writing is ready, and waited on again while it is still under way.
-let settle(h: Handle) -> Try(Io, Io/Error, {}) =
+let settle(h: Handle) -> Try(Io, Io/Error, {}) =>
     let () = Handle/wait(h, Handle/Interest/writable)!;
     let (_, settled) =
         Handle/retried(
@@ -52,7 +52,7 @@ let settle(h: Handle) -> Try(Io, Io/Error, {}) =
     Status/answer(settled);
 
 --- `h` connected to `addr`: at once, or once the connect the host started has settled.
-let connected(h: Handle, addr: Bytes) -> Try(Io, Io/Error, {}) =
+let connected(h: Handle, addr: Bytes) -> Try(Io, Io/Error, {}) =>
     let status = socket_connect(h, addr)!;
     match Status/of_code(status)
     | blocked() => settle(h)
@@ -62,7 +62,7 @@ let connected(h: Handle, addr: Bytes) -> Try(Io, Io/Error, {}) =
 --- Upgrade this socket to a TLS client stream for this server name: `ok`, or the status of the failure.
 foreign tls_start(Handle, Bytes) -> Nat;
 
-let upgrade(h: Handle, host: Str, tls: Bool) -> Try(Io, Io/Error, {}) =
+let upgrade(h: Handle, host: Str, tls: Bool) -> Try(Io, Io/Error, {}) =>
     match tls
     | true =>
         let status = tls_start(h, Str/to_bytes(host))!;
@@ -70,7 +70,7 @@ let upgrade(h: Handle, host: Str, tls: Bool) -> Try(Io, Io/Error, {}) =
     | false => Try/pure(())
     end;
 
-let connect_addr(s: Io/Scope, host: Str, addr: Bytes, tls: Bool) -> Try(Io, Io/Error, Socket) =
+let connect_addr(s: Io/Scope, host: Str, addr: Bytes, tls: Bool) -> Try(Io, Io/Error, Socket) =>
     let h = opened(addr)!;
     let () = Io/Scope/defer(s, (how) => release(h, how))!;
     let () = Try/rescue(connected(h, addr), (e) => close_raising(h, e))!;
@@ -78,11 +78,11 @@ let connect_addr(s: Io/Scope, host: Str, addr: Bytes, tls: Bool) -> Try(Io, Io/E
     Try/pure(Socket { h });
 
 --- A connection to `host` at `port`, in the clear, opened into `s`. When `s` ends the connection is closed, and where `s` finished, what it holds of the writes it accepted is handed on and its sending half ended first, a courtesy whose failure is no one's: a body that must know its last writes left flushes them itself.
-pub let connect(s: Io/Scope, host: Str, port: Nat) -> Try(Io, Io/Error, Socket) =
+pub let connect(s: Io/Scope, host: Str, port: Nat) -> Try(Io, Io/Error, Socket) =>
     let addr = resolve(host, port)!;
     connect_addr(s, host, addr, false);
 
 --- A connection to `host` at `port` under TLS, the certificate checked against `host`, opened into `s` as `connect` opens one.
-pub let connect_tls(s: Io/Scope, host: Str, port: Nat) -> Try(Io, Io/Error, Socket) =
+pub let connect_tls(s: Io/Scope, host: Str, port: Nat) -> Try(Io, Io/Error, Socket) =>
     let addr = resolve(host, port)!;
     connect_addr(s, host, addr, true);

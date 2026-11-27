@@ -3,17 +3,17 @@ use /std/Nat/{Divides, Gcd};
 use /std/Bool/{Holds};
 
 --- That `a` and `b` share no divisor but one: their greatest common divisor is `1`.
-pub let Coprime(a: Nat, b: Nat) -> Prop =
+pub let Coprime(a: Nat, b: Nat) -> Prop =>
     Eq()(Nat/gcd(a, b), 1);
 
 --- The procedure that decides `Coprime(a, b)`: the evidence when it holds, `none` otherwise.
-pub let try(a: Nat, b: Nat) -> Option(Coprime(a, b)) =
+pub let try(a: Nat, b: Nat) -> Option(Coprime(a, b)) =>
     match Nat/gcd(a, b) == 1
     | true => Option/some(proved())
     | false => Option/none()
     end;
 
-pub let symmetric(@a: Nat, @b: Nat, c: Coprime(a, b)) -> Coprime(b, a) =
+pub let symmetric(@a: Nat, @b: Nat, c: Coprime(a, b)) -> Coprime(b, a) =>
     Eq/trans(Gcd/symmetric(b, a), c);
 
 --- Every common divisor of two coprime numbers is one.
@@ -24,7 +24,7 @@ pub let common(
     d: Nat,
     p: Divides(d, a),
     q: Divides(d, b),
-) -> Eq()(d, 1) =
+) -> Eq()(d, 1) =>
     Divides/antisym(
         Eq/subst((g: Nat) => Divides(d, g), c, Gcd/of(a, b).greatest(d, p, q)),
         Divides/one(d));
@@ -34,7 +34,7 @@ pub let of_common(
     a: Nat,
     b: Nat,
     only: (d: Nat, p: Divides(d, a), q: Divides(d, b)) -> Eq()(d, 1),
-) -> Coprime(a, b) =
+) -> Coprime(a, b) =>
     only(Nat/gcd(a, b), Gcd/of(a, b).left, Gcd/of(a, b).right);
 
 -- The operands are their quotients scaled by the divisor, so by [`Gcd/scaled`] the divisor is the quotients' own scaled by itself, and a positive number that is its multiple by `x` has `x` as one.
@@ -43,7 +43,7 @@ pub let quotients(
     a: Nat,
     b: Nat,
     @ok: Holds(0 < Nat/gcd(a, b)),
-) -> Coprime(a / Nat/gcd(a, b), b / Nat/gcd(a, b)) =
+) -> Coprime(a / Nat/gcd(a, b), b / Nat/gcd(a, b)) =>
     let g = Nat/gcd(a, b);
     let x = a / g;
     let y = b / g;
@@ -59,7 +59,7 @@ pub let quotients(
 
 -- It divides `a * k` and `b * k`, so it divides their greatest common divisor, which is `gcd(a, b) * k` by [`Gcd/scaled`] and so `k`.
 --- Euclid's lemma: a number coprime to `b` that divides `b * k` divides `k`.
-pub let cancel(@a: Nat, @b: Nat, k: Nat, c: Coprime(a, b), p: Divides(a, b * k)) -> Divides(a, k) =
+pub let cancel(@a: Nat, @b: Nat, k: Nat, c: Coprime(a, b), p: Divides(a, b * k)) -> Divides(a, k) =>
     let both: Divides(a, Nat/gcd(a * k, b * k)) =
         Gcd/of(a * k, b * k).greatest(a, Divides/intro(k, Eq/refl()), p);
     Eq/subst(
@@ -77,7 +77,7 @@ pub let unique(
     p: Coprime(a, b),
     q: Coprime(c, d),
     e: Eq()(a * d, c * b),
-) -> {numerator: Eq()(a, c), denominator: Eq()(b, d)} =
+) -> {numerator: Eq()(a, c), denominator: Eq()(b, d)} =>
     let crossed: Eq()(c * b, a * d) = Eq/sym(e);
     (
         numerator =

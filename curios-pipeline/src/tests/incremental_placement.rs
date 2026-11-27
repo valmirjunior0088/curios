@@ -58,15 +58,15 @@ fn a_recompile_over_a_recompile_holds_each_name_where_its_module_does() {
 fn inserting_a_polymorphic_item_leaves_the_items_after_it_unchanged() {
     let base = "use /std/{Nat};
 
-pub let apply(@A: Type, f: (A) -> A, a: A) -> A = f(a);
+pub let apply(@A: Type, f: (A) -> A, a: A) -> A => f(a);
 
-pub let double(n: Nat) -> Nat = n + n;
+pub let double(n: Nat) -> Nat => n + n;
 
 pub let twice: Nat = apply(double, 2);
 ";
     let inserted = base.replace(
         "pub let apply",
-        "pub let id(@A: Type, a: A) -> A = a;\n\npub let apply",
+        "pub let id(@A: Type, a: A) -> A => a;\n\npub let apply",
     );
     let baseline = unit_of(base);
 
@@ -108,7 +108,7 @@ pub induct T: pub Type
 | two(n: Nat)
 end
 
-pub let d(t: T) -> Nat =
+pub let d(t: T) -> Nat =>
     match t
     | one() => b
     | two(n) => n
@@ -229,7 +229,7 @@ fn a_kept_declaration_is_placed_where_an_edit_above_moved_it() {
 #[test]
 fn a_declaration_whose_text_changed_is_elaborated_again_and_placed_in_its_new_text() {
     let baseline = unit_of(BASE);
-    let edited = BASE.replace("= n + n;", "=\n    n + n;");
+    let edited = BASE.replace("=> n + n;", "=>\n    n + n;");
 
     let incremental = recompile_over(&edited, &baseline).unwrap();
 

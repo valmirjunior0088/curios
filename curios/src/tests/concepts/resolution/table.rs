@@ -19,7 +19,7 @@ fn concept_witness_resolves_through_wrapper() {
             show(A) -> Str
         }
         satisfy Show(Nat) {
-            show(n) = Nat/to_str(n)
+            show(n) => Nat/to_str(n)
         }
         let n : Nat = 42;
         /std/print(Show/show(n))
@@ -37,7 +37,7 @@ fn explicit_use_argument_overrides() {
             show(A) -> Str
         }
         satisfy Show(Nat) {
-            show(n) = Nat/to_str(n)
+            show(n) => Nat/to_str(n)
         }
         let parens : Show(Nat) =
             Show(Nat) { show = (n) => Str/concat("(", Str/concat(Nat/to_str(n), ")")) };
@@ -83,10 +83,10 @@ fn multi_param_witnesses_share_a_first_head() {
             into(A) -> B
         }
         satisfy Into(Nat, Str) {
-            into(n) = Nat/to_str(n)
+            into(n) => Nat/to_str(n)
         }
         satisfy Into(Nat, Bool) {
-            into(n) = Nat/eql(n, 1)
+            into(n) => Nat/eql(n, 1)
         }
         let s : Str = Into/into(2);
         let b : Bool = Into/into(2);
@@ -105,9 +105,9 @@ fn open_parameter_does_not_infer_from_the_witness() {
             into(A) -> B
         }
         satisfy Into(Nat, Str) {
-            into(n) = Nat/to_str(n)
+            into(n) => Nat/to_str(n)
         }
-        pub let discard(@A : Type, x : A) -> Nat = 0;
+        pub let discard(@A : Type, x : A) -> Nat => 0;
         /std/print(Nat/to_str(discard(Into/into(1))))
         "#;
 
@@ -132,9 +132,9 @@ fn an_open_key_no_witness_agrees_with_reports_no_witness() {
             into(A) -> B
         }
         satisfy Into(Nat, Str) {
-            into(n) = Nat/to_str(n)
+            into(n) => Nat/to_str(n)
         }
-        pub let discard(@A : Type, x : A) -> Nat = 0;
+        pub let discard(@A : Type, x : A) -> Nat => 0;
         /std/print(Nat/to_str(discard(Into/into(true))))
         "#;
 
@@ -153,9 +153,9 @@ fn syn_add_concept_resolves_everywhere() {
         use /std/ops/{Add};
         struct Point : pub Type { x : Nat, y : Nat }
         satisfy Add(Point) {
-            add(a, b) = Point { x = Nat/add(a.x, b.x), y = Nat/add(a.y, b.y) }
+            add(a, b) => Point { x = Nat/add(a.x, b.x), y = Nat/add(a.y, b.y) }
         }
-        pub let double(@A : Type, use Add(A), v : A) -> A = Add/add(v, v);
+        pub let double(@A : Type, use Add(A), v : A) -> A => Add/add(v, v);
         let p : Point = double(Point { x = 3, y = 4 });
         let n : Nat = Add/add(20, 1);
         /std/print(Nat/to_str(Nat/add(p.x, n)))
@@ -188,9 +188,9 @@ fn forward_declared_witness_resolves() {
         pub concept Eqx(A : Type) : pub Type {
             eqx(A, A) -> Bool
         }
-        pub let uses_eqx(a : Nat, b : Nat) -> Bool = Eqx/eqx(a, b);
+        pub let uses_eqx(a : Nat, b : Nat) -> Bool => Eqx/eqx(a, b);
         satisfy Eqx(Nat) {
-            eqx(a, b) = Nat/eql(a, b)
+            eqx(a, b) => Nat/eql(a, b)
         }
         /std/print(Bool/to_str(uses_eqx(3, 3)))
         "#;
@@ -206,7 +206,7 @@ fn a_witness_spelled_through_a_name_for_its_type_is_keyed_at_the_type() {
         pub struct Box: pub Type { value: Nat }
         let Alias: Type = Box;
         let shown: Str = Show/show(Box { value = 1 });
-        satisfy Show(Alias) { show(b) = "boxed" }
+        satisfy Show(Alias) { show(b) => "boxed" }
         /std/print(shown)
         "#;
 
@@ -222,13 +222,13 @@ fn a_constructor_a_goal_computes_is_keyed_by_the_former_it_computes() {
         concept Tag(F : (Type) -> Type) : Type {
             tag : Nat
         }
-        let partial(F : (Type, Type) -> Type, S : Type) -> (Type) -> Type = (A) => F(S, A);
-        let through(S : Type, A : Type) -> Type = Box(S, A);
-        satisfy (@S : Type) => Tag((A : Type) => Box(S, A)) {
+        let partial(F : (Type, Type) -> Type, S : Type) -> (Type) -> Type => (A) => F(S, A);
+        let through(S : Type, A : Type) -> Type => Box(S, A);
+        satisfy (@S : Type) -> Tag((A : Type) => Box(S, A)) {
             tag = 1
         }
         let outside : Nat = Tag/tag(@partial(Box, Nat));
-        let inside(n : Nat) -> Nat =
+        let inside(n : Nat) -> Nat =>
             match n
             | 0 => Tag/tag(@partial(Box, Nat))
             | k + 1 => k

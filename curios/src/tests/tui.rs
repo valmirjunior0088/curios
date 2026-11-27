@@ -42,7 +42,7 @@ fn a_session_switches_the_terminal_and_restores_it_in_reverse() {
         r#"
         use /std/{Str, Try, Io, Show, Tui};
         use /std/Tui/{Session};
-        let program() -> Io({}) =
+        let program() -> Io({}) =>
             let outcome = Try/run(Try/scope((scope) => Try/bind(Session/open(scope), (s) => Try/pure("inside"))))!;
             match outcome
             | success(s) => /std/print(s)
@@ -72,7 +72,7 @@ fn a_session_sets_up_what_the_terminal_confirmed() {
         r#"
         use /std/{Str, Try, Io, Show, Tui};
         use /std/Tui/{Session};
-        let program() -> Io({}) =
+        let program() -> Io({}) =>
             let outcome = Try/run(Try/scope((scope) => Try/bind(Session/open(scope), (s) => Try/pure("inside"))))!;
             match outcome
             | success(s) => /std/print(s)
@@ -96,7 +96,7 @@ fn a_session_without_a_terminal_is_refused_before_anything_is_written() {
         r#"
         use /std/{Str, Try, Io, Show, Tui};
         use /std/Tui/{Session};
-        let program() -> Io({}) =
+        let program() -> Io({}) =>
             let outcome = Try/run(Try/scope((scope) => Try/bind(Session/open(scope), (s) => Try/pure("inside"))))!;
             match outcome
             | success(s) => /std/print(s)
@@ -170,7 +170,7 @@ fn a_session_carries_incomplete_input_into_its_next_read() {
     run_text(r#"
         use /std/{Nat, List, Option, Try, Io, print};
         use /std/Tui/{Session};
-        let program() -> Io({}) =
+        let program() -> Io({}) =>
             let outcome = Try/run(Try/scope((scope) => Try/bind(Session/open(scope), (s) =>
                 let first = Session/read(s)!;
                 let _ = print(match first | some(events) => Nat/to_str(List/length(events)) | none() => "eof" end)!;
@@ -209,7 +209,7 @@ fn a_read_dropped_while_it_waits_for_the_rest_of_a_key_keeps_what_it_decoded() {
         use /std/{Try, Io, print};
         use /std/time/{Duration};
         use /std/Tui/{Session};
-        let program() -> Io({}) =
+        let program() -> Io({}) =>
             let outcome = Try/run(Try/scope((scope) => Try/bind(Session/open(scope), (s) =>
                 let dropped = Io/select([
                     Io/bind(Io/sleep(Duration/of_millis(1)), (()) => Io/pure(true)),
@@ -242,7 +242,7 @@ fn a_session_remembers_what_it_drew_and_the_size_it_was_told() {
         r#"
         use /std/{Nat, Try, Io, print};
         use /std/Tui/{Session, View};
-        let program() -> Io({}) =
+        let program() -> Io({}) =>
             let outcome = Try/run(Try/scope((scope) => Try/bind(Session/open(scope), (s) =>
                 let _ = Session/draw(s, View/fit(View/blank(4, 2), 4, 2))!;
                 let _ = Session/draw(s, View/fit(View/blank(4, 2), 4, 2))!;
@@ -280,16 +280,16 @@ fn resize_events_update_the_drawing_session_before_rendering() {
         use /std/Tui/{View, Directive};
         let app: Tui(Nat, Nat) = Tui {
             init = (0, Directive/none()),
-            update(model, event) = match event
+            update(model, event) => match event
                 | input(resize(size)) => match size.w == 8
                     | true => (model + 1, Directive/quit())
                     | false => (model + 1, Directive/none())
                     end
                 | _ => (model, Directive/none())
                 end,
-            view(model) = (w, h) => View/fit(View/blank(w, h), w, h),
+            view(model) => (w, h) => View/fit(View/blank(w, h), w, h),
         };
-        let program() -> Io({}) =
+        let program() -> Io({}) =>
             let result = Try/run(Tui/main(app))!;
             print(match result | success(n) => Nat/to_str(n) | failure(_) => "failed" end);
         program()
@@ -309,10 +309,10 @@ const IDLE_PROGRAM: &str = r#"
     use /std/Tui/{View, Directive};
     let app: Tui(Nat, Nat) = Tui {
         init = (0, Directive/none()),
-        update(model, event) = (model, Directive/none()),
-        view(model) = (w, h) => View/fit(View/blank(w, h), w, h),
+        update(model, event) => (model, Directive/none()),
+        view(model) => (w, h) => View/fit(View/blank(w, h), w, h),
     };
-    let program() -> Io({}) =
+    let program() -> Io({}) =>
         let result = Try/run(Tui/main(app))!;
         print(match result | success(_) => "quit" | failure(e) => Show/show(e) end);
     program()
@@ -370,18 +370,18 @@ fn a_program_outlives_the_end_of_its_input() {
         use /std/{Nat, Try, Tui, Io, print};
         use /std/time/{Duration};
         use /std/Tui/{View, Directive};
-        let later() -> Io(Nat) =
+        let later() -> Io(Nat) =>
             let _ = Io/sleep(Duration/of_millis(300))!;
             Io/pure(7);
         let app: Tui(Nat, Nat) = Tui {
             init = (0, Directive/perform(later())),
-            update(model, event) = match event
+            update(model, event) => match event
                 | custom(n) => (n, Directive/quit())
                 | _ => (model, Directive/none())
                 end,
-            view(model) = (w, h) => View/fit(View/blank(w, h), w, h),
+            view(model) => (w, h) => View/fit(View/blank(w, h), w, h),
         };
-        let program() -> Io({}) =
+        let program() -> Io({}) =>
             let result = Try/run(Tui/main(app))!;
             print(match result | success(n) => Nat/to_str(n) | failure(_) => "failed" end);
         program()
@@ -405,18 +405,18 @@ fn a_quit_waits_for_the_work_its_update_asked_for() {
         r#"
         use /std/{Nat, Try, Tui, Io, print};
         use /std/Tui/{View, Directive};
-        let save() -> Io(Nat) =
+        let save() -> Io(Nat) =>
             let _ = print("saved")!;
             Io/pure(1);
         let app: Tui(Nat, Nat) = Tui {
             init = (0, Directive/none()),
-            update(model, event) = match event
+            update(model, event) => match event
                 | input(key(_)) => (model, Directive/batch([Directive/perform(save()), Directive/quit()]))
                 | _ => (model, Directive/none())
                 end,
-            view(model) = (w, h) => View/fit(View/blank(w, h), w, h),
+            view(model) => (w, h) => View/fit(View/blank(w, h), w, h),
         };
-        let program() -> Io({}) =
+        let program() -> Io({}) =>
             let result = Try/run(Tui/main(app))!;
             print(match result | success(_) => "/quit" | failure(_) => "/failed" end);
         program()
@@ -460,12 +460,12 @@ fn a_release_gives_the_terminal_back_around_its_action() {
         r#"
         use /std/{Nat, Try, Tui, Io, print};
         use /std/Tui/{View, Directive};
-        let outside() -> Io(Nat) =
+        let outside() -> Io(Nat) =>
             let _ = print("outside")!;
             Io/pure(5);
         let app: Tui(Nat, Nat) = Tui {
             init = (0, Directive/none()),
-            update(model, event) = match event
+            update(model, event) => match event
                 | input(key(k)) => match k.code
                     | char(c) => match c == 'r'
                         | true => (model, Directive/release(outside()))
@@ -476,9 +476,9 @@ fn a_release_gives_the_terminal_back_around_its_action() {
                 | custom(n) => (model + n, Directive/none())
                 | _ => (model, Directive/none())
                 end,
-            view(model) = (w, h) => View/fit(View/blank(w, h), w, h),
+            view(model) => (w, h) => View/fit(View/blank(w, h), w, h),
         };
-        let program() -> Io({}) =
+        let program() -> Io({}) =>
             let result = Try/run(Tui/main(app))!;
             print(match result | success(n) => Nat/to_str(n) | failure(_) => "failed" end);
         program()
@@ -515,13 +515,13 @@ fn a_size_the_terminal_reports_reaches_update_as_an_input() {
         use /std/Tui/{View, Directive};
         let app: Tui(Nat, Nat) = Tui {
             init = (0, Directive/none()),
-            update(model, event) = match event
+            update(model, event) => match event
                 | input(resize(size)) => (size.w, Directive/quit())
                 | _ => (model, Directive/none())
                 end,
-            view(model) = (w, h) => View/fit(View/blank(w, h), w, h),
+            view(model) => (w, h) => View/fit(View/blank(w, h), w, h),
         };
-        let program() -> Io({}) =
+        let program() -> Io({}) =>
             let result = Try/run(Tui/main(app))!;
             print(match result | success(n) => Nat/to_str(n) | failure(_) => "failed" end);
         program()
@@ -557,14 +557,14 @@ const PICKER_PROGRAM: &str = r#"
 
     let fruit: List(Str) = ["apple", "banana", "blueberry", "cherry"];
 
-    let matching(f: Field) -> Listing(Str) =
+    let matching(f: Field) -> Listing(Str) =>
         Listing/new(List/filter(fruit, (s: Str) => Str/starts_with(s, f.text)));
 
-    let save(chosen: Option(Str)) -> Io(Nat) =
+    let save(chosen: Option(Str)) -> Io(Nat) =>
         let _ = print(Str/concat("saved ", Option/unwrap_or(chosen, "nothing")))!;
         Io/pure(0);
 
-    let reacted(m: Model, k: Key) -> {Model, Directive(Nat)} =
+    let reacted(m: Model, k: Key) -> {Model, Directive(Nat)} =>
         match
         | k.code == Key/Code/tab() => (Model { ..m, focus = Focus/handle(m.focus, k) }, Directive/none())
         | k.ctrl && k.code == Key/Code/char('s') =>
@@ -582,18 +582,18 @@ const PICKER_PROGRAM: &str = r#"
             init = (
                 Model { field = Field/empty, listing = matching(Field/empty), focus = Focus/new(Part/filter(), [Part/items()]) },
                 Directive/none()),
-            update(model, event) =
+            update(model, event) =>
                 match event
                 | input(key(k)) => reacted(model, k)
                 | _ => (model, Directive/none())
                 end,
-            view(model) =
+            view(model) =>
                 Pane/rows([
                     (Pane/Constraint/length(3), Pane/border(Style/plain, "find", Field/view(model.field, Style/plain))),
                     (Pane/Constraint/fill(1), Pane/border(Style/plain, "fruit", Listing/view(model.listing, (s: Str) => s, Style/plain, marked)))]),
         };
 
-    let program() -> Io({}) =
+    let program() -> Io({}) =>
         let result = Try/run(Tui/main(app))!;
         print(match result | success(m) => Str/concat(" with ", m.field.text) | failure(_) => " failed" end);
     program()

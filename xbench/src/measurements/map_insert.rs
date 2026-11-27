@@ -41,7 +41,7 @@ pub fn spines_insert_slope() {
 const KEY_ENCODED: &str = r#"
 use /std/{Str, Nat, Bytes, Hash, Option, Io};
 
-let walk(n: Nat, x: Nat, s: Nat) -> Nat =
+let walk(n: Nat, x: Nat, s: Nat) -> Nat =>
     match n
     | 0 => s
     | k + 1 =>
@@ -49,7 +49,7 @@ let walk(n: Nat, x: Nat, s: Nat) -> Nat =
         walk(k, y, (s + y + Bytes/length(Hash/hash(y)) + Bytes/length(Hash/hash(x))) % 1000003)
     end;
 
-let entry() -> /std/Io({}) =
+let entry() -> /std/Io({}) =>
     let arguments = /std/Proc/args()!;
     let input = /std/List/try_get(arguments, 1);
     match input
@@ -70,7 +70,7 @@ entry()
 const KEY_CONTROL: &str = r#"
 use /std/{Str, Nat, Bytes, Option, Io};
 
-let walk(n: Nat, x: Nat, s: Nat) -> Nat =
+let walk(n: Nat, x: Nat, s: Nat) -> Nat =>
     match n
     | 0 => s
     | k + 1 =>
@@ -78,7 +78,7 @@ let walk(n: Nat, x: Nat, s: Nat) -> Nat =
         walk(k, y, (s + y + 4) % 1000003)
     end;
 
-let entry() -> /std/Io({}) =
+let entry() -> /std/Io({}) =>
     let arguments = /std/Proc/args()!;
     let input = /std/List/try_get(arguments, 1);
     match input

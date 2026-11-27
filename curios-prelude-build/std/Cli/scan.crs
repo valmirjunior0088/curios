@@ -34,14 +34,14 @@ pub struct Raw: pub Type {
 }
 
 -- Every name the option `f` at `i` answers to, with how each reads.
-let claims_of(f: Field, i: Nat) -> List({Str, Claim}) =
+let claims_of(f: Field, i: Nat) -> List({Str, Claim}) =>
     let names = [f.long, ..f.aliases];
     let short =
         match f.short
         | none() => []
         | some(c) => [Str/concat("-", Str/of_char(c))]
         end;
-    let as(spelled: List(Str), claim: Claim) -> List({Str, Claim}) =
+    let as(spelled: List(Str), claim: Claim) -> List({Str, Claim}) =>
         List/map(spelled, (s) => (s, claim));
     match f.kind
     | flag() | count() =>
@@ -58,7 +58,7 @@ let claims_of(f: Field, i: Nat) -> List({Str, Claim}) =
             (entry) => (Str/concat("--", entry.1.long), Claim/alternative(i, entry.0)))
     end;
 
-let claims(fields: List(Field), version: Option(Str)) -> Map(Str, Claim) =
+let claims(fields: List(Field), version: Option(Str)) -> Map(Str, Claim) =>
     Map/of_list([
         ("--help", Claim/help()),
         ("-h", Claim/help()),
@@ -71,13 +71,13 @@ let claims(fields: List(Field), version: Option(Str)) -> Map(Str, Claim) =
             (entry) => claims_of(entry.1, entry.0))]);
 
 -- `s` recorded against the option at `i`.
-let seen(raw: Raw, i: Nat, s: Seen) -> Raw =
+let seen(raw: Raw, i: Nat, s: Seen) -> Raw =>
     Raw {
         ..raw,
         seen = Map/update(raw.seen, i, (old) => Option/some([s, ..Option/unwrap_or(old, [])])) };
 
 -- The line refused by `failure`, unless it already was: the first refusal is the one reported, and help asked later still answers.
-let refuse(raw: Raw, failure: Failure) -> Raw =
+let refuse(raw: Raw, failure: Failure) -> Raw =>
     Raw {
         ..raw,
         failure =
@@ -86,7 +86,7 @@ let refuse(raw: Raw, failure: Failure) -> Raw =
             | none() => Option/some(failure)
             end };
 
-let flagged(raw: Raw, claim: Claim) -> Raw =
+let flagged(raw: Raw, claim: Claim) -> Raw =>
     match claim
     | help() => Raw { ..raw, help = true }
     | version() => Raw { ..raw, version = true }
@@ -103,7 +103,7 @@ let take(
     spelled: Str,
     attached: Option(Bytes),
     more: List(Bytes),
-) -> {Raw, List(Bytes)} =
+) -> {Raw, List(Bytes)} =>
     match claim
     | valued(i) =>
         match attached
@@ -122,7 +122,7 @@ let take(
     end;
 
 -- Whether `b` begins with the bytes `p`.
-let leads(p: Bytes, b: Bytes) -> Bool =
+let leads(p: Bytes, b: Bytes) -> Bool =>
     let matched =
         Bytes/fold(
             p,
@@ -138,14 +138,14 @@ let leads(p: Bytes, b: Bytes) -> Bool =
     matched.1;
 
 -- The bytes of `b` after its first `k`, or none where it holds no more.
-let after(b: Bytes, k: Nat) -> Bytes =
+let after(b: Bytes, k: Nat) -> Bytes =>
     match Bool/holds(k <= Bytes/length(b))
     | some(ok) => Bytes/drop(b, k, @ok)
     | none() => 0x[]
     end;
 
 -- The short names `lookup` holds, `-c`, each by the bytes of its character beside its spelling and its claim.
-let shorts(lookup: Map(Str, Claim)) -> List({Bytes, Str, Claim}) =
+let shorts(lookup: Map(Str, Claim)) -> List({Bytes, Str, Claim}) =>
     List/concat_map(
         Map/to_list(lookup),
         (entry: {Str, Claim}) =>
@@ -161,7 +161,7 @@ let cluster(
     body: Bytes,
     whole: Bytes,
     more: List(Bytes),
-) -> {Raw, List(Bytes)} =
+) -> {Raw, List(Bytes)} =>
     match Bytes/length(body) == 0
     | true => (raw, more)
     | false =>
@@ -189,7 +189,7 @@ let cluster(
     end;
 
 -- A token read as a value rather than a cluster: a dash and a digit, as a negative number is, which no short name can be.
-let numeric(token: Bytes) -> Bool =
+let numeric(token: Bytes) -> Bool =>
     match (Bytes/try_get(token, 0), Bytes/try_get(token, 1))
     | (some(dash), some(digit)) => dash == '-' && Nat/in_range(Byte/to_nat(digit), 0x30, 0x39)
     | _ => false
@@ -201,11 +201,11 @@ let step(
     literal: Bool,
     tokens: List(Bytes),
     group: Bool,
-) -> Raw =
+) -> Raw =>
     match tokens
     | [] => Raw { ..raw, positionals = List/reverse(raw.positionals) }
     | [token, ..more] =>
-        let positional() -> Raw =
+        let positional() -> Raw =>
             match group
             | true => Raw { ..raw, positionals = List/reverse(raw.positionals), rest = tokens }
             | false =>
@@ -226,7 +226,7 @@ let step(
                 | [n] => (n, Option/none())
                 | [] => (0x[], Option/none())
                 end;
-            let unknown(near: Option(Str)) -> Raw =
+            let unknown(near: Option(Str)) -> Raw =>
                 step(
                     lookup,
                     refuse(raw, Failure/unknown_option(Str/of_bytes_lossy(token), near)),
@@ -257,7 +257,7 @@ let step(
     end;
 
 --- `tokens` read against `fields` and the built-ins. A group stops at its first positional, the word that names its command, and hands it and what follows to the command.
-pub let line(fields: List(Field), version: Option(Str), tokens: List(Bytes), group: Bool) -> Raw =
+pub let line(fields: List(Field), version: Option(Str), tokens: List(Bytes), group: Bool) -> Raw =>
     step(
         claims(fields, version),
         Raw {
@@ -272,9 +272,9 @@ pub let line(fields: List(Field), version: Option(Str), tokens: List(Bytes), gro
         group);
 
 -- How many single-character edits turn `a` into `b`: each row the distances of a longer prefix of `a` to every prefix of `b`.
-let distance(a: Str, b: Str) -> Nat =
+let distance(a: Str, b: Str) -> Nat =>
     let bs = Str/to_list(b);
-    let advance(prev: List(Nat), rest: List(Char), c: Char, left: Nat) -> List(Nat) =
+    let advance(prev: List(Nat), rest: List(Char), c: Char, left: Nat) -> List(Nat) =>
         match prev
         | [diagonal, ..above] =>
             match (above, rest)
@@ -297,7 +297,7 @@ let distance(a: Str, b: Str) -> Nat =
     Option/unwrap_or(List/last(last.0), 0);
 
 --- The name of `known` nearest to `word`, where one is within two edits and closer than the word is long.
-pub let closest(word: Str, known: List(Str)) -> Option(Str) =
+pub let closest(word: Str, known: List(Str)) -> Option(Str) =>
     let near =
         List/fold(
             known,

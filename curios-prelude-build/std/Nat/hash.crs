@@ -3,14 +3,14 @@ use /std/ops/{Ord};
 use /std/Bool/{True, False, Holds};
 
 -- How many bytes follow a number's first.
-let rank(n: Nat) -> Nat =
+let rank(n: Nat) -> Nat =>
     match n < 16 | true => 0 | false => 1 + rank(n / 256) end;
 
 -- What a number's `rank` bytes leave of it: its top four bits.
-let top(n: Nat) -> Nat =
+let top(n: Nat) -> Nat =>
     match n < 16 | true => n | false => top(n / 256) end;
 
-let top_below(n: Nat) -> Holds(top(n) < 16) =
+let top_below(n: Nat) -> Holds(top(n) < 16) =>
     Nat/descend(
         (m: Nat) => m,
         (m) => Holds(top(m) < 16),
@@ -19,21 +19,21 @@ let top_below(n: Nat) -> Holds(top(n) < 16) =
         n);
 
 -- The first byte of a number of rank `l` and top `t`, behind a `0xFF` for every seven of its rank past six.
-let first(l: Nat, t: Nat, @fits: Holds(t < 16)) -> Bytes =
+let first(l: Nat, t: Nat, @fits: Holds(t < 16)) -> Bytes =>
     match l < 7
     | true => 0x[Nat/to_byte(0x80 + 16 * l + t)]
     | false => 0x[0xFF, ..first(l - 7, t)]
     end;
 
 -- The bytes after a number's first, most significant first.
-let rest(n: Nat) -> Bytes =
+let rest(n: Nat) -> Bytes =>
     match n < 16
     | true => 0x[]
     | false => 0x[..rest(n / 256), Nat/to_byte(n % 256)]
     end;
 
 -- The encoding in one walk: the rank counted on the way down, the first byte written where the top is left, and the bytes appended on the way back.
-let from(n: Nat, l: Nat) -> Bytes =
+let from(n: Nat, l: Nat) -> Bytes =>
     match n < 16
     | true => first(l, n)
     | false => 0x[..from(n / 256, l + 1), Nat/to_byte(n % 256)]
@@ -42,14 +42,14 @@ let from(n: Nat, l: Nat) -> Bytes =
 --- A natural's encoding, in the order of the numbers: a smaller number's is before a larger one's as `Bytes/ord` reads them, and no number's begins another's.
 ---
 --- The first byte is `0x80 + 16 * rank + top`, where `rank` is how many bytes follow it, below seven, and `top` the number those bytes leave, below sixteen; then the `rank` bytes, most significant first. A rank of seven or more writes a `0xFF` for every seven and then the same. So a number below 16 is one byte, below 4 096 two and below `2^20` three.
-pub let hash(n: Nat) -> Bytes =
+pub let hash(n: Nat) -> Bytes =>
     from(n, 0);
 
 -- The walk from a count writes the first byte of that count past the number's rank, and then the number's bytes.
 let from_count(
     n: Nat,
     l: Nat,
-) -> Eq()(from(n, l), 0x[..first(l + rank(n), top(n), @top_below(n)), ..rest(n)]) =
+) -> Eq()(from(n, l), 0x[..first(l + rank(n), top(n), @top_below(n)), ..rest(n)]) =>
     Nat/descend(
         (m: Nat) => m,
         (m) =>
@@ -69,7 +69,7 @@ let from_count(
         l);
 
 -- A smaller number has no more bytes.
-let rank_mono(a: Nat, b: Nat, le: Holds(a <= b)) -> Holds(rank(a) <= rank(b)) =
+let rank_mono(a: Nat, b: Nat, le: Holds(a <= b)) -> Holds(rank(a) <= rank(b)) =>
     Nat/descend(
         (m: Nat) => m,
         (m) => (b: Nat, le: Holds(m <= b)) -> Holds(rank(m) <= rank(b)),
@@ -93,7 +93,7 @@ let top_mono(
     b: Nat,
     le: Holds(a <= b),
     ranks: Holds(rank(a) == rank(b)),
-) -> Holds(top(a) <= top(b)) =
+) -> Holds(top(a) <= top(b)) =>
     Nat/descend(
         (m: Nat) => m,
         (m) =>
@@ -128,7 +128,7 @@ let first_ranks(
     @fa: Holds(ta < 16),
     @fb: Holds(tb < 16),
     under: Holds(la < lb),
-) -> Holds(Bytes/ord/below(0x[..first(la, ta), ..s], 0x[..first(lb, tb), ..u])) =
+) -> Holds(Bytes/ord/below(0x[..first(la, ta), ..s], 0x[..first(lb, tb), ..u])) =>
     Nat/descend(
         (m: Nat) => m,
         (l) =>
@@ -173,7 +173,7 @@ let first_tops(
     @fb: Holds(tb < 16),
     ranks: Holds(la == lb),
     under: Holds(ta < tb),
-) -> Holds(Bytes/ord/below(0x[..first(la, ta), ..s], 0x[..first(lb, tb), ..u])) =
+) -> Holds(Bytes/ord/below(0x[..first(la, ta), ..s], 0x[..first(lb, tb), ..u])) =>
     Nat/descend(
         (m: Nat) => m,
         (l) =>
@@ -220,7 +220,7 @@ let first_same(
     ranks: Holds(la == lb),
     tops: Holds(ta == tb),
     parted: Holds(Bytes/ord/below(s, u)),
-) -> Holds(Bytes/ord/below(0x[..first(la, ta), ..s], 0x[..first(lb, tb), ..u])) =
+) -> Holds(Bytes/ord/below(0x[..first(la, ta), ..s], 0x[..first(lb, tb), ..u])) =>
     Nat/descend(
         (m: Nat) => m,
         (l) =>
@@ -273,7 +273,7 @@ let tails(
     under: Holds(a < b),
     ranks: Holds(rank(a) == rank(b)),
     tops: Holds(top(a) == top(b)),
-) -> Holds(Bytes/ord/below(rest(a), rest(b))) =
+) -> Holds(Bytes/ord/below(rest(a), rest(b))) =>
     Nat/descend(
         (m: Nat) => m,
         (m) =>
@@ -326,7 +326,7 @@ let tails(
         tops);
 
 -- Two numbers each at most the other are equal, as the decision an arithmetic fact is read from.
-let level(x: Nat, y: Nat, le: Holds(x <= y), ge: Holds(y <= x)) -> Holds(x == y) =
+let level(x: Nat, y: Nat, le: Holds(x <= y), ge: Holds(y <= x)) -> Holds(x == y) =>
     Eq/subst((v: Nat) => Holds(x == v), Nat/le/antisym(x, y, le, ge), True/qed());
 
 -- An encoding read as its first byte and then its bytes, on both sides of a comparison.
@@ -337,7 +337,7 @@ let split(
         Bytes/ord/below(
             0x[..first(rank(a), top(a), @top_below(a)), ..rest(a)],
             0x[..first(rank(b), top(b), @top_below(b)), ..rest(b)])),
-) -> Holds(Bytes/ord/below(hash(a), hash(b))) =
+) -> Holds(Bytes/ord/below(hash(a), hash(b))) =>
     Eq/subst(
         (z: Bytes) => Holds(Bytes/ord/below(z, hash(b))),
         Eq/sym(from_count(a, 0)),
@@ -348,7 +348,7 @@ let split(
             parted));
 
 --- `a < b` gives `a`'s encoding below `b`'s at a byte: by their first bytes where the ranks or the tops differ, and by the bytes after them where both agree.
-pub let of_lt(a: Nat, b: Nat, under: Holds(a < b)) -> Holds(Bytes/ord/below(hash(a), hash(b))) =
+pub let of_lt(a: Nat, b: Nat, under: Holds(a < b)) -> Holds(Bytes/ord/below(hash(a), hash(b))) =>
     let top_a: Holds(top(a) < 16) = top_below(a);
     let top_b: Holds(top(b) < 16) = top_below(b);
     let ranks: Holds(rank(a) <= rank(b)) = rank_mono(a, b, proved());
@@ -379,7 +379,7 @@ pub let of_lt(a: Nat, b: Nat, under: Holds(a < b)) -> Holds(Bytes/ord/below(hash
         end);
 
 --- The order of two numbers is the order of their encodings.
-pub let mono(a: Nat, b: Nat) -> Eq()(Nat/ord(a, b), Bytes/ord(hash(a), hash(b))) =
+pub let mono(a: Nat, b: Nat) -> Eq()(Nat/ord(a, b), Bytes/ord(hash(a), hash(b))) =>
     match
     | a < b => Eq/sym(Bytes/ord/below/lt(hash(a), hash(b), of_lt(a, b, True/qed())))
     | b < a =>
@@ -399,7 +399,7 @@ pub let mono(a: Nat, b: Nat) -> Eq()(Nat/ord(a, b), Bytes/ord(hash(a), hash(b)))
     end;
 
 --- An encoding leads with a byte in the upper half: the one byte `0x7F` is below every encoding, which is what leaves the lower half to the complements an integer below zero is written as.
-pub let leads(n: Nat) -> Holds(Bytes/ord/below(0x[0x7F], hash(n))) =
+pub let leads(n: Nat) -> Holds(Bytes/ord/below(0x[0x7F], hash(n))) =>
     let fits: Holds(top(n) < 16) = top_below(n);
     Eq/subst(
         (z: Bytes) => Holds(Bytes/ord/below(0x[0x7F], z)),

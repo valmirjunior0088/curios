@@ -2,16 +2,16 @@
 use /std/{Str, Char, List, Bool, Option, Test};
 
 -- Each conversion flips a letter at either end of the alphabet, and leaves the characters just outside it, the other case and a letter past ASCII as they are.
-test ascii_case_flips_letters_and_nothing_beside_them =
+test ascii_case_flips_letters_and_nothing_beside_them =>
     let cases = ['@', 'A', 'Z', '[', '`', 'a', 'z', '{', 'é'];
-    let spelled(convert: (Char) -> Char) -> Str =
+    let spelled(convert: (Char) -> Char) -> Str =>
         Str/flatten(List/map(cases, (c) => Str/of_char(convert(c))));
     Test/all([
         Test/equal(spelled(Char/to_ascii_lower), "@az[`az{é"),
         Test/equal(spelled(Char/to_ascii_upper), "@AZ[`AZ{é")]);
 
 -- Upper case is the database's full mapping: a letter past ASCII is raised, `ß` becomes two letters and `ΐ` three, a run where the two cases alternate raises its lower letters and leaves the upper ones between them, and a character with no mapping stays itself.
-test to_upper_is_the_full_mapping =
+test to_upper_is_the_full_mapping =>
     Test/all([
         Test/equal(Char/to_upper('a'), "A"),
         Test/equal(Char/to_upper('é'), "É"),
@@ -23,7 +23,7 @@ test to_upper_is_the_full_mapping =
         Test/equal(Char/to_upper('1'), "1")]);
 
 -- Lower case is the database's full mapping, read with no context: `İ` becomes two characters, `Σ` is `σ` alone, a letter that is already lower stays, and so does a character with no mapping.
-test to_lower_is_the_full_mapping =
+test to_lower_is_the_full_mapping =>
     Test/all([
         Test/equal(Char/to_lower('A'), "a"),
         Test/equal(Char/to_lower('É'), "é"),
@@ -35,7 +35,7 @@ test to_lower_is_the_full_mapping =
         Test/equal(Char/to_lower('1'), "1")]);
 
 -- Folding is the database's full one: `ß` and `ẞ` fold to two letters, both sigmas to one, an upper letter to its lower one, and a character with no folding stays itself.
-test to_casefold_is_the_full_folding =
+test to_casefold_is_the_full_folding =>
     Test/all([
         Test/equal(Char/to_casefold('A'), "a"),
         Test/equal(Char/to_casefold('ß'), "ss"),
@@ -46,7 +46,7 @@ test to_casefold_is_the_full_folding =
         Test/equal(Char/to_casefold('1'), "1")]);
 
 -- The case predicates are the database's: a letter past ASCII has its case, a titlecase letter is neither upper nor lower, a letter Unicode 18.0.0 adds is a letter, and a digit is no letter.
-test the_case_predicates_are_the_database_s =
+test the_case_predicates_are_the_database_s =>
     Test/all([
         Test/assert("é is lower", Char/is_lower('é')),
         Test/assert("É is upper", Char/is_upper('É')),
@@ -56,13 +56,13 @@ test the_case_predicates_are_the_database_s =
         Test/assert("1 is no letter", Bool/not(Char/is_alpha('1')))]);
 
 -- A nibble's digit at both ends of each run, and a value past fifteen read modulo sixteen.
-test hex_digit_spells_a_nibble_modulo_sixteen =
+test hex_digit_spells_a_nibble_modulo_sixteen =>
     Test/equal(
         Str/flatten(List/map([0, 9, 10, 15, 16, 0xFF], (n) => Str/of_char(Char/hex_digit(n)))),
         "09af0f");
 
 -- A combining mark's class orders it among the marks beside it, and a starter's is `0`.
-test combining_class_is_the_database_s =
+test combining_class_is_the_database_s =>
     Test/all([
         Test/equal(Char/combining_class('\u{301}'), 230),
         Test/equal(Char/combining_class('\u{323}'), 220),
@@ -70,7 +70,7 @@ test combining_class_is_the_database_s =
         Test/equal(Char/combining_class('\u{D55C}'), 0)]);
 
 -- A decomposition is full: a character whose decomposition decomposes again is written as what it ends at, a Hangul syllable as its jamo, a compatibility character canonically as itself and by compatibility as what it stands for, and a character with none as itself.
-test the_decompositions_are_full =
+test the_decompositions_are_full =>
     Test/all([
         Test/equal(Char/canonical_decomposition('\u{1E69}'), "s\u{323}\u{307}"),
         Test/equal(Char/canonical_decomposition('\u{D55C}'), "\u{1112}\u{1161}\u{11AB}"),
@@ -80,8 +80,8 @@ test the_decompositions_are_full =
         Test/equal(Char/canonical_decomposition('a'), "a")]);
 
 -- A pair composes to the character whose canonical decomposition it is, a Hangul syllable's jamo to the syllable, and a pair whose composite is excluded or that names none to nothing.
-test primary_composite_is_the_composite_no_exclusion_keeps_out =
-    let spelled(composite: Option(Char)) -> Str =
+test primary_composite_is_the_composite_no_exclusion_keeps_out =>
+    let spelled(composite: Option(Char)) -> Str =>
         match composite | some(c) => Str/of_char(c) | none() => "none" end;
     Test/all([
         Test/equal(spelled(Char/primary_composite('A', '\u{30A}')), "\u{C5}"),

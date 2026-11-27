@@ -1,6 +1,6 @@
 # A totality refusal names the call path that does not descend
 
-**Not refined yet.** A definition refused as not known to terminate is named, and the call path that closes to no descent is not: `let spin(n: Nat) -> True = spin(n)` reads "a proof in `spin` reaches `spin`, which is not known to terminate", its caret on the call, and nothing says that `n` is handed on unchanged, or which of a group's calls compose to the path that repeats. A report is read to be acted on ([A diagnostic spells what its reader can write](../../design/tooling/a-diagnostic-spells-what-its-reader-can-write.md)), and the action here is changing that path. It waits on how the path reaches the refusal.
+**Not refined yet.** A definition refused as not known to terminate is named, and the call path that closes to no descent is not: `let spin(n: Nat) -> True => spin(n)` reads "a proof in `spin` reaches `spin`, which is not known to terminate", its caret on the call, and nothing says that `n` is handed on unchanged, or which of a group's calls compose to the path that repeats. A report is read to be acted on ([A diagnostic spells what its reader can write](../../design/tooling/a-diagnostic-spells-what-its-reader-can-write.md)), and the action here is changing that path. It waits on how the path reaches the refusal.
 
 ## What is wrong today
 

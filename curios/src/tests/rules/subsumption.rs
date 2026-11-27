@@ -13,9 +13,9 @@ fn a_function_types_codomain_is_cumulative() {
         use /std/{Bool, print};
         use /std/Bool/{Holds};
 
-        let both(@S: Type, f: (Bool) -> S, g: (Bool) -> S) -> Bool = true;
-        let is(b: Bool) -> Prop = Holds(b);
-        let over_types(b: Bool) -> Prop = (A: Type) -> Holds(b);
+        let both(@S: Type, f: (Bool) -> S, g: (Bool) -> S) -> Bool => true;
+        let is(b: Bool) -> Prop => Holds(b);
+        let over_types(b: Bool) -> Prop => (A: Type) -> Holds(b);
 
         let small_first: Bool = both(is, over_types);
         let large_first: Bool = both(over_types, is);
@@ -31,7 +31,7 @@ fn a_function_types_codomain_is_cumulative() {
         use /std/{Bool, Nat, print};
         use /std/Bool/{True, Holds};
 
-        let apply(motive: (Bool) -> Type, b: Bool) -> Type =
+        let apply(motive: (Bool) -> Type, b: Bool) -> Type =>
             motive(b);
 
         let witnessed: apply((b: Bool) => Nat, true) =
@@ -58,10 +58,10 @@ fn a_function_types_domain_is_invariant() {
         use /std/{Nat, print};
         use /std/Bool/{Holds};
 
-        let takes(motive: (Prop) -> Type) -> Type =
+        let takes(motive: (Prop) -> Type) -> Type =>
             motive(Holds(true));
 
-        let given(t: Prop) -> Type =
+        let given(t: Prop) -> Type =>
             Nat;
 
         let _bad: Type = takes(given);
@@ -70,7 +70,7 @@ fn a_function_types_domain_is_invariant() {
         b"",
     )
     .refused(&[
-        ("let given(t: Prop) -> Type =\n            Nat;", "let given(t: Type) -> Type =\n            t;"),
+        ("let given(t: Prop) -> Type =>\n            Nat;", "let given(t: Type) -> Type =>\n            t;"),
     ])
     .by_elaborator_in("/_bad", |error| {
         matches!(error, Error::TypeMismatch { inferred, expected, .. } if pinned(inferred) == "(t: Type) -> Type" && pinned(expected) == "(Prop) -> Type")
@@ -80,10 +80,10 @@ fn a_function_types_domain_is_invariant() {
         r#"
         use /std/{Bool, print};
 
-        let takes(motive: (Type) -> Type) -> Type =
+        let takes(motive: (Type) -> Type) -> Type =>
             motive(Type);
 
-        let given(p: Type) -> Type =
+        let given(p: Type) -> Type =>
             Bool;
 
         let _bad: Type = takes(given);
@@ -142,14 +142,14 @@ fn what_an_arms_case_makes_a_sort_or_a_function_type_is_subsumed_as_one_there() 
         use /std/{Bool, Nat, print};
         use /std/Bool/{Holds};
 
-        let S(b: Bool) -> Type = match b | true => Type | false => Nat end;
-        let H(b: Bool) -> Type = match b | true => (Nat) -> Type | false => Nat end;
+        let S(b: Bool) -> Type => match b | true => Type | false => Nat end;
+        let H(b: Bool) -> Type => match b | true => (Nat) -> Type | false => Nat end;
         "#;
 
     let admitted = r#"
-        let small(_: Nat) -> Type = Bool;
-        let sort(k: (Nat) -> Bool) -> Nat = match k(0) | true => let _: S(k(0)) = Bool; 0 | false => 0 end;
-        let family(k: (Nat) -> Bool) -> Nat = match k(0) | true => let _: H(k(0)) = small; 0 | false => 0 end;
+        let small(_: Nat) -> Type => Bool;
+        let sort(k: (Nat) -> Bool) -> Nat => match k(0) | true => let _: S(k(0)) = Bool; 0 | false => 0 end;
+        let family(k: (Nat) -> Bool) -> Nat => match k(0) | true => let _: H(k(0)) = small; 0 | false => 0 end;
 
         let _ = sort((_) => true) + family((_) => true);
         print("ok")
@@ -159,16 +159,16 @@ fn what_an_arms_case_makes_a_sort_or_a_function_type_is_subsumed_as_one_there() 
     for (at, declared, edits, inferred_as, expected_as) in [
         (
             "/_sort",
-            "let _sort(k: (Nat) -> Bool) -> Nat = match k(0) | true => let _: S(k(0)) = Bool; 0 | false => 0 end;",
+            "let _sort(k: (Nat) -> Bool) -> Nat => match k(0) | true => let _: S(k(0)) = Bool; 0 | false => 0 end;",
             [("= Bool; 0", "= Holds(true); 0")],
             "Prop",
             "Type",
         ),
         (
             "/_family",
-            "let is(_: Nat) -> Type = Bool;
-            let _family(k: (Nat) -> Bool) -> Nat = match k(0) | true => let _: H(k(0)) = is; 0 | false => 0 end;",
-            [("let is(_: Nat) -> Type = Bool;", "let is(_: Nat) -> Prop = Holds(true);")],
+            "let is(_: Nat) -> Type => Bool;
+            let _family(k: (Nat) -> Bool) -> Nat => match k(0) | true => let _: H(k(0)) = is; 0 | false => 0 end;",
+            [("let is(_: Nat) -> Type => Bool;", "let is(_: Nat) -> Prop => Holds(true);")],
             "(Nat) -> Prop",
             "(Nat) -> Type",
         ),
@@ -200,10 +200,10 @@ fn a_codomain_is_cumulative_past_a_rung_that_waits() {
         use /std/{Bool, Nat, Eq, print};
         use /std/Bool/{Holds};
 
-        let is(b: Bool) -> Prop = Holds(b);
-        let over_types(b: Bool) -> Prop = (A: Type) -> Holds(b);
-        let dom(c: Bool) -> Type = match c | true => Bool | false => Nat end;
-        let app(@c: Bool, @S: Type, f: (dom(c)) -> S, g: (dom(c)) -> S, w: Eq()(c, true)) -> Nat = 0;
+        let is(b: Bool) -> Prop => Holds(b);
+        let over_types(b: Bool) -> Prop => (A: Type) -> Holds(b);
+        let dom(c: Bool) -> Type => match c | true => Bool | false => Nat end;
+        let app(@c: Bool, @S: Type, f: (dom(c)) -> S, g: (dom(c)) -> S, w: Eq()(c, true)) -> Nat => 0;
 
         let large_first: Nat = app(over_types, is, Eq/refl());
         let small_first: Nat = app(is, over_types, Eq/refl());
@@ -223,9 +223,9 @@ fn a_rung_waits_on_a_family_its_sibling_solves() {
         use /std/{Bool, Nat, print};
         use /std/Bool/{Holds};
 
-        let is(b: Bool) -> Prop = Holds(b);
-        let over_types(b: Bool) -> Prop = (A: Type) -> Holds(b);
-        let app(@F: (Nat) -> Type, @S: Type, f: (F(0)) -> S, h: (F(0)) -> S, g: (n: Nat) -> F(n)) -> Nat = 0;
+        let is(b: Bool) -> Prop => Holds(b);
+        let over_types(b: Bool) -> Prop => (A: Type) -> Holds(b);
+        let app(@F: (Nat) -> Type, @S: Type, f: (F(0)) -> S, h: (F(0)) -> S, g: (n: Nat) -> F(n)) -> Nat => 0;
 
         let large_first: Nat = app(over_types, is, (n) => true);
         let small_first: Nat = app(is, over_types, (n) => true);
@@ -243,11 +243,11 @@ fn a_pair_that_is_no_sort_and_no_function_type_is_the_equation_it_was() {
     let source = r#"
         use /std/{Bool, Nat, print};
 
-        let Handler(c: Bool) -> Type = match c | true => (Nat) -> Nat | false => (Bool) -> Bool end;
-        let make(@c: Bool, h: Handler(c)) -> Nat = 0;
+        let Handler(c: Bool) -> Type => match c | true => (Nat) -> Nat | false => (Bool) -> Bool end;
+        let make(@c: Bool, h: Handler(c)) -> Nat => 0;
         let given: Handler(true) = (n) => n;
 
-        let tower(n: Nat) -> Type = match n | 0 => Type | m + 1 => tower(m) end;
+        let tower(n: Nat) -> Type => match n | 0 => Type | m + 1 => tower(m) end;
         let held: tower(2) = Nat;
 
         let _ = make(given);
@@ -264,9 +264,9 @@ fn a_sort_left_to_an_implicit_is_held_by_no_argument() {
     let source = r#"
         use /std/{Bool, Nat, List, print};
 
-        let both(@S: Type, f: (Bool) -> S, g: (Bool) -> S) -> Nat = 0;
-        let fam(b: Bool) -> Type = Nat;
-        let fam1(b: Bool) -> Type = Type;
+        let both(@S: Type, f: (Bool) -> S, g: (Bool) -> S) -> Nat => 0;
+        let fam(b: Bool) -> Type => Nat;
+        let fam1(b: Bool) -> Type => Type;
 
         let high_first: Nat = both(fam1, fam);
         let low_first: Nat = both(fam, fam1);
@@ -274,7 +274,7 @@ fn a_sort_left_to_an_implicit_is_held_by_no_argument() {
         let listed_high_first = [Type, Nat];
         let listed_low_first = [Nat, Type];
 
-        let arms(b: Bool) -> Nat =
+        let arms(b: Bool) -> Nat =>
             let high = match b | true => Type | false => Nat end;
             let low = match b | true => Nat | false => Type end;
             0;
@@ -294,13 +294,13 @@ fn a_declaration_keeps_no_argument_order_in_its_scheme() {
     let source = r#"
         use /std/{Bool, Nat, Eq, print};
 
-        let both(@S: Type, f: (Bool) -> S, g: (Bool) -> S) -> Nat = 0;
-        let fam1(b: Bool) -> Type = Type;
-        let fam2(b: Bool) -> Type = {K: Type, same: Eq()(K, Type)};
+        let both(@S: Type, f: (Bool) -> S, g: (Bool) -> S) -> Nat => 0;
+        let fam1(b: Bool) -> Type => Type;
+        let fam2(b: Bool) -> Type => {K: Type, same: Eq()(K, Type)};
 
-        let family_last(f: (Bool) -> Type) -> Nat = both(fam1, f);
-        let family_first(f: (Bool) -> Type) -> Nat = both(f, fam1);
-        let written(f: (Bool) -> Type) -> Nat = both(@Type, fam1, f);
+        let family_last(f: (Bool) -> Type) -> Nat => both(fam1, f);
+        let family_first(f: (Bool) -> Type) -> Nat => both(f, fam1);
+        let written(f: (Bool) -> Type) -> Nat => both(@Type, fam1, f);
 
         let _ = family_last(fam2) + family_first(fam2) + written(fam2);
         print("ok")
@@ -318,11 +318,11 @@ fn a_proposition_and_a_type_under_one_implicit_are_refused_in_either_order() {
 
         struct Twin(S: Type): pub Type { a: S, b: S }
         struct Pack: pub Type { @S: Type, a: S, b: S }
-        let both(@S: Type, f: (Bool) -> S, g: (Bool) -> S) -> Nat = 0;
-        let pick(@S: Type, x: S, y: S) -> Option(S) = Option/some(x);
-        let id(@A: Type, a: A) -> A = a;
-        let is(b: Bool) -> Prop = Holds(b);
-        let fam(b: Bool) -> Type = Nat;
+        let both(@S: Type, f: (Bool) -> S, g: (Bool) -> S) -> Nat => 0;
+        let pick(@S: Type, x: S, y: S) -> Option(S) => Option/some(x);
+        let id(@A: Type, a: A) -> A => a;
+        let is(b: Bool) -> Prop => Holds(b);
+        let fam(b: Bool) -> Type => Nat;
         "#;
 
     for (sound, edit, at, inferred_as, expected_as) in [
@@ -376,14 +376,14 @@ fn a_proposition_and_a_type_under_one_implicit_are_refused_in_either_order() {
             "/sys/Option(Type)",
         ),
         (
-            "(b: Bool) -> Nat = let arm = match b | true => Nat | false => Bool end; 0",
+            "(b: Bool) -> Nat => let arm = match b | true => Nat | false => Bool end; 0",
             ("| false => Bool end", "| false => Holds(b) end"),
             "/_mixed",
             "Type",
             "Prop",
         ),
         (
-            "(b: Bool) -> Nat = let arm = match b | true => Bool | false => Nat end; 0",
+            "(b: Bool) -> Nat => let arm = match b | true => Bool | false => Nat end; 0",
             ("match b | true => Bool", "match b | true => Holds(b)"),
             "/_mixed",
             "Prop",
@@ -446,9 +446,9 @@ fn propositions_under_one_implicit_make_it_a_sort_of_propositions() {
         use /std/Bool/{Holds};
 
         struct Twin(S: Type): pub Type { a: S, b: S }
-        let pick(@S: Type, x: S, y: S) -> S = x;
-        let id(@A: Type, a: A) -> A = a;
-        let through(@S: Type, x: S, k: (S) -> Nat) -> Nat = k(x);
+        let pick(@S: Type, x: S, y: S) -> S => x;
+        let id(@A: Type, a: A) -> A => a;
+        let through(@S: Type, x: S, k: (S) -> Nat) -> Nat => k(x);
 
         let both_props: Prop = pick(Holds(true), Holds(false));
         let passed: Prop = id(Holds(true));
@@ -474,7 +474,7 @@ fn a_sort_and_a_value_under_one_implicit_are_refused() {
         use /std/{Bool, Nat, print};
         use /std/Bool/{Holds};
 
-        let same(@S: Type, x: S, y: S) -> Nat = 0;
+        let same(@S: Type, x: S, y: S) -> Nat => 0;
         let _bad: Nat = same(Holds(true), Holds(false));
         print("")
         "#,
@@ -496,15 +496,15 @@ fn a_type_that_is_a_proposition_in_one_case_is_at_no_sort_left_to_a_caller() {
         | b()
         end
 
-        let F(c: Bool) -> Type = match c | true => Bool | false => Nat end;
+        let F(c: Bool) -> Type => match c | true => Bool | false => Nat end;
 
         /std/print("")
         "#,
         b"",
     )
     .refused(&[(
-        "-> Type = match c | true => Bool |",
-        "-> Sort = match c | true => Two |",
+        "-> Type => match c | true => Bool |",
+        "-> Sort => match c | true => Two |",
     )])
     .by_elaborator_in("/F", |error| {
         matches!(error, Error::SortDecidedTwice { prop: true, .. })
@@ -519,10 +519,10 @@ fn a_type_whose_sort_its_argument_computes_is_a_proposition_only_where_the_argum
         use /std/{Nat, Bool, Eq, print};
         use /std/Bool/{True};
 
-        let S(c: Bool) -> Type = match c | true => Prop | false => Type end;
-        let F(c: Bool) -> S(c) = match c | true => True | false => Nat end;
+        let S(c: Bool) -> Type => match c | true => Prop | false => Type end;
+        let F(c: Bool) -> S(c) => match c | true => True | false => Nat end;
 
-        let one(x: F(true), y: F(true)) -> Eq()(x, y) = Eq/refl();
+        let one(x: F(true), y: F(true)) -> Eq()(x, y) => Eq/refl();
         print("ok")
         "#,
         b"ok",
@@ -539,10 +539,10 @@ fn a_type_whose_sort_its_argument_computes_is_a_proposition_only_where_the_argum
         use /std/{Nat, Bool, print};
         use /std/Bool/{True};
 
-        let S(c: Bool) -> Type = match c | true => Prop | false => Type end;
-        let F(c: Bool) -> S(c) = match c | true => True | false => Nat end;
+        let S(c: Bool) -> Type => match c | true => Prop | false => Type end;
+        let F(c: Bool) -> S(c) => match c | true => True | false => Nat end;
 
-        let either(c: Bool, x: S(c)) -> Bool = c;
+        let either(c: Bool, x: S(c)) -> Bool => c;
         print("")
         "#,
         b"",
@@ -565,7 +565,7 @@ fn a_proposition_is_not_matched_into_a_sort_left_to_a_caller() {
         | b()
         end
 
-        let pick(@A: Prop, t: Two, x: A, y: A) -> A = match t | a() => x | b() => y end;
+        let pick(@A: Prop, t: Two, x: A, y: A) -> A => match t | a() => x | b() => y end;
 
         /std/print("")
         "#,
@@ -613,7 +613,7 @@ fn a_proposition_holds_no_field_at_a_sort_left_to_its_caller() {
 fn two_values_of_a_sort_left_to_a_caller_are_not_one() {
     control(
         r#"
-        let same(@A: Prop, x: A, y: A, G: (A) -> Prop, g: G(x)) -> G(y) = g;
+        let same(@A: Prop, x: A, y: A, G: (A) -> Prop, g: G(x)) -> G(y) => g;
 
         /std/print("")
         "#,
@@ -637,7 +637,7 @@ fn two_instances_of_a_family_apart_in_a_sort_are_two_types() {
 
         let v: Ph = Ph/mk((A: Prop, x: A, y: A) => Eq/refl());
 
-        let apply(p: Ph) -> Eq()(True/qed(), True/qed()) =
+        let apply(p: Ph) -> Eq()(True/qed(), True/qed()) =>
             match p | mk(g) => g(True, True/qed(), True/qed()) end;
 
         let leak: Eq()(True/qed(), True/qed()) = apply(v);
@@ -648,7 +648,7 @@ fn two_instances_of_a_family_apart_in_a_sort_are_two_types() {
     )
     .refused(&[
         ("        use /std/Bool/{True};\n", ""),
-        ("-> Eq()(True/qed(), True/qed()) =", "-> Eq()(false, true) ="),
+        ("-> Eq()(True/qed(), True/qed()) =>", "-> Eq()(false, true) =>"),
         ("g(True, True/qed(), True/qed())", "g(Bool, false, true)"),
         ("let leak: Eq()(True/qed(), True/qed()) = apply(v);", "let leak: Bool/False = Bool/false_neq_true(apply(v));"),
     ])
@@ -689,7 +689,7 @@ fn a_struct_at_a_sort_left_to_a_caller_has_one_inhabitant_only_at_prop() {
 
         struct Box(A: Sort): pub Type { a: A }
 
-        let generic(@A: Prop, x: Box(A), y: Box(A), G: (Box(A)) -> Prop, g: G(x)) -> G(y) = g;
+        let generic(@A: Prop, x: Box(A), y: Box(A), G: (Box(A)) -> Prop, g: G(x)) -> G(y) => g;
 
         let _held: Holds(true) = generic(Box { a = True/qed() }, Box { a = True/qed() }, (z: Box(Holds(true))) => Holds(true), True/qed());
 

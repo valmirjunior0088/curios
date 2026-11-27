@@ -46,7 +46,7 @@ satisfy Spell(GraphemeBreak) {
 }
 
 -- The class `/sys/grapheme_break` gives `code`.
-let of_code(code: Nat) -> GraphemeBreak =
+let of_code(code: Nat) -> GraphemeBreak =>
     match
     | code == /sys/grapheme_break/cr => cr()
     | code == /sys/grapheme_break/lf => lf()
@@ -71,5 +71,5 @@ let _every_code_the_database_names_is_a_case: Holds(
     True/qed();
 
 --- `c`'s class.
-pub let of_char(c: Char) -> GraphemeBreak =
+pub let of_char(c: Char) -> GraphemeBreak =>
     of_code(unicode/class(/sys/unicode/grapheme_break, /sys/grapheme_break/missing, c));

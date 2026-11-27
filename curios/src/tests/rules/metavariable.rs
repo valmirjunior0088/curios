@@ -22,7 +22,7 @@ fn a_metavariable_does_not_survive_into_an_induct_telescope() {
         r#"
         use /std/{Nat};
 
-        let drop(@A : Type, n : Nat) -> Nat = n;
+        let drop(@A : Type, n : Nat) -> Nat => n;
 
         induct Bad : pub Type
         | c(x : /std/Eq()(drop(@Nat, 0), 0))
@@ -44,7 +44,7 @@ fn a_metavariable_does_not_survive_into_a_struct_field() {
         r#"
         use /std/{Nat};
 
-        let drop(@A : Type, n : Nat) -> Nat = n;
+        let drop(@A : Type, n : Nat) -> Nat => n;
 
         struct Bad : pub Type {
             x : /std/Eq()(drop(@Nat, 0), 0)
@@ -66,9 +66,9 @@ fn a_metavariable_does_not_survive_a_definitions_type() {
         r#"
         use /std/{Nat};
 
-        let drop(@A : Type, n : Nat) -> Nat = n;
+        let drop(@A : Type, n : Nat) -> Nat => n;
 
-        let f(x : /std/Eq()(drop(@Nat, 0), 0)) -> Nat = 0;
+        let f(x : /std/Eq()(drop(@Nat, 0), 0)) -> Nat => 0;
 
         /std/Io/pure(())
         "#,
@@ -86,7 +86,7 @@ fn a_metavariable_does_not_survive_the_entrypoint_body() {
         r#"
         use /std/{Nat};
 
-        let drop(@A : Type, n : Nat) -> Nat = n;
+        let drop(@A : Type, n : Nat) -> Nat => n;
 
         /std/print(Nat/to_str(drop(@Nat, 0)))
         "#,

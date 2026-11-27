@@ -11,7 +11,7 @@ fn constructor_pattern_matches_an_implicit_payload() {
         | nil() : (0)
         | cons(@n : Nat, head : T, tail : Vec(T)(n)) : (n + 1)
         end
-        let head3(v : Vec(Nat)(3)) -> Nat =
+        let head3(v : Vec(Nat)(3)) -> Nat =>
             match v
             | cons(@m, x, xs) => x
             end;
@@ -29,7 +29,7 @@ fn constructor_pattern_leaves_a_hidden_payload_out() {
         | nil() : (0)
         | cons(@n : Nat, head : T, tail : Vec(T)(n)) : (n + 1)
         end
-        let head3(v : Vec(Nat)(3)) -> Nat =
+        let head3(v : Vec(Nat)(3)) -> Nat =>
             match v
             | cons(x, xs) => x
             end;
@@ -43,9 +43,9 @@ fn constructor_pattern_leaves_a_hidden_payload_out() {
 fn constructor_pattern_of_hidden_payloads_alone_writes_none() {
     let source = r#"
         use /std/{Nat, Str, Eq, print};
-        let flip(@x: Nat, @y: Nat, p: Eq()(x, y)) -> Eq()(y, x) =
+        let flip(@x: Nat, @y: Nat, p: Eq()(x, y)) -> Eq()(y, x) =>
             match p | refl() => Eq/refl() end;
-        let carried(@x: Nat, @y: Nat, p: Eq()(x, y), n: Nat) -> Nat =
+        let carried(@x: Nat, @y: Nat, p: Eq()(x, y), n: Nat) -> Nat =>
             match flip(p) | refl() => n end;
         print(Nat/to_str(carried(@4, @4, Eq/refl(), 7)))
         "#;
@@ -61,8 +61,8 @@ fn a_hidden_payload_left_out_is_a_fact_in_the_arm() {
         induct Positive: pub Type
         | at(n: Nat, @Holds(0 < n))
         end
-        let halve(n: Nat, @_: Holds(0 < n)) -> Nat = n / 2;
-        let below(p: Positive) -> Nat = match p | at(n) => halve(n) end;
+        let halve(n: Nat, @_: Holds(0 < n)) -> Nat => n / 2;
+        let below(p: Positive) -> Nat => match p | at(n) => halve(n) end;
         print(Nat/to_str(below(Positive/at(4))))
         "#;
     assert_eq!(run(source), b"2");
@@ -77,7 +77,7 @@ fn constructor_pattern_plain_binder_never_binds_a_hidden_payload() {
         | nil() : (0)
         | cons(@n : Nat, head : T, tail : Vec(T)(n)) : (n + 1)
         end
-        let head3(v : Vec(Nat)(3)) -> Nat =
+        let head3(v : Vec(Nat)(3)) -> Nat =>
             match v
             | cons(m, x, xs) => x
             end;
@@ -99,7 +99,7 @@ fn constructor_pattern_hidden_binder_past_its_run_has_no_slot() {
         | nil() : (0)
         | cons(@n : Nat, head : T, tail : Vec(T)(n)) : (n + 1)
         end
-        let head3(v : Vec(Nat)(3)) -> Nat =
+        let head3(v : Vec(Nat)(3)) -> Nat =>
             match v
             | cons(x, xs, @m) => x
             end;
@@ -121,7 +121,7 @@ fn constructor_pattern_rows_of_one_constructor_write_their_own_hidden_payloads()
         | nil() : (0)
         | cons(@n : Nat, head : T, tail : Vec(T)(n)) : (n + 1)
         end
-        let first(@n : Nat, v : Vec(Nat)(n), o : Option(Nat)) -> Nat =
+        let first(@n : Nat, v : Vec(Nat)(n), o : Option(Nat)) -> Nat =>
             match (v, o)
             | (cons(@m, x, xs), some(y)) => x + y
             | (cons(x, xs), none()) => x
@@ -143,7 +143,7 @@ fn constructor_pattern_mark_on_explicit_payload_is_rejected() {
         | nil() : (0)
         | cons(@n : Nat, head : T, tail : Vec(T)(n)) : (n + 1)
         end
-        let head3(v : Vec(Nat)(3)) -> Nat =
+        let head3(v : Vec(Nat)(3)) -> Nat =>
             match v
             | cons(@m, @x, xs) => x
             end;

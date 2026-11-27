@@ -11,7 +11,7 @@ induct Stmt: Type
 | array_header(List(Str))
 end
 
-let key_path(acc: List(Str)) -> Parse(Str, List(Str)) =
+let key_path(acc: List(Str)) -> Parse(Str, List(Str)) =>
     let k = key_part()!;
     let () = ws()!;
     let acc2 = [..acc, k];
@@ -23,7 +23,7 @@ let key_path(acc: List(Str)) -> Parse(Str, List(Str)) =
     | none() => Parse/pure(acc2)
     end;
 
-let header(double: Bool) -> Parse(Str, List(Str)) =
+let header(double: Bool) -> Parse(Str, List(Str)) =>
     let () = ws()!;
     let path = key_path([])!;
     let _ = Parse/label(Parse/str/expect(']'), "expected ']' in table header")!;
@@ -34,7 +34,7 @@ let header(double: Bool) -> Parse(Str, List(Str)) =
     | false => Parse/pure(path)
     end;
 
-let stmt() -> Parse(Str, Stmt) =
+let stmt() -> Parse(Str, Stmt) =>
     let bracket = Parse/optional(Parse/str/expect('['))!;
     match bracket
     | none() =>
@@ -55,7 +55,7 @@ let stmt() -> Parse(Str, Stmt) =
         end
     end;
 
-let stmts(acc: List(Stmt)) -> Parse(Str, List(Stmt)) =
+let stmts(acc: List(Stmt)) -> Parse(Str, List(Stmt)) =>
     let () = trivia()!;
     let done = Parse/optional(Parse/eof())!;
     match done
@@ -67,7 +67,7 @@ let stmts(acc: List(Stmt)) -> Parse(Str, List(Stmt)) =
     end;
 
 --- Exactly one whole document as its root table; anything after it is refused, as is a document that breaks the table-construction rules.
-pub let decode(source: Str) -> Result(Error, Map(Str, Toml)) =
+pub let decode(source: Str) -> Result(Error, Map(Str, Toml)) =>
     match Parse/run(stmts([]), source)
     | failure(e) => Result/failure(Error/syntax(e))
     | success(parsed) =>

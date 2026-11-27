@@ -48,7 +48,7 @@ fn a_program_suspended_on_a_timer_wakes_into_its_rest() {
         r#"
         use /std/{Io, Nat};
         use /std/time/{Duration};
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let woke = Io/bind(Io/sleep(Duration/of_millis(50)), (_) => Io/pure(7))!;
             /std/print(Nat/to_str(woke));
         entry()
@@ -64,7 +64,7 @@ fn a_suspension_passed_out_through_binds_resumes_into_their_continuations_in_ord
         r#"
         use /std/{Io, Nat};
         use /std/time/{Duration};
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let suspended = Io/bind(Io/sleep(Duration/zero), (_) => Io/pure(1));
             let x = Io/bind(Io/bind(suspended, (a) => Io/pure(a + 1)), (b) => Io/pure(b * 10))!;
             /std/print(Nat/to_str(x));
@@ -81,9 +81,9 @@ fn a_program_suspended_on_a_filled_cell_goes_on_into_its_rest() {
     let (code, output, _) = ended(
         r#"
         use /std/{Io};
-        let told(ended: Io/Scope/Ended) -> Io({}) =
+        let told(ended: Io/Scope/Ended) -> Io({}) =>
             /std/print(match ended | finished() => "finished|" | cancelled() => "cancelled|" end);
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let _ = Io/scope((scope) => Io/bind(Io/Scope/defer(scope, told), (_) => Io/bind(Io/yield(), (_) => /std/print("resumed|"))))!;
             /std/print("after|");
         entry()
@@ -103,9 +103,9 @@ fn a_program_suspended_on_an_empty_cell_alone_ends_reporting_the_deadlock() {
         r#"
         use /std/{Io};
         use /std/Io/{Future};
-        let told(ended: Io/Scope/Ended) -> Io({}) =
+        let told(ended: Io/Scope/Ended) -> Io({}) =>
             /std/print(match ended | finished() => "finished|" | cancelled() => "cancelled|" end);
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let never = Future/new(@{})!;
             let _ = Io/scope((scope) => Io/bind(Io/Scope/defer(scope, told), (_) => Io/bind(Future/wait(never), (_) => /std/print("resumed|"))))!;
             /std/print("after|");
@@ -127,8 +127,8 @@ fn a_cancel_that_suspends_part_way_runs_to_its_end() {
         r#"
         use /std/{Io};
         use /std/time/{Duration};
-        let entry() -> /std/Io({}) =
-            let release(_: Io/Scope/Ended) -> Io({}) = Io/bind(Io/sleep(Duration/zero), (_) => /std/print("abandoned|"));
+        let entry() -> /std/Io({}) =>
+            let release(_: Io/Scope/Ended) -> Io({}) => Io/bind(Io/sleep(Duration/zero), (_) => /std/print("abandoned|"));
             let _ = Io/scope((scope) => Io/bind(Io/Scope/defer(scope, release), (_) => Io/bind(Io/select(@{}, []), (_) => /std/print("resumed|"))))!;
             /std/print("after|");
         entry()
@@ -147,7 +147,7 @@ fn a_program_suspended_on_no_handle_runs_its_cancel_and_ends_reporting_the_deadl
     let (code, output, errors) = ended(
         r#"
         use /std/{Io};
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let _ = Io/scope((scope) => Io/bind(Io/Scope/defer(scope, (_) => /std/print("abandoned|")), (_) => Io/bind(Io/select(@{}, []), (_) => /std/print("resumed|"))))!;
             /std/print("after|");
         entry()
@@ -173,7 +173,7 @@ fn the_real_host_sleeps_a_suspension_on_a_timer_until_its_instant() {
         r#"
         use /std/{Io, Str, Path, File, Try};
         use /std/time/{Instant, Duration};
-        let main() -> Try(Io, Io/Error, {}) =
+        let main() -> Try(Io, Io/Error, {}) =>
             let start = Instant/now()!;
             let _ = Io/sleep(Duration/of_millis(30))!;
             let slept = Duration/to_millis(Instant/diff(Instant/now()!, start));
@@ -207,7 +207,7 @@ fn the_real_host_runs_a_branch_while_another_waits_on_a_fifo() {
     let source = fill!(
         r#"
         use /std/{Io, Str, Path, File, Try};
-        let main() -> Try(Io, Io/Error, {}) =
+        let main() -> Try(Io, Io/Error, {}) =>
             let (read, marked) = Io/both(Try/run(File/read_all(Path/of_str("${fifo}"))), Try/run(File/write_all(Path/of_str("${marker}"), Str/to_bytes("ran"))))!;
             let _ = marked!;
             let bytes = read!;
@@ -261,7 +261,7 @@ fn what_a_suspension_holds_survives_the_collections_between_its_turns() {
         r#"
         use /std/{Io, Nat, List};
         use /std/time/{Duration};
-        let turn(n: Nat, held: List(Nat)) -> Io(Nat) =
+        let turn(n: Nat, held: List(Nat)) -> Io(Nat) =>
             match n
             | 0 => Io/pure(List/length(held))
             | m + 1 =>
@@ -269,7 +269,7 @@ fn what_a_suspension_holds_survives_the_collections_between_its_turns() {
                 let _ = Io/bind(Io/sleep(Duration/zero), (_) => Io/pure(List/length(garbage)))!;
                 turn(m, [n, ..held])
             end;
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let counted = turn(3000, [])!;
             /std/print(Nat/to_str(counted));
         entry()
@@ -316,7 +316,7 @@ fn a_branch_ticks_while_an_embedder_s_row_is_answered_later() {
         use /std/{Io, Nat};
         use /std/time/{Duration};
         foreign fetch(Nat) -> Nat;
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let tick = Io/bind(Io/sleep(Duration/of_millis(5)), (_) => /std/print("tick "));
             let (n, _) = Io/both(fetch(3), tick)!;
             /std/print(Nat/to_str(n));
@@ -341,7 +341,7 @@ fn the_real_host_runs_a_branch_while_another_waits_on_a_row_answered_later() {
         r#"
         use /std/{Io, Str, Path, File, Try, Nat};
         foreign fetch(Nat) -> Nat;
-        let main() -> Try(Io, Io/Error, {}) =
+        let main() -> Try(Io, Io/Error, {}) =>
             let (n, marked) = Io/both(fetch(3), Try/run(File/write_all(Path/of_str("${marker}"), Str/to_bytes("ran"))))!;
             let _ = marked!;
             File/write_all(Path/of_str("${report}"), Str/to_bytes(Nat/to_str(n)));
@@ -401,7 +401,7 @@ fn a_call_cancelled_while_its_answer_is_pending_drops_the_future() {
         use /std/{Io};
         use /std/time/{Duration};
         foreign hang(Nat) -> Nat;
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let came = Io/timeout(Duration/of_millis(10), hang(1))!;
             /std/print(match came | some(_) => "came" | none() => "timed out" end);
         entry()

@@ -198,12 +198,12 @@ fn every_commutative_law_holds_over_atoms_that_differ_in_a_proof() {
 
 /// What a row over calls apart in a universe instance is stated under: a family whose level only sizes its parameter, and at each carrier whose values hold no type a recursive definition over it. Every written call of one takes a level of its own, which nothing ties to another call's and no unfolding settles, a member reproducing its levels at every step.
 const INSTANCES: &str = "induct Tree(K: Type): Type | tip(K) | join(Tree(K), Tree(K)) end
-let nat_of(@K: Type, t: Tree(K)) -> Nat = match t | tip(_) => 1 | join(l, r) => nat_of(l) + nat_of(r) end;
-let int_of(@K: Type, t: Tree(K)) -> Int = match t | tip(_) => +1 | join(l, r) => int_of(l) + int_of(r) end;
-let bool_of(@K: Type, t: Tree(K)) -> Bool = match t | tip(_) => true | join(l, r) => bool_of(l) && bool_of(r) end;
-let byte_of(@K: Type, t: Tree(K)) -> Byte = match t | tip(_) => 1 | join(l, r) => Byte/and(byte_of(l), byte_of(r)) end;
-let flt_of(@K: Type, t: Tree(K)) -> Flt = match t | tip(_) => 1.0 | join(l, r) => flt_of(l) + flt_of(r) end;
-let bytes_of(@K: Type, t: Tree(K)) -> Bytes = match t | tip(_) => 0x[1] | join(l, r) => 0x[..bytes_of(l), ..bytes_of(r)] end;";
+let nat_of(@K: Type, t: Tree(K)) -> Nat => match t | tip(_) => 1 | join(l, r) => nat_of(l) + nat_of(r) end;
+let int_of(@K: Type, t: Tree(K)) -> Int => match t | tip(_) => +1 | join(l, r) => int_of(l) + int_of(r) end;
+let bool_of(@K: Type, t: Tree(K)) -> Bool => match t | tip(_) => true | join(l, r) => bool_of(l) && bool_of(r) end;
+let byte_of(@K: Type, t: Tree(K)) -> Byte => match t | tip(_) => 1 | join(l, r) => Byte/and(byte_of(l), byte_of(r)) end;
+let flt_of(@K: Type, t: Tree(K)) -> Flt => match t | tip(_) => 1.0 | join(l, r) => flt_of(l) + flt_of(r) end;
+let bytes_of(@K: Type, t: Tree(K)) -> Bytes => match t | tip(_) => 0x[1] | join(l, r) => 0x[..bytes_of(l), ..bytes_of(r)] end;";
 
 /// The definition of [`INSTANCES`] that answers a value of `carrier`, where the carrier's values hold no type.
 fn answering(carrier: Carrier) -> Option<&'static str> {
@@ -370,7 +370,10 @@ fn every_law_holds_over_atoms_spelled_two_ways() {
                 (telescope, claim.clone())
             })
             .collect::<Vec<_>>();
-        if let Err(found) = closes(&format!("{IMPORTS}\nlet Same(T: Type) -> Type = T;"), &rows) {
+        if let Err(found) = closes(
+            &format!("{IMPORTS}\nlet Same(T: Type) -> Type => T;"),
+            &rows,
+        ) {
             failures.push(format!("at order {order}:\n{}", found.join("\n")));
         }
     }
@@ -853,7 +856,7 @@ fn solving(index: usize, row: &Row) -> Option<String> {
         .collect::<Vec<_>>();
     let helper_binders = helper.join(", ");
     Some(format!(
-        "let solve{index}({outer}) -> Bool = let h(@{hole}: {type_}, {helper_binders}, e: {claim}) -> Bool = true; h({}, Eq/refl());",
+        "let solve{index}({outer}) -> Bool => let h(@{hole}: {type_}, {helper_binders}, e: {claim}) -> Bool => true; h({}, Eq/refl());",
         arguments.join(", ")
     ))
 }
@@ -885,7 +888,7 @@ fn distinct_constructors_stay_distinct() {
         )
         .enumerate()
         .map(|(index, (binders, equation))| {
-            format!("let absurd{index}({binders}, p: {equation}) -> Nat = match p end;")
+            format!("let absurd{index}({binders}, p: {equation}) -> Nat => match p end;")
         })
         .collect::<Vec<_>>();
     let source = format!("{IMPORTS}\n{}\nIo/pure(())", items.join("\n"));
@@ -899,7 +902,7 @@ fn distinct_constructors_stay_distinct() {
     }
 
     let control = format!(
-        "{IMPORTS}\nlet unrefuted(x: Nat, p: Eq()(x, 1)) -> Nat = match p end;\nIo/pure(())"
+        "{IMPORTS}\nlet unrefuted(x: Nat, p: Eq()(x, 1)) -> Nat => match p end;\nIo/pure(())"
     );
     assert!(
         typecheck(&control).is_err(),

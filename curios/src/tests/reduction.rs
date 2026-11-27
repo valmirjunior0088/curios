@@ -161,7 +161,7 @@ fn ascii_refinement(n: usize) -> String {
     fill!(
         r#"
         use /std/{Bytes, Byte, Nat, Bool, Eq};
-        let all_ascii(b : Bytes) -> Bool =
+        let all_ascii(b : Bytes) -> Bool =>
             match b
             | 0x[] => true
             | 0x[h, ..t] =>
@@ -255,7 +255,7 @@ fn paired_fold(width: usize, paired: bool) -> String {
         true => fill!(
             r#"
             use /std/{Nat, Byte, Bytes, Eq};
-            let go(x: Bytes, c: Byte) -> {Bytes, Byte} =
+            let go(x: Bytes, c: Byte) -> {Bytes, Byte} =>
                 match x
                 | 0x[] => (0x[], c)
                 | 0x[h, ..t] =>
@@ -272,7 +272,7 @@ fn paired_fold(width: usize, paired: bool) -> String {
         false => fill!(
             r#"
             use /std/{Nat, Byte, Bytes, Eq};
-            let go(x: Bytes, c: Byte) -> Bytes =
+            let go(x: Bytes, c: Byte) -> Bytes =>
                 match x
                 | 0x[] => 0x[]
                 | 0x[h, ..t] => 0x[Byte/xor(h, c), ..go(t, Byte/xor(h, c))]
@@ -356,7 +356,7 @@ fn a_bytes_walk_is_run_once_however_many_follow_it() {
         let literal = "ab,".repeat(tokens);
         let total = 2 * tokens;
         fill!(
-            "use /std/{Parse, Result, Eq, Byte, Bytes, Str, Nat};\n\nlet token() -> Parse(Bytes, Nat) =\n    let run = Parse/bytes/take_while((b) => Byte/to_nat(b) != ',')!;\n    let _ = Parse/bytes/expect(',')!;\n    Parse/pure(Bytes/length(run));\n\nlet tokens(count: Nat, acc: Nat) -> Parse(Bytes, Nat) =\n    match count\n    | 0 => Parse/pure(acc)\n    | k + 1 =>\n        let n = token()!;\n        tokens(k, acc + n)\n    end;\n\nlet walked: Eq()(Parse/run(tokens(${tokens}, 0), Str/to_bytes(\"${literal}\")), Result/success(${total})) = Eq/refl();\n\n/std/print(\"ok\")\n",
+            "use /std/{Parse, Result, Eq, Byte, Bytes, Str, Nat};\n\nlet token() -> Parse(Bytes, Nat) =>\n    let run = Parse/bytes/take_while((b) => Byte/to_nat(b) != ',')!;\n    let _ = Parse/bytes/expect(',')!;\n    Parse/pure(Bytes/length(run));\n\nlet tokens(count: Nat, acc: Nat) -> Parse(Bytes, Nat) =>\n    match count\n    | 0 => Parse/pure(acc)\n    | k + 1 =>\n        let n = token()!;\n        tokens(k, acc + n)\n    end;\n\nlet walked: Eq()(Parse/run(tokens(${tokens}, 0), Str/to_bytes(\"${literal}\")), Result/success(${total})) = Eq/refl();\n\n/std/print(\"ok\")\n",
             tokens,
             literal,
             total
@@ -384,7 +384,7 @@ fn parse_claim(letters: usize, claim: impl FnOnce(&str) -> String) -> String {
     ));
 
     fill!(
-        "use /std/{Str, Parse, Result, Bool, Eq};\nuse /std/Bool/{Holds, True};\n\nlet ok(r: Result(Parse/Error, {})) -> Bool =\n    match r\n    | success(_) => true\n    | failure(_) => false\n    end;\n\n${claim}\n\n/std/print(\"ok\")\n",
+        "use /std/{Str, Parse, Result, Bool, Eq};\nuse /std/Bool/{Holds, True};\n\nlet ok(r: Result(Parse/Error, {})) -> Bool =>\n    match r\n    | success(_) => true\n    | failure(_) => false\n    end;\n\n${claim}\n\n/std/print(\"ok\")\n",
         claim
     )
 }
@@ -463,7 +463,7 @@ fn an_equation_costs_what_its_decision_costs() {
 /// A published item's binders state whether they bind a proof, each asked at its declared type under the binders before it: a function's proof does, and its type parameter, its number and a value at the type parameter do not; of two `let`s, the equation does and the sum does not.
 #[test]
 fn a_published_binder_states_whether_it_binds_a_proof() {
-    let source = "use /std/{Nat, Eq};\nuse /std/Bool/{Holds};\n\nlet through(A: Type, n: Nat, h: Holds(0 <= n), x: A) -> Nat =\n    let twice = n + n;\n    let same: Eq()(n, n) = Eq/refl();\n    twice;\n\n/std/print(\"ok\")\n";
+    let source = "use /std/{Nat, Eq};\nuse /std/Bool/{Holds};\n\nlet through(A: Type, n: Nat, h: Holds(0 <= n), x: A) -> Nat =>\n    let twice = n + n;\n    let same: Eq()(n, n) = Eq/refl();\n    twice;\n\n/std/print(\"ok\")\n";
     let entrypoint = source.parse::<Entrypoint>().expect("the program parses");
     let program = typecheck_with_prelude(DEFAULT_BUDGET, &entrypoint, &RootSource::none())
         .expect("the program elaborates within the default budget")
@@ -501,7 +501,7 @@ fn a_published_binder_states_whether_it_binds_a_proof() {
 /// `checked` is no recursive member's call: it eliminates the lemma, so taking it to a weak-head value runs the lemma's induction, `steps` deep, where a recursive call alone would stay folded.
 fn proof_argument_claim(steps: usize, proof: &str) -> String {
     fill!(
-        "use /std/{Nat, Eq};\n\nlet lemma(n: Nat) -> Eq()(n, n) =\n    match n\n    | 0 => Eq/refl()\n    | k + 1 => match lemma(k) | refl() => Eq/refl() end\n    end;\n\nlet checked(n: Nat) -> Eq()(n, n) =\n    match lemma(n) | refl() => Eq/refl() end;\n\nlet through(n: Nat, h: Eq()(n, n)) -> Nat = n;\n\nlet _claim: Eq()(through(${steps}, ${proof}), ${steps}) = Eq/refl();\n\n/std/print(\"ok\")\n",
+        "use /std/{Nat, Eq};\n\nlet lemma(n: Nat) -> Eq()(n, n) =>\n    match n\n    | 0 => Eq/refl()\n    | k + 1 => match lemma(k) | refl() => Eq/refl() end\n    end;\n\nlet checked(n: Nat) -> Eq()(n, n) =>\n    match lemma(n) | refl() => Eq/refl() end;\n\nlet through(n: Nat, h: Eq()(n, n)) -> Nat => n;\n\nlet _claim: Eq()(through(${steps}, ${proof}), ${steps}) = Eq/refl();\n\n/std/print(\"ok\")\n",
         steps,
         proof
     )
@@ -577,7 +577,7 @@ fn a_recursion_through_an_intrinsics_operand_runs_at_constant_native_depth() {
             use /std/{Nat};
             use /std/Bool/{True, Holds};
 
-            pub let sum(n: Nat) -> Nat = match n | 0 => 0 | k + 1 => sum(k) + 1 end;
+            pub let sum(n: Nat) -> Nat => match n | 0 => 0 | k + 1 => sum(k) + 1 end;
             pub let x: Holds(sum(20000) == 20000) = True/qed();
 
             /std/print("ok")

@@ -9,9 +9,9 @@ use crate::test_support::*;
 fn a_nat_case_split_is_erased_under_its_successor() {
     let source = r#"
         use /std/{Nat};
-        let Step(n: Nat) -> Type =
+        let Step(n: Nat) -> Type =>
             match n | 0 => Nat | k + 1 => (Nat) -> Nat end;
-        let f(x: Nat, g: Step(x), m: Nat) -> Nat =
+        let f(x: Nat, g: Step(x), m: Nat) -> Nat =>
             match x | 0 => m | xp + 1 => g(m) + xp end;
         /std/print(Nat/to_str(f(5, (k) => k + 5, 4)))
         "#;
@@ -23,10 +23,10 @@ fn a_nat_case_split_is_erased_under_its_successor() {
 fn a_nat_case_split_over_an_expression_is_erased_under_its_successor() {
     let source = r#"
         use /std/{Nat};
-        let Step(n: Nat) -> Type =
+        let Step(n: Nat) -> Type =>
             match n | 0 => Nat | k + 1 => (Nat) -> Nat end;
-        let count(n: Nat) -> Nat = match n | 0 => 0 | k + 1 => count(k) + 1 end;
-        let f(x: Nat, g: Step(count(x)), m: Nat) -> Nat =
+        let count(n: Nat) -> Nat => match n | 0 => 0 | k + 1 => count(k) + 1 end;
+        let f(x: Nat, g: Step(count(x)), m: Nat) -> Nat =>
             match count(x) | 0 => m | xp + 1 => g(m) + xp end;
         /std/print(Nat/to_str(f(5, (k) => k + 5, 4)))
         "#;
@@ -38,9 +38,9 @@ fn a_nat_case_split_over_an_expression_is_erased_under_its_successor() {
 fn a_list_case_split_is_erased_under_its_cons() {
     let source = r#"
         use /std/{Nat, List};
-        let Shape(l: List(Nat)) -> Type =
+        let Shape(l: List(Nat)) -> Type =>
             match l | [] => Nat | [_, ..t] => (Nat) -> Nat end;
-        let f(l: List(Nat), g: Shape(l)) -> Nat =
+        let f(l: List(Nat), g: Shape(l)) -> Nat =>
             match l | [] => 0 | [_, ..t] => g(List/length(t)) end;
         /std/print(Nat/to_str(f([1, 2, 3], (k) => k + 1)))
         "#;
@@ -52,9 +52,9 @@ fn a_list_case_split_is_erased_under_its_cons() {
 fn a_bytes_case_split_is_erased_under_its_cons() {
     let source = r#"
         use /std/{Nat, Bytes};
-        let Shape(b: Bytes) -> Type =
+        let Shape(b: Bytes) -> Type =>
             match b | 0x[] => Nat | 0x[_, ..t] => (Nat) -> Nat end;
-        let f(b: Bytes, g: Shape(b)) -> Nat =
+        let f(b: Bytes, g: Shape(b)) -> Nat =>
             match b | 0x[] => 0 | 0x[_, ..t] => g(Bytes/length(t)) end;
         /std/print(Nat/to_str(f(0x[1, 2, 3], (k) => k + 1)))
         "#;

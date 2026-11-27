@@ -4,13 +4,13 @@ use /std/{Int, Bool, Eq};
 use /std/Bool/{True, Holds};
 
 --- `a < b` gives `n + a < n + b`: a dividend is below its quotient's multiple raised by its divisor's magnitude, as the elaborator's proofs read an `Int` quotient's bound from above.
-pub let add_mono_l(n: Int, @a: Int, @b: Int, p: Holds(a < b)) -> Holds(n + a < n + b) =
+pub let add_mono_l(n: Int, @a: Int, @b: Int, p: Holds(a < b)) -> Holds(n + a < n + b) =>
     p;
 
 --- A bound whose two sides differ is strict: `a <= b` and `a == b` failing give `a < b`.
 ---
 --- The case of a disequality its loose bound holds in.
-pub let of_le_ne(a: Int, b: Int, p: Holds(a <= b), q: Holds(Bool/not(a == b))) -> Holds(a < b) =
+pub let of_le_ne(a: Int, b: Int, p: Holds(a <= b), q: Holds(Bool/not(a == b))) -> Holds(a < b) =>
     match a < b
     | true => True/qed()
     | false =>

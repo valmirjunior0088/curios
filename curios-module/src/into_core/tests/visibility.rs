@@ -183,7 +183,7 @@ fn facade_may_name_what_it_re_exports_in_a_public_signature() {
                 pub let Helper : Type = Type;
             end
             pub use Impl/{Helper};
-            pub let build(h : Helper) -> Helper = h;
+            pub let build(h : Helper) -> Helper => h;
         end
         Type
     "#);
@@ -200,7 +200,7 @@ fn public_signature_naming_an_unexported_subtree_item_is_rejected() {
                 pub let Helper : Type = Type;
             end
             use Impl/{Helper};
-            pub let build(h : Helper) -> Helper = h;
+            pub let build(h : Helper) -> Helper => h;
         end
         Type
     "#

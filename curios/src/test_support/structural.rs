@@ -20,12 +20,12 @@ use {
 
 pub const LCG: &str = r#"
     use /std/{Nat, List, Proc};
-    let loop(k : Nat, x : Nat) -> Nat =
+    let loop(k : Nat, x : Nat) -> Nat =>
         match k
         | 0 => x
         | kp + 1 => loop(kp, 75 * x % 65537)
         end;
-    let entry() -> /std/Io({}) =
+    let entry() -> /std/Io({}) =>
         let taint = List/length(Proc/args()!);
         let n : Nat = taint;
         /std/print(Nat/to_str(loop(n, 1)));
@@ -38,17 +38,17 @@ pub const TREES: &str = r#"
     | leaf(Nat)
     | node(Nat, Tree, Tree)
     end
-    let build(d : Nat, v : Nat) -> Tree =
+    let build(d : Nat, v : Nat) -> Tree =>
         match d
         | 0 => Tree/leaf(v)
         | dp + 1 => Tree/node(v, build(dp, v * 2), build(dp, v * 2 + 1))
         end;
-    let sum(t : Tree) -> Nat =
+    let sum(t : Tree) -> Nat =>
         match t
         | leaf(n) => n % 1000003
         | node(n, l, r) => (n + sum(l) + sum(r)) % 1000003
         end;
-    let entry() -> /std/Io({}) =
+    let entry() -> /std/Io({}) =>
         let taint = List/length(Proc/args()!);
         let d : Nat = taint;
         /std/print(Nat/to_str(sum(build(d, 1))));
@@ -57,12 +57,12 @@ pub const TREES: &str = r#"
 
 pub const HIGHER_ORDER: &str = r#"
     use /std/{Nat, Bool, List, Proc};
-    let pick(b : Bool) -> (Nat) -> Nat =
+    let pick(b : Bool) -> (Nat) -> Nat =>
         match b
         | true => (y) => y + 1
         | false => (y) => y * 2
         end;
-    let entry() -> /std/Io({}) =
+    let entry() -> /std/Io({}) =>
         let taint = List/length(Proc/args()!);
         let n : Nat = taint;
         let f = pick(n <= 0);
@@ -72,14 +72,14 @@ pub const HIGHER_ORDER: &str = r#"
 
 pub const DIRECT_ESCAPING: &str = r#"
     use /std/{Nat, Bool, List, Proc};
-    let inc(x : Nat) -> Nat = x + 1;
-    let apply(g : (Nat) -> Nat, x : Nat) -> Nat = g(x);
-    let select(b : Bool, g : (Nat) -> Nat) -> (Nat) -> Nat =
+    let inc(x : Nat) -> Nat => x + 1;
+    let apply(g : (Nat) -> Nat, x : Nat) -> Nat => g(x);
+    let select(b : Bool, g : (Nat) -> Nat) -> (Nat) -> Nat =>
         match b
         | true => g
         | false => (y) => y
         end;
-    let entry() -> /std/Io({}) =
+    let entry() -> /std/Io({}) =>
         let taint = List/length(Proc/args()!);
         let n : Nat = taint;
         let escaped = select(n <= 0, inc);
@@ -89,12 +89,12 @@ pub const DIRECT_ESCAPING: &str = r#"
 
 pub const FUNCTION_ONLY: &str = r#"
     use /std/{Nat, List, Proc};
-    let down(n : Nat, acc : Nat) -> Nat =
+    let down(n : Nat, acc : Nat) -> Nat =>
         match n
         | 0 => acc
         | p + 1 => down(p, acc + 1)
         end;
-    let entry() -> /std/Io({}) =
+    let entry() -> /std/Io({}) =>
         let taint = List/length(Proc/args()!);
         let n : Nat = taint;
         /std/print(Nat/to_str(down(n, 0)));
@@ -104,11 +104,11 @@ pub const FUNCTION_ONLY: &str = r#"
 /// Two mutually recursive functions entered from two arms of a runtime match — the closest surface shape to an irreducible cycle. Curios has no unstructured jump, so the structurizer lays this out reducibly (no dispatcher); see `mutual_recursion_stays_reducible`.
 pub const MUTUAL_RECURSION: &str = r#"
     use /std/{Nat, List, Proc};
-    let ping(n : Nat) -> Nat =
+    let ping(n : Nat) -> Nat =>
         match n | 0 => 0 | p + 1 => pong(p) end
-    and pong(n : Nat) -> Nat =
+    and pong(n : Nat) -> Nat =>
         match n | 0 => 1 | p + 1 => ping(p) end;
-    let entry() -> /std/Io({}) =
+    let entry() -> /std/Io({}) =>
         let taint = List/length(Proc/args()!);
         let n : Nat = taint;
         let start = n <= 0;
@@ -125,7 +125,7 @@ pub const SPLIT_RETURN: &str = r#"
     | more(Nat, Nat, Nat)
     | done(Nat, Nat)
     end
-    let advance(x : Nat) -> Step =
+    let advance(x : Nat) -> Step =>
         match x % 7
         | 0 => Step/done((x * 3 + 1) * 13 % 20011, (x * 7 + 3) % 20011)
         | k + 1 =>
@@ -134,17 +134,17 @@ pub const SPLIT_RETURN: &str = r#"
             let w = (k * 2 + 11) % 20011;
             Step/more((v * 9 + 4) % 20011, (w * 6 + 5) % 20011, (u * 2 + 9) % 20011)
         end;
-    let first(a : Nat) -> Nat =
+    let first(a : Nat) -> Nat =>
         match advance(a)
         | more(p, q, t) => (p + q + t) % 30011
         | done(r, s) => (r + s) % 30011
         end;
-    let second(b : Nat) -> Nat =
+    let second(b : Nat) -> Nat =>
         match advance(b + 1)
         | more(p, q, t) => (p * 2 + q + t) % 40009
         | done(r, s) => (r * 3 + s) % 40009
         end;
-    let entry() -> /std/Io({}) =
+    let entry() -> /std/Io({}) =>
         let taint = List/length(Proc/args()!);
         let n : Nat = taint;
         /std/print(Nat/to_str(first(n) + second(n)));
@@ -160,7 +160,7 @@ pub const SPLIT_RETURN: &str = r#"
 /// Two details of its shape are load-bearing rather than decoration, and a smaller fixture measures nothing. The arithmetic puts `walk`'s extent past the multi-site inline budget — without it the inliner *peels* the recursion into itself, since the same invisible cycle that hides the loop from this transform also leaves `walk` unmarked as recursive, and no known call site survives to rewrite. And the applied argument is bound to `c` ahead of the call rather than written into the call, because an argument computed inside the continuation that receives the closure cannot move above it. See `a_returned_closure_every_caller_applies_is_absorbed`.
 pub const UNCURRY: &str = r#"
     use /std/{Nat, List, Proc};
-    let walk(n : Nat) -> (Nat) -> Nat =
+    let walk(n : Nat) -> (Nat) -> Nat =>
         match n
         | 0 => (s) => (s * 7 + 13) % 30011
         | m + 1 => (s) =>
@@ -169,7 +169,7 @@ pub const UNCURRY: &str = r#"
             let c = (b * 3 + 19) % 30011;
             walk(m)(c)
         end;
-    let entry() -> /std/Io({}) =
+    let entry() -> /std/Io({}) =>
         let taint = List/length(Proc/args()!);
         let n : Nat = taint;
         /std/print(Nat/to_str(walk(n)(1)));
@@ -179,7 +179,7 @@ pub const UNCURRY: &str = r#"
 /// [`UNCURRY`]'s admissible shape with one difference: the caller applies the returned closure once *and* captures it in a lambda defined below the application, which escapes into a `List/map` so it is neither inlined nor dead. `mk` is recursive and `n` tainted so nothing folds the closure away, every return edge carries a closure, and the direct application is the resume's only *visible* use.
 pub const UNCURRY_CAPTURED: &str = r#"
     use /std/{Nat, List, Str, Proc};
-    let mk(n : Nat) -> (Nat) -> Nat =
+    let mk(n : Nat) -> (Nat) -> Nat =>
         match n
         | 0 => (m) => m
         | p + 1 =>
@@ -187,7 +187,7 @@ pub const UNCURRY_CAPTURED: &str = r#"
             let w = f(0);
             (m) => f(m) + w
         end;
-    let entry() -> /std/Io({}) =
+    let entry() -> /std/Io({}) =>
         let taint = List/length(Proc/args()!);
         let n : Nat = taint;
         let c = mk(n);
@@ -201,13 +201,13 @@ pub const UNCURRY_CAPTURED: &str = r#"
 pub const UNCURRY_THROUGH_A_CALL: &str = r#"
     use /std/{Flt, Nat, Str, Option, Map, print};
 
-    let read(text: Str) -> Str =
+    let read(text: Str) -> Str =>
         match Flt/of_str(text) | some(value) => Flt/to_str(value) | none() => "none" end;
 
-    let build(i: Nat, acc: Map(Str, Str)) -> Map(Str, Str) =
+    let build(i: Nat, acc: Map(Str, Str)) -> Map(Str, Str) =>
         match i | 0 => acc | _ => build(i - 1, Map/insert(acc, Nat/to_str(i), Nat/to_str(i))) end;
 
-    let shown() -> Str =
+    let shown() -> Str =>
         let d: Map(Str, Str) = Map/remove(build(80, Map/empty()), "80");
         Str/concat(read("2.5e-3"), Nat/to_str(Map/length(d)));
 
@@ -217,7 +217,7 @@ pub const UNCURRY_THROUGH_A_CALL: &str = r#"
 /// A capture-free closure selected and applied inside a loop — the constant-closure interning shape. Each iteration picks one of two lambdas by a runtime condition, so the call stays genuinely unknown (the parameter joins two closures, exactly [`HIGHER_ORDER`]'s conflict), but neither lambda captures anything: with the code field an ordinary `i32`, both are constant aggregates, so the loop must reference two module consts rather than construct an environment per iteration.
 pub const LOOPED_PICK: &str = r#"
     use /std/{Nat, Bool, List, Proc};
-    let spin(k : Nat, acc : Nat) -> Nat =
+    let spin(k : Nat, acc : Nat) -> Nat =>
         match k
         | 0 => acc
         | p + 1 =>
@@ -227,7 +227,7 @@ pub const LOOPED_PICK: &str = r#"
                 end;
             spin(p, f(acc) % 40009)
         end;
-    let entry() -> /std/Io({}) =
+    let entry() -> /std/Io({}) =>
         let taint = List/length(Proc/args()!);
         let n : Nat = taint;
         /std/print(Nat/to_str(spin(n, 1)));
@@ -241,9 +241,9 @@ pub const LOOPED_PICK: &str = r#"
 /// A conjunction whose second operand is a call of a total function: `spin`'s loop reduces by `65537`, the needle that finds it, and the comparison before the `&&` reads the taint against `4`. Four arguments, the program's name among them, make it `true`, and `spin(4, 1)` is `20608`.
 pub const CONJUNCTION_CALL: &str = r#"
     use /std/{Nat, Bool, List, Proc};
-    let spin(n: Nat, acc: Nat) -> Nat =
+    let spin(n: Nat, acc: Nat) -> Nat =>
         match n | 0 => acc | k + 1 => spin(k, (acc * 75 + 1) % 65537) end;
-    let entry() -> /std/Io({}) =
+    let entry() -> /std/Io({}) =>
         let taint = List/length(Proc/args()!);
         let held = taint == 4 && spin(taint, 1) == 20608;
         /std/print(Bool/to_str(held));
@@ -253,12 +253,12 @@ pub const CONJUNCTION_CALL: &str = r#"
 /// Two lists that differ at their first element, compared by a recursion a conjunction closes, `x == y && same(xs, ys)`, over `Nat`, whose `==` resolves to a known function: the recursion terminates and does nothing else, so it may be dropped.
 pub const LIST_EQUALITY: &str = r#"
     use /std/{Nat, Bool, List, Proc};
-    let same(a: List(Nat), b: List(Nat)) -> Bool =
+    let same(a: List(Nat), b: List(Nat)) -> Bool =>
         match a
         | [] => match b | [] => true | _ => false end
         | [x, ..xs] => match b | [] => false | [y, ..ys] => x == y && same(xs, ys) end
         end;
-    let entry() -> /std/Io({}) =
+    let entry() -> /std/Io({}) =>
         let taint = List/length(Proc/args()!);
         /std/print(Bool/to_str(same([taint, 1, 2], [1, taint, 2])));
     entry()
@@ -269,7 +269,7 @@ pub const LIST_EQUALITY: &str = r#"
 /// **The demand is `spin`'s own `* +2.0`.** The program's tail follows a host call, so it is reached both where the answer arrives and through the suspension's continuation: `spin` is called from the two, stays a function and returns its result boxed, and a use past that return would leave the slot a reference.
 pub const VARIANT_FILLER: &str = r#"
     use /std/{Nat, Flt, Option, List, Proc};
-    let spin(k : Nat, o : Option(Flt)) -> Flt =
+    let spin(k : Nat, o : Option(Flt)) -> Flt =>
         match k
         | 0 => Option/unwrap_or(o, +0.25) * +2.0
         | p + 1 =>
@@ -280,7 +280,7 @@ pub const VARIANT_FILLER: &str = r#"
                 end;
             spin(p, next)
         end;
-    let entry() -> /std/Io({}) =
+    let entry() -> /std/Io({}) =>
         let taint = List/length(Proc/args()!);
         let n : Nat = taint * 4 + 4;
         /std/print(Flt/to_str(spin(n, Option/none())));
@@ -290,12 +290,12 @@ pub const VARIANT_FILLER: &str = r#"
 /// A loop that reads two float literals in registers, seeded by a float its own entry computes so its parameter is held in a register. `j % 7919` puts a small `Nat` the loop alone holds into it, the needle that finds it: a float literal's own text also stands in its global's initializer, outside every loop.
 pub const FLOAT_LITERAL_LOOP: &str = r#"
     use /std/{Nat, Flt, List, Proc};
-    let go(acc : Flt, k : Nat) -> Flt =
+    let go(acc : Flt, k : Nat) -> Flt =>
         match k
         | 0 => acc
         | j + 1 => go(acc * +1.25 + Nat/to_flt(j % 7919) * +0.375, j)
         end;
-    let entry() -> /std/Io({}) =
+    let entry() -> /std/Io({}) =>
         let taint = List/length(Proc/args()!);
         /std/print(Flt/to_str(go(Nat/to_flt(taint), taint + 10)));
     entry()
@@ -304,19 +304,19 @@ pub const FLOAT_LITERAL_LOOP: &str = r#"
 /// A loop seeded by its function's own float parameter. `spin` is called from two places and its body is past `MULTI_SITE_INLINE_LIMIT`, so it stays a function, with `go` contified into it and seeded by `x`; `j % 7919` puts a small `Nat` the loop alone holds into it.
 pub const KNOWN_PARAMETER_SEED: &str = r#"
     use /std/{Flt, Nat, List, Str, Proc};
-    let go(acc : Flt, k : Nat) -> Flt =
+    let go(acc : Flt, k : Nat) -> Flt =>
         match k
         | 0 => acc
         | j + 1 => go(acc * +1.5 + Nat/to_flt(j % 7919) * +0.25, j)
         end;
-    let spin(x : Flt, n : Nat) -> Flt =
+    let spin(x : Flt, n : Nat) -> Flt =>
         let a = go(x, n);
         let b = a * +0.5 + a * +0.25 + +1.0;
         let c = b * +0.5 + b * +0.25 + +1.0;
         let d = c * +0.5 + c * +0.25 + +1.0;
         let e = d * +0.5 + d * +0.25 + +1.0;
         e * +0.5 + e * +0.25 + +1.0;
-    let entry() -> /std/Io({}) =
+    let entry() -> /std/Io({}) =>
         let taint = List/length(Proc/args()!);
         /std/print(Str/join(" | ", [Flt/to_str(spin(Nat/to_flt(taint) * +0.001, taint + 10)), Flt/to_str(spin(+0.002, taint + 20))]));
     entry()
@@ -325,7 +325,7 @@ pub const KNOWN_PARAMETER_SEED: &str = r#"
 /// A loop seeded by a call's result. `base` is called from two places with values the input decides, and its body is past `MULTI_SITE_INLINE_LIMIT`, so it stays a function and `seed` arrives as what it hands back.
 pub const CALL_RESULT_SEED: &str = r#"
     use /std/{Flt, Nat, List, Str, Proc};
-    let base(x : Flt) -> Flt =
+    let base(x : Flt) -> Flt =>
         let b = x * +0.5 + x * +0.25 + +1.0;
         let c = b * +0.5 + b * +0.25 + +1.0;
         let d = c * +0.5 + c * +0.25 + +1.0;
@@ -335,12 +335,12 @@ pub const CALL_RESULT_SEED: &str = r#"
         let h = g * +0.5 + g * +0.25 + +1.0;
         let i = h * +0.5 + h * +0.25 + +1.0;
         i * +0.5 + i * +0.25 + +1.0;
-    let go(acc : Flt, k : Nat) -> Flt =
+    let go(acc : Flt, k : Nat) -> Flt =>
         match k
         | 0 => acc
         | j + 1 => go(acc * +1.5 + Nat/to_flt(j % 7919) * +0.25, j)
         end;
-    let entry() -> /std/Io({}) =
+    let entry() -> /std/Io({}) =>
         let taint = List/length(Proc/args()!);
         let seed = base(Nat/to_flt(taint) * +0.001);
         let other = base(Nat/to_flt(taint) * +0.002);
@@ -352,7 +352,7 @@ pub const CALL_RESULT_SEED: &str = r#"
 pub const PAIR_STEP: &str = r#"
     use /std/{Flt, Nat, List, Str, Proc};
     struct Vec2: Type { x: Flt, y: Flt }
-    let step(p : Vec2, v : Vec2, dt : Flt) -> Vec2 =
+    let step(p : Vec2, v : Vec2, dt : Flt) -> Vec2 =>
         let a = p.x + v.x * dt;
         let b = p.y + v.y * dt;
         let c = a * +0.5 + b * +0.25 + +1.0;
@@ -364,12 +364,12 @@ pub const PAIR_STEP: &str = r#"
         let i = g * +0.5 + h * +0.25 + +1.0;
         let k = h * +0.5 + g * +0.25 + +1.0;
         Vec2 { x = i * +0.001, y = k * +0.001 };
-    let run(p : Vec2, v : Vec2, k : Nat) -> Vec2 =
+    let run(p : Vec2, v : Vec2, k : Nat) -> Vec2 =>
         match k
         | 0 => p
         | j + 1 => run(step(p, v, Nat/to_flt(j % 7919) * +0.01), v, j)
         end;
-    let entry() -> /std/Io({}) =
+    let entry() -> /std/Io({}) =>
         let taint = List/length(Proc/args()!);
         let t = Nat/to_flt(taint);
         let r = run(Vec2 { x = t, y = t * +0.5 }, Vec2 { x = +1.0, y = t }, taint + 10);
@@ -381,17 +381,17 @@ pub const PAIR_STEP: &str = r#"
 /// A float computed in the entry seeds a loop there and is captured by a closure that escapes into a list, whose loop it seeds too. `inner` and `outer` are each called once, so each is contified where it is called: `outer` into the entry, `inner` into the closure's body, which reads `seed` as a value free in it. `j % 7919` and `j % 6007` put a small `Nat` each loop alone holds into it.
 pub const CAPTURED_FLOAT: &str = r#"
     use /std/{Flt, Nat, List, Str, Proc, Option};
-    let inner(acc : Flt, k : Nat) -> Flt =
+    let inner(acc : Flt, k : Nat) -> Flt =>
         match k
         | 0 => acc
         | j + 1 => inner(acc * +1.5 + Nat/to_flt(j % 7919) * +0.25, j)
         end;
-    let outer(acc : Flt, k : Nat) -> Flt =
+    let outer(acc : Flt, k : Nat) -> Flt =>
         match k
         | 0 => acc
         | j + 1 => outer(acc * +1.25 + Nat/to_flt(j % 6007) * +0.5, j)
         end;
-    let entry() -> /std/Io({}) =
+    let entry() -> /std/Io({}) =>
         let taint = List/length(Proc/args()!);
         let seed = Nat/to_flt(taint) * +0.001;
         let warp = (n : Nat) => inner(seed, n);
@@ -404,18 +404,18 @@ pub const CAPTURED_FLOAT: &str = r#"
 /// Two loops only a stated carrier seeds. `warp` escapes into a list, so its parameter arrives through its closure wrapper's uniform signature and seeds `go`'s loop; and the closure called out of the list hands its result back as a reference, which seeds `spin`'s. `j % 7919` and `j % 6007` put a small `Nat` each loop alone holds into it.
 pub const STATED_SEEDS: &str = r#"
     use /std/{Flt, Nat, List, Str, Proc, Option};
-    let go(acc : Flt, k : Nat) -> Flt =
+    let go(acc : Flt, k : Nat) -> Flt =>
         match k
         | 0 => acc
         | j + 1 => go(acc * +1.5 + Nat/to_flt(j % 7919) * +0.25, j)
         end;
-    let warp(x : Flt) -> Flt = go(x, 30);
-    let spin(acc : Flt, k : Nat) -> Flt =
+    let warp(x : Flt) -> Flt => go(x, 30);
+    let spin(acc : Flt, k : Nat) -> Flt =>
         match k
         | 0 => acc
         | j + 1 => spin(acc * +1.25 + Nat/to_flt(j % 6007) * +0.5, j)
         end;
-    let entry() -> /std/Io({}) =
+    let entry() -> /std/Io({}) =>
         let taint = List/length(Proc/args()!);
         let fs : List((Flt) -> Flt) = [warp, (y : Flt) => y * +2.0];
         let f = match List/try_get(fs, taint % 2) | some(g) => g | none() => warp end;
@@ -429,7 +429,7 @@ pub const STATED_SEEDS: &str = r#"
 /// **The error has to arrive from a call.** `judged` recurses, so it is not inlined and `doubled` forwards a `failure` whose payload no edge shows being built: the emitter has no aggregate to refuse, and a payload held in a float register casts the error where the `failure` edge is taken. `taint + 1` and `taint + 3` take it and `taint` does not, so both constructors reach the join.
 pub const SHARED_PAYLOAD: &str = r#"
     use /std/{Str, Flt, Nat, Result, List, Proc};
-    let judged(n : Nat, depth : Nat) -> Result(Str, Flt) =
+    let judged(n : Nat, depth : Nat) -> Result(Str, Flt) =>
         match depth
         | 0 =>
             match n % 2 == 0
@@ -438,17 +438,17 @@ pub const SHARED_PAYLOAD: &str = r#"
             end
         | d + 1 => judged(n, d)
         end;
-    let doubled(n : Nat) -> Result(Str, Flt) =
+    let doubled(n : Nat) -> Result(Str, Flt) =>
         match judged(n, 3)
         | success(x) => Result/success(x * +2.0)
         | failure(why) => Result/failure(why)
         end;
-    let told(n : Nat) -> Str =
+    let told(n : Nat) -> Str =>
         match doubled(n)
         | success(f) => Flt/to_str(f + +0.5)
         | failure(why) => why
         end;
-    let entry() -> /std/Io({}) =
+    let entry() -> /std/Io({}) =>
         let taint = List/length(Proc/args()!);
         /std/print(Str/join(" | ", [told(taint + 1), told(taint), told(taint + 3)]));
     entry()
@@ -457,14 +457,14 @@ pub const SHARED_PAYLOAD: &str = r#"
 /// The same slot met through a parser: `whole` binds a float and answers it after a later step, so the float is `success`'s payload beside the refusal `failure` carries, and here the refusal is built where the join can see it.
 pub const PARSED_FLOAT: &str = r#"
     use /std/{Str, Flt, Parse, Nat, Char, List, Proc};
-    let digits() -> Parse(Str, Flt) =
+    let digits() -> Parse(Str, Flt) =>
         let run = Parse/str/take_while(Char/is_ascii_digit)!;
         Parse/pure(Nat/to_flt(Str/length(run)));
-    let whole() -> Parse(Str, Flt) =
+    let whole() -> Parse(Str, Flt) =>
         let value = digits()!;
         let _ = Parse/eof()!;
         Parse/pure(value);
-    let entry() -> /std/Io({}) =
+    let entry() -> /std/Io({}) =>
         let taint = List/length(Proc/args()!);
         let text = Str/concat(Nat/to_str(taint + 10), match taint > 99 | true => "x" | false => "" end);
         /std/print(match Parse/run(whole(), text) | success(f) => Flt/to_str(f) | failure(_) => "none" end);
@@ -474,14 +474,14 @@ pub const PARSED_FLOAT: &str = r#"
 /// A value whose type a match computes: `Held(b)` is a float where `b` holds and a string where it does not, so the one name `v` is joined from a float and from a string, and read as a float under one branch only. No variant is involved and no slot is shared: the parameter itself has two types.
 pub const COMPUTED_TYPE: &str = r#"
     use /std/{Str, Flt, Nat, Bool, List, Proc};
-    let Held(b : Bool) -> Type =
+    let Held(b : Bool) -> Type =>
         match b | true => Flt | false => Str end;
-    let held(b : Bool, n : Nat) -> Held(b) =
+    let held(b : Bool, n : Nat) -> Held(b) =>
         match b
         | true => Nat/to_flt(n) * +1.5
         | false => Str/concat("text ", Nat/to_str(n))
         end;
-    let told(b : Bool, n : Nat) -> Str =
+    let told(b : Bool, n : Nat) -> Str =>
         let v = held(b, n);
         let tell: (Held(b)) -> Str =
             match b
@@ -489,7 +489,7 @@ pub const COMPUTED_TYPE: &str = r#"
             | false => (x) => x
             end;
         tell(v);
-    let entry() -> /std/Io({}) =
+    let entry() -> /std/Io({}) =>
         let taint = List/length(Proc/args()!);
         /std/print(Str/join(" | ", [told(taint % 2 == 0, taint + 2), told(taint % 2 == 1, taint + 3)]));
     entry()
@@ -500,7 +500,7 @@ pub const COMPUTED_TYPE: &str = r#"
 /// The string comes from `Nat/to_str` rather than a literal or `Str/of_bytes`, and both choices are load-bearing. A literal would let partial evaluation unroll the walk over known bytes, so the fixture would assert nothing about a loop; `of_bytes` would drag in the scan `/std/Str/Valid/try` runs over every byte, whose allocations would swamp the claim. What is left is the walk itself.
 pub const STRING_WALK: &str = r#"
     use /std/{Nat, Str, Char, List, Proc};
-    let entry() -> /std/Io({}) =
+    let entry() -> /std/Io({}) =>
         let taint = List/length(Proc/args()!);
         let n : Nat = taint;
         let text : Str = Nat/to_str(n);

@@ -2,14 +2,14 @@
 use /std/{Nat, Str, Option, Test};
 use /std/Tui/{Style, Frame, View};
 
-let shown(v: View) -> Str =
+let shown(v: View) -> Str =>
     Str/join("/", Frame/to_lines(Frame/of_view(View/fit(v, View/width(v), View/height(v)))));
 
-let row(s: Str, w: Nat) -> View =
+let row(s: Str, w: Nat) -> View =>
     View/sized(View/text(Style/plain, s), w, 1);
 
 -- `beside` joins at the sum of its widths and `above` at the sum of its heights.
-test beside_and_above_join_at_the_sum_of_their_sizes =
+test beside_and_above_join_at_the_sum_of_their_sizes =>
     Test/equal(
         Str/join(" ", [
             shown(View/beside(View/blank(2, 2), View/blank(1, 2))),
@@ -17,7 +17,7 @@ test beside_and_above_join_at_the_sum_of_their_sizes =
         "   /      /  /  ");
 
 -- Beside a taller view a view is padded below, and above a wider one it is padded on the right.
-test the_smaller_of_two_joined_views_is_padded_to_the_larger =
+test the_smaller_of_two_joined_views_is_padded_to_the_larger =>
     Test/equal(
         Str/join(" ", [
             shown(View/beside(View/above(row("a", 1), row("b", 1)), row("c", 1))),
@@ -25,22 +25,22 @@ test the_smaller_of_two_joined_views_is_padded_to_the_larger =
         "ac/b  ab/c ");
 
 -- A sized view, in both directions at once: wider and shorter than its size, it is cropped on the right and padded below.
-test a_sized_view_crops_what_overflows_and_pads_what_falls_short =
+test a_sized_view_crops_what_overflows_and_pads_what_falls_short =>
     let wide = View/above(row("abcdef", 6), row("ghijkl", 6));
     Test/equal(
         Str/join(" ", [shown(View/sized(wide, 3, 3)), shown(View/sized(wide, 8, 1))]),
         "abc/ghi/    abcdef  ");
 
 -- A text view is as wide as its line: a double-width glyph takes its column and the one after, and reads back as itself.
-test a_text_is_as_wide_as_its_line =
+test a_text_is_as_wide_as_its_line =>
     Test/equal(shown(View/text(Style/plain, "日a")), "日a");
 
 -- A cut through a wide glyph leaves no half of it: cropped at the column after its first, it shows a blank there.
-test a_cut_through_a_wide_glyph_shows_a_blank =
+test a_cut_through_a_wide_glyph_shows_a_blank =>
     Test/equal(Str/join(" ", [shown(row("a日", 2)), shown(View/crop(row("日b", 3), 1, 0))]), "a   b");
 
 -- `over` clips a patch at the edge: where a popup sits is known only as the program runs.
-test over_clips_a_patch_at_the_edge =
+test over_clips_a_patch_at_the_edge =>
     let base = View/above(View/above(row("....", 4), row("....", 4)), row("....", 4));
     let patch = View/above(row("XX", 2), row("XX", 2));
     Test/equal(
@@ -51,14 +51,14 @@ test over_clips_a_patch_at_the_edge =
         "..../.XX./.XX. ..../..../...X ..../..../....");
 
 -- A tile is read under the bounds the frame's own type decides, which a literal discharges.
-test a_tile_is_read_under_the_frame_s_own_bounds =
+test a_tile_is_read_under_the_frame_s_own_bounds =>
     let f = Frame/of_view(View/fit(View/above(row("ab", 2), row("cd", 2)), 2, 2));
     Test/assert(
         "the tile at the frame's corner is the one placed there",
         Frame/get(f, 1, 1) == Frame/get(Frame/of_view(View/fit(row("d", 1), 1, 1)), 0, 0));
 
 -- A cursor asked for inside a view stands where the view is placed: shifted past what stands beside it and above it, and carried over a patch's offset. Past the edge of a view sized smaller it stands still, for the drawing to clip.
-test a_cursor_stands_where_its_view_is_placed =
+test a_cursor_stands_where_its_view_is_placed =>
     let caret = View/with_cursor(View/blank(3, 1), View/Point { x = 1, y = 0 });
     let column = (p: View/Point) => p.x;
     let line = (p: View/Point) => p.y;

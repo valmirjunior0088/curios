@@ -55,7 +55,7 @@ struct Pair(A: Type): Type {
 concept Sized(T: Type): Type {
     size: (value: T) -> /std/Nat,
 }
-let lift(F: (Type) -> Type, apply: (x: /std/Nat) -> /std/Nat, Pair { first = inner }: Pair(/std/Nat)) -> /std/Nat =
+let lift(F: (Type) -> Type, apply: (x: /std/Nat) -> /std/Nat, Pair { first = inner }: Pair(/std/Nat)) -> /std/Nat =>
     let held = apply(inner);
     held;
 let one: /std/Nat = lift(/std/List, (n) => n, Pair(/std/Nat) { first = 1 });
@@ -162,7 +162,7 @@ fn a_local_groups_member_is_classed_where_it_is_read() {
     );
 }
 
-const AGAIN: &str = "let twice(n: /std/Nat) -> /std/Nat = n + n;\n/std/print(\"\")";
+const AGAIN: &str = "let twice(n: /std/Nat) -> /std/Nat => n + n;\n/std/print(\"\")";
 
 /// A local read again is classed where it stands, as its first read is: each read of a parameter is a row of its own.
 #[test]
@@ -184,27 +184,27 @@ concept Sized(T: Type): Type {
 }
 
 satisfy Sized(Nat) {
-    size(value) = value,
+    size(value) => value,
 }
 
-let even(n: Nat) -> Bool =
+let even(n: Nat) -> Bool =>
     match n
     | 0 => true
     | p + 1 => odd(p)
     end
-and odd(n: Nat) -> Bool =
+and odd(n: Nat) -> Bool =>
     match n
     | 0 => false
     | p + 1 => even(p)
     end;
 
-let twice(n: Nat) -> Nat =
+let twice(n: Nat) -> Nat =>
     let test = n;
-    let left(k: Nat) -> Nat = right(k)
-    and right(k: Nat) -> Nat = k;
+    let left(k: Nat) -> Nat => right(k)
+    and right(k: Nat) -> Nat => k;
     left(test) + test;
 
-test twice_holds = Test/assert("twice", twice(1) == 2);
+test twice_holds => Test/assert("twice", twice(1) == 2);
 
 /std/print("")"#;
 

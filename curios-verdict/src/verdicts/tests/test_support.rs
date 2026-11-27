@@ -244,7 +244,7 @@ pub fn packs(root: &Path) -> Vec<PathBuf> {
 /// `base`'s `x` as `body` computes it.
 pub fn base_library(body: &str) -> String {
     fill!(
-        "use /std/{Nat};\n\npub let x(n: Nat) -> Nat = ${body};\n",
+        "use /std/{Nat};\n\npub let x(n: Nat) -> Nat => ${body};\n",
         body
     )
 }

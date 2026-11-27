@@ -9,7 +9,7 @@ pub let split(
     i: Nat,
     j: Nat,
     fits: Holds(j <= i),
-) -> Eq()(shl(x, i), shl(shl(x, i - j), j)) =
+) -> Eq()(shl(x, i), shl(shl(x, i - j), j)) =>
     Eq/cong((count: Nat) => shl(x, count), Eq/sym(Nat/le/add_sub_cancel(j, i, fits)));
 
 -- The signed scale, carried from [`Nat/Scale/unique`] through the sign: a shift's magnitude is its operand's shifted and its sign its operand's, which conversion decides, so the magnitudes are one odd part at one count, the signs are one, and an integer is its sign times its magnitude.
@@ -22,7 +22,7 @@ pub let unique(
     odd_m: Holds(Int/abs(m) % 2 == 1),
     odd_n: Holds(Int/abs(n) % 2 == 1),
     e: Eq()(shl(m, k), shl(n, j)),
-) -> {count: Eq()(k, j), value: Eq()(m, n)} =
+) -> {count: Eq()(k, j), value: Eq()(m, n)} =>
     let left: Eq()(Int/abs(m), 2 * (Int/abs(m) / 2) + 1) =
         Nat/le/antisym(Int/abs(m), 2 * (Int/abs(m) / 2) + 1, proved(), proved());
     let right: Eq()(Int/abs(n), 2 * (Int/abs(n) / 2) + 1) =

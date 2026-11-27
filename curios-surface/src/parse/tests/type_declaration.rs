@@ -188,7 +188,7 @@ fn struct_round_trips() {
         "Pair { ..p, snd = b }",
         "Pair(Nat, ?) { ..p, fst = a }",
         "Ordered(Nat) { ..o, use my_eql }",
-        "Api { ..a, ping(x) = f(x) }",
+        "Api { ..a, ping(x) => f(x) }",
     ] {
         let term = source.parse::<Term>().unwrap();
         assert_eq!(
@@ -231,8 +231,8 @@ fn function_field_sugar_in_types() {
 
 #[test]
 fn function_field_sugar_in_values() {
-    // The definition sugar `label(params) = body` is admitted by every tuple-shaped field list — tuple literals and struct literals — and is kept as written: the AST node carries the parameter list (`func_params`) and the body; `into_core` undoes the sugar.
-    let term = "(bump(x) = f(x), 3)".parse::<Term>().unwrap();
+    // The definition sugar `label(params) => body` is admitted by every tuple-shaped field list — tuple literals and struct literals — and is kept as written: the AST node carries the parameter list (`func_params`) and the body; `into_core` undoes the sugar.
+    let term = "(bump(x) => f(x), 3)".parse::<Term>().unwrap();
     let Subterm::Tuple(Tuple { fields }) = term.as_subterm() else {
         panic!("expected a tuple literal");
     };
@@ -253,7 +253,7 @@ fn function_field_sugar_in_values() {
     ));
 
     // The one-element form needs no trailing comma — the `=` disambiguates.
-    let term = "(bump(x : Nat) = f(x))".parse::<Term>().unwrap();
+    let term = "(bump(x : Nat) => f(x))".parse::<Term>().unwrap();
     let Subterm::Tuple(Tuple { fields }) = term.as_subterm() else {
         panic!("expected a tuple literal");
     };
@@ -263,7 +263,7 @@ fn function_field_sugar_in_values() {
     assert_eq!(params[0].pattern, Pattern::Binder("x".into()));
     assert!(params[0].annotation.is_some());
 
-    let term = "Api { ping(x) = f(x) }".parse::<Term>().unwrap();
+    let term = "Api { ping(x) => f(x) }".parse::<Term>().unwrap();
     let Subterm::StructLit(StructLit { entries, .. }) = term.as_subterm() else {
         panic!("expected a struct literal");
     };
@@ -299,9 +299,9 @@ fn function_field_sugar_round_trips() {
     // The retained sugar survives print → re-parse unchanged in every position: Σ-types, struct declarations, tuple literals (incl. the one-element form), struct literals, concepts, and witnesses.
     for source in [
         "{ len(s : Str) -> Nat, x : Nat }",
-        "(bump(x) = f(x), 3)",
-        "(bump(x : Nat) = f(x))",
-        "Api { ping(x) = f(x) }",
+        "(bump(x) => f(x), 3)",
+        "(bump(x : Nat) => f(x))",
+        "Api { ping(x) => f(x) }",
     ] {
         let term = source.parse::<Term>().unwrap();
         assert_eq!(
@@ -314,8 +314,8 @@ fn function_field_sugar_round_trips() {
     for source in [
         "struct Api : pub Type { version : Nat, ping(x : Nat) -> Nat } u",
         "concept Ordered(A : Type) : Type { use Equal(A), cmp(A, A) -> Ordering } u",
-        "let o : Ordered(Nat) = Ordered { use eql_nat, cmp(a, b) = f(a, b) }; u",
-        "satisfy Ordered(Nat) { cmp(a, b) = f(a, b) } u",
+        "let o : Ordered(Nat) = Ordered { use eql_nat, cmp(a, b) => f(a, b) }; u",
+        "satisfy Ordered(Nat) { cmp(a, b) => f(a, b) } u",
     ] {
         let entrypoint = source.parse::<Entrypoint>().unwrap();
         assert_eq!(

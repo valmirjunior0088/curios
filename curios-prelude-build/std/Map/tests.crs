@@ -3,34 +3,34 @@ use /std/{Str, Nat, Int, Bool, Byte, Bytes, List, Option, Eq, Hash, Ordering, Ma
 use /std/ops/{Ord};
 use /std/Bool/{True, False, Holds};
 
-test a_key_an_empty_map_lacks_is_tried_as_none =
+test a_key_an_empty_map_lacks_is_tried_as_none =>
     let m: Map(Str, Str) = Map/empty();
     Test/equal(Map/try_get(m, "missing"), Option/none());
 
 -- A read under a guard on `has` takes the evidence the guard gives and answers the value, with no `Option` to open.
-test get_reads_the_key_its_guard_found =
+test get_reads_the_key_its_guard_found =>
     let m: Map(Str, Nat) = Map/of_list([("one", 1), ("two", 2)]);
-    let at(k: Str) -> Nat =
+    let at(k: Str) -> Nat =>
         match Map/has(m, k) | true => Map/get(m, k) | false => 0 end;
     Test/equal([at("one"), at("two"), at("three")], [1, 2, 0]);
 
 -- "", "a", "ab", "abc" and "b" force the trie to branch on the presence-marker bits: a key that is a proper prefix of another differs from it only at a marker position, the case a plain per-byte comparison would miss.
-test roundtrips_prefix_related_keys =
+test roundtrips_prefix_related_keys =>
     let m: Map(Str, Str) =
         Map/of_list([("", "nil"), ("ab", "AB"), ("a", "A"), ("abc", "ABC"), ("b", "B")]);
-    let at(k: Str) -> Str = Option/unwrap_or(Map/try_get(m, k), "?");
+    let at(k: Str) -> Str => Option/unwrap_or(Map/try_get(m, k), "?");
     Test/equal(
         Str/join(",", [at(""), at("a"), at("ab"), at("abc"), at("b"), at("c")]),
         "nil,A,AB,ABC,B,?");
 
 -- An integer below zero encodes as a complement, so a negative key, its negation and zero are three entries, and a key never inserted is absent.
-test integer_keys_keep_their_signs_apart =
+test integer_keys_keep_their_signs_apart =>
     let m: Map(Int, Str) = Map/of_list([(-2, "minus two"), (+0, "zero"), (+2, "two")]);
-    let at(k: Int) -> Str = Option/unwrap_or(Map/try_get(m, k), "?");
+    let at(k: Int) -> Str => Option/unwrap_or(Map/try_get(m, k), "?");
     Test/equal(Str/join(",", [at(-2), at(+0), at(+2), at(-1)]), "minus two,zero,two,?");
 
 -- A digest's eight bytes at the empty run, whose three lanes each stand at their seed, at a short text and at eight bytes of ones. Pinned, and not stable: a digest may change between compiler versions, and this is where a change shows.
-test a_digest_is_eight_bytes_of_its_three_lanes =
+test a_digest_is_eight_bytes_of_its_three_lanes =>
     Test/equal(
         [
             Hash/digest(0x[]),
@@ -42,7 +42,7 @@ test a_digest_is_eight_bytes_of_its_three_lanes =
             0x[0x2E, 0x53, 0x52, 0x90, 0x8B, 0x42, 0xD9, 0x43]]);
 
 -- A natural's first byte holds how many bytes follow it and its top four bits, so a number below sixteen is one byte, one below 4 096 two, and one below `2^20` three.
-test a_natural_encodes_its_length_and_its_top_in_its_first_byte =
+test a_natural_encodes_its_length_and_its_top_in_its_first_byte =>
     Test/equal(
         [
             Hash/hash(0),
@@ -64,8 +64,8 @@ test a_natural_encodes_its_length_and_its_top_in_its_first_byte =
             0x[0xB0, 0x10, 0x00, 0x00]]);
 
 -- A map of naturals enumerates them in their order, across every boundary of the first byte: the top four bits, each rank, and the run that writes a rank past six.
-test natural_keys_enumerate_in_number_order =
-    let edge(rank: Nat) -> Nat = 16 * Nat/pow(256, rank);
+test natural_keys_enumerate_in_number_order =>
+    let edge(rank: Nat) -> Nat => 16 * Nat/pow(256, rank);
     let keys: List(Nat) =
         [
             256, 1, 2, 65536, 255, 257, 0, 513, 15, 16, 4095, 4096, 1048575, 1048576,
@@ -76,7 +76,7 @@ test natural_keys_enumerate_in_number_order =
     Test/equal(Set/to_list(Set/of_list(keys)), List/sort(keys));
 
 -- A map of tuples enumerates them in their order, by the first field and then the rest: a text that begins a longer one first, a zero byte in a text below every other, and each field's own order where the ones before it tie.
-test tuple_keys_enumerate_in_their_order =
+test tuple_keys_enumerate_in_their_order =>
     let keys: List({Str, Nat, Bool}) =
         [
             ("b", 1, false),
@@ -89,18 +89,18 @@ test tuple_keys_enumerate_in_their_order =
     Test/equal(Set/to_list(Set/of_list(keys)), List/sort(keys));
 
 -- A map of options enumerates them in their order, `none` first and then the payloads in theirs.
-test option_keys_enumerate_in_their_order =
+test option_keys_enumerate_in_their_order =>
     let keys: List(Option(Str)) = [Option/some("b"), Option/none(), Option/some("a")];
     Test/equal(Set/to_list(Set/of_list(keys)), List/sort(keys));
 
 -- A map of lists enumerates them lexicographically, a list that begins a longer one first.
-test list_keys_enumerate_in_their_order =
+test list_keys_enumerate_in_their_order =>
     let keys: List(List(Nat)) = [[2], [], [1, 3], [1], [1, 2]];
     Test/equal(Set/to_list(Set/of_list(keys)), List/sort(keys));
 
 -- A map of offset date-times enumerates them in their order, by the moment and then the local date-time: two of one moment at two offsets stand apart, the one whose clock reads earlier first, and a later moment after both.
-test offset_date_time_keys_enumerate_in_their_order =
-    let at(s: Str) -> List(time/OffsetDateTime) =
+test offset_date_time_keys_enumerate_in_their_order =>
+    let at(s: Str) -> List(time/OffsetDateTime) =>
         match time/OffsetDateTime/of_str(s)
         | some(t) => [t]
         | none() => []
@@ -119,11 +119,11 @@ let _a_smaller_natural_encodes_before_a_larger(
     a: Nat,
     b: Nat,
     under: Holds(a < b),
-) -> Eq()(Bytes/ord(Hash/hash(a), Hash/hash(b)), Ordering/lt()) =
+) -> Eq()(Bytes/ord(Hash/hash(a), Hash/hash(b)), Ordering/lt()) =>
     Bytes/ord/below/lt(Hash/hash(a), Hash/hash(b), Nat/hash/of_lt(a, b, under));
 
 -- An integer at or above zero encodes as its natural, and one below as the complement of the natural `-1 - i`'s, so no byte is spent on the sign.
-test an_integer_encodes_as_its_natural_or_as_a_complement =
+test an_integer_encodes_as_its_natural_or_as_a_complement =>
     Test/equal(
         [
             Hash/hash(+0),
@@ -145,8 +145,8 @@ test an_integer_encodes_as_its_natural_or_as_a_complement =
             0x[0x50, 0x00, 0x00]]);
 
 -- A map of integers enumerates them in their order: every boundary of a natural's first byte, and the `-1 - n` that mirrors each below zero.
-test integer_keys_enumerate_in_number_order =
-    let edge(rank: Nat) -> Nat = 16 * Nat/pow(256, rank);
+test integer_keys_enumerate_in_number_order =>
+    let edge(rank: Nat) -> Nat => 16 * Nat/pow(256, rank);
     let naturals: List(Nat) =
         [
             256, 1, 2, 65536, 255, 257, 0, 513, 15, 16, 4095, 4096, 1048575, 1048576,
@@ -162,7 +162,7 @@ let _a_smaller_integer_encodes_before_a_larger(
     a: Int,
     b: Int,
     under: Holds(a < b),
-) -> Eq()(Bytes/ord(Hash/hash(a), Hash/hash(b)), Ordering/lt()) =
+) -> Eq()(Bytes/ord(Hash/hash(a), Hash/hash(b)), Ordering/lt()) =>
     Bytes/ord/below/lt(Hash/hash(a), Hash/hash(b), Int/hash/of_lt(a, b, under));
 
 -- An insert stands in a type, everything it reaches being known to terminate: what three inserts leave is decided by reduction, in the order of the numbers.
@@ -177,7 +177,7 @@ let _a_maps_keys_are_in_their_order(
     use Hash/Key(K),
     @V: Type,
     m: Map(K, V),
-) -> Holds(List/ordered(Map/keys(m), Ord/lt_by((a: K, b: K) => Ord/ord(a, b)))) =
+) -> Holds(List/ordered(Map/keys(m), Ord/lt_by((a: K, b: K) => Ord/ord(a, b)))) =>
     Map/keys/ordered(m);
 
 -- A map is a function of its entries: two orders of insertion build one map, decided by reduction.
@@ -195,7 +195,7 @@ let _a_key_removed_after_its_insertion_leaves_the_map(
     k: K,
     v: V,
     absent: Eq()(Map/try_get(m, k), Option/none()),
-) -> Eq()(Map/remove(Map/insert(m, k, v), k), m) =
+) -> Eq()(Map/remove(Map/insert(m, k, v), k), m) =>
     Map/try_get/inj(
         Map/remove(Map/insert(m, k, v), k),
         m,
@@ -225,7 +225,7 @@ let _inserts_at_two_keys_commute(
     b: K,
     y: V,
     apart: (Eq()(b, a)) -> False,
-) -> Eq()(Map/insert(Map/insert(m, a, x), b, y), Map/insert(Map/insert(m, b, y), a, x)) =
+) -> Eq()(Map/insert(Map/insert(m, a, x), b, y), Map/insert(Map/insert(m, b, y), a, x)) =>
     let left = Map/insert(Map/insert(m, a, x), b, y);
     let right = Map/insert(Map/insert(m, b, y), a, x);
     let aside: (Eq()(a, b)) -> False = (e) => apart(Eq/sym(e));
@@ -267,17 +267,17 @@ let _inserts_at_two_keys_commute(
         end);
 
 -- The keys of the least and of the greatest entry of the map of `keys`.
-let ends(@K: Type, use Hash/Key(K), keys: List(K)) -> List(Option(K)) =
+let ends(@K: Type, use Hash/Key(K), keys: List(K)) -> List(Option(K)) =>
     let m: Map(K, Nat) = Map/of_list(List/map(keys, (k: K) => (k, 0)));
     [Option/map(Map/least(m), ((k, _)) => k), Option/map(Map/greatest(m), ((k, _)) => k)];
 
 -- The first and the last of `keys` sorted.
-let sorted_ends(@K: Type, use Ord(K), keys: List(K)) -> List(Option(K)) =
+let sorted_ends(@K: Type, use Ord(K), keys: List(K)) -> List(Option(K)) =>
     let sorted = List/sort(keys);
     [List/try_get(sorted, 0), List/last(sorted)];
 
 -- The least and the greatest key of a map are the first and the last of its keys sorted, at every key type, and the empty map has neither.
-test the_least_and_the_greatest_key_are_the_ends_of_the_sorted_keys =
+test the_least_and_the_greatest_key_are_the_ends_of_the_sorted_keys =>
     let naturals: List(Nat) = [256, 1, 65536, 0, 255, 4096];
     let integers: List(Int) = [+2, -3, +0, -1, -65536, +4096];
     let texts: List(Str) = ["b", "", "ab", "a"];
@@ -302,16 +302,16 @@ let _no_key_is_past_a_maps_ends(
     m: Map(K, V),
     x: K,
     i: List/Member()(x, Map/keys(m)),
-) -> {Map/least/Below(Map/least(m), x), Map/greatest/Above(Map/greatest(m), x)} =
+) -> {Map/least/Below(Map/least(m), x), Map/greatest/Above(Map/greatest(m), x)} =>
     (Map/least/below(m, x, i), Map/greatest/above(m, x, i));
 
 -- Setting an existing key goes down the `replaced` path: same size, new value, no duplicate leaf.
-test insert_replaces_without_growing =
+test insert_replaces_without_growing =>
     let m: Map(Str, Nat) = Map/insert(Map/insert(Map/empty(), "k", 1), "k", 2);
     Test/equal(m, Map/of_list([("k", 2)]));
 
 -- Deleting a present key collapses its parent fork — the sibling is spliced up — deleting an absent key is the identity, and deleting the last key returns to the empty map.
-test remove_collapses_and_is_the_identity_on_an_absent_key =
+test remove_collapses_and_is_the_identity_on_an_absent_key =>
     let m: Map(Str, Nat) = Map/of_list([("a", 1), ("b", 2), ("c", 3)]);
     let d: Map(Str, Nat) = Map/remove(m, "b");
     Test/all([
@@ -320,24 +320,24 @@ test remove_collapses_and_is_the_identity_on_an_absent_key =
         Test/equal(Map/remove(Map/remove(d, "a"), "c"), Map/empty())]);
 
 -- Iteration order is a property of the canonical shape, not of insertion order: a branch's twigs hold the keys in the order of their digits, and the digit saying a byte is there sorts a prefix before its extensions.
-test iterates_in_lexicographic_key_order =
+test iterates_in_lexicographic_key_order =>
     let m: Map(Str, Nat) = Map/of_list([("b", 0), ("abc", 0), ("", 0), ("a", 0), ("ab", 0)]);
     Test/equal(Str/join(",", Map/keys(m)), ",a,ab,abc,b");
 
 -- Canonicity, observed through the API: the same entry set reached by two insertion histories — one of them through a later-deleted key — is the same map.
-test entries_agree_across_insertion_orders =
+test entries_agree_across_insertion_orders =>
     let m1: Map(Str, Nat) = Map/of_list([("x", 1), ("y", 2), ("z", 3)]);
     let m2: Map(Str, Nat) = Map/remove(Map/of_list([("z", 3), ("w", 0), ("y", 2), ("x", 1)]), "w");
     Test/equal(m1, m2);
 
 -- 300 sequential keys rendered as decimal share long prefixes — "1" against "10" against "100" — exercising deep shared paths and the presence markers that separate a key from its own extensions; deleting the even half exercises collapse at scale. Keys are `Str` because the shared prefixes are what this exercises, and a decimal rendering is how you get them.
-test holds_many_keys_with_shared_prefixes =
-    let build(i: Nat, acc: Map(Str, Str)) -> Map(Str, Str) =
+test holds_many_keys_with_shared_prefixes =>
+    let build(i: Nat, acc: Map(Str, Str)) -> Map(Str, Str) =>
         match i
         | 0 => acc
         | _ => build(i - 1, Map/insert(acc, Nat/to_str(i), Nat/to_str(i)))
         end;
-    let drop_even(i: Nat, acc: Map(Str, Str)) -> Map(Str, Str) =
+    let drop_even(i: Nat, acc: Map(Str, Str)) -> Map(Str, Str) =>
         match i
         | 0 => acc
         | _ =>
@@ -348,7 +348,7 @@ test holds_many_keys_with_shared_prefixes =
         end;
     let m: Map(Str, Str) = build(300, Map/empty());
     let d: Map(Str, Str) = drop_even(300, m);
-    let at(n: Nat) -> Str = Option/unwrap_or(Map/try_get(d, Nat/to_str(n)), "?");
+    let at(n: Nat) -> Str => Option/unwrap_or(Map/try_get(d, Nat/to_str(n)), "?");
     Test/equal(
         Str/join(",", [
             Nat/to_str(Map/length(m)),
@@ -361,7 +361,7 @@ test holds_many_keys_with_shared_prefixes =
         "300,150,?,3,255,?,257");
 
 -- `update` is the one rewriting entry point: the function sees the current value or `none`, and answers the value to keep or `none` to remove. `map` and `filter` walk the entries, `union` is right-biased, and `get_or` reads with a default.
-test update_map_filter_union_and_get_or_rewrite_entries =
+test update_map_filter_union_and_get_or_rewrite_entries =>
     let m: Map(Str, Nat) = Map/of_list([("a", 1), ("b", 2), ("c", 3)]);
     Test/all([
         Test/equal(
@@ -384,7 +384,7 @@ test update_map_filter_union_and_get_or_rewrite_entries =
         Test/equal(Map/get_or(m, "c", 0), 3)]);
 
 -- An intersection keeps the first map's entries at the keys the second has, and a difference the rest, whatever the second's values are.
-test intersection_and_difference_part_the_first_map_by_the_seconds_keys =
+test intersection_and_difference_part_the_first_map_by_the_seconds_keys =>
     let m: Map(Str, Nat) = Map/of_list([("a", 1), ("b", 2), ("c", 3)]);
     let keys: Map(Str, Bool) = Map/of_list([("b", true), ("c", false), ("z", true)]);
     Test/all([

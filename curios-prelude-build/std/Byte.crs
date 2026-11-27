@@ -6,49 +6,49 @@ use /std/ops/{Ord, Eql, And, Or};
 use /std/Bool/{True, Holds};
 
 --- Whether the two are equal.
-pub let eql(a: Byte, b: Byte) -> Bool =
+pub let eql(a: Byte, b: Byte) -> Bool =>
     to_nat(a) == to_nat(b);
 
 -- `Eql`'s law at `Byte`: the codes are equal by `Nat`'s, and a byte is the byte of its own code, since `to_byte(to_nat(b))` converts with `b`.
-let eq_of_eql(a: Byte, b: Byte, h: Holds(eql(a, b))) -> Eq()(a, b) =
+let eq_of_eql(a: Byte, b: Byte, h: Holds(eql(a, b))) -> Eq()(a, b) =>
     Eq/cong((n) => Nat/to_byte(n % 256), proved(@Eq()(to_nat(a), to_nat(b))));
 
 --- Whether `a` is below `b`.
-pub let lt(a: Byte, b: Byte) -> Bool =
+pub let lt(a: Byte, b: Byte) -> Bool =>
     to_nat(a) < to_nat(b);
 
 --- Whether `a` is below `b` or equal to it.
-pub let le(a: Byte, b: Byte) -> Bool =
+pub let le(a: Byte, b: Byte) -> Bool =>
     to_nat(a) <= to_nat(b);
 
 --- Whether `a` is above `b`.
-pub let gt(a: Byte, b: Byte) -> Bool =
+pub let gt(a: Byte, b: Byte) -> Bool =>
     to_nat(a) > to_nat(b);
 
 --- Whether `a` is above `b` or equal to it.
-pub let ge(a: Byte, b: Byte) -> Bool =
+pub let ge(a: Byte, b: Byte) -> Bool =>
     to_nat(a) >= to_nat(b);
 
 --- The bitwise conjunction.
-pub let and(a: Byte, b: Byte) -> Byte =
+pub let and(a: Byte, b: Byte) -> Byte =>
     Nat/to_byte(Nat/and(to_nat(a), to_nat(b)));
 
 --- The bitwise disjunction.
-pub let or(a: Byte, b: Byte) -> Byte =
+pub let or(a: Byte, b: Byte) -> Byte =>
     Nat/to_byte(Nat/or(to_nat(a), to_nat(b)));
 
 --- The bitwise difference.
-pub let xor(a: Byte, b: Byte) -> Byte =
+pub let xor(a: Byte, b: Byte) -> Byte =>
     Nat/to_byte(Nat/xor(to_nat(a), to_nat(b)));
 
 -- Spelled as a subtraction from the all-ones byte rather than as a complement, because `Nat` is unbounded and has no complement to take: what a width-8 `not` means is the distance to that width's largest value.
 --- Every bit of the byte flipped.
-pub let not(a: Byte) -> Byte =
+pub let not(a: Byte) -> Byte =>
     Nat/to_byte(255 - to_nat(a));
 
 -- `count` is guarded rather than masked. `Nat` is unbounded, so the shift builds its whole product before the conjunction narrows it — a number as wide as the count, on the way to an answer that is `0`. The guard computes that answer instead of the number.
 --- The byte shifted left by `count`, the bits carried past the width discarded.
-pub let shl(a: Byte, count: Nat) -> Byte =
+pub let shl(a: Byte, count: Nat) -> Byte =>
     match count < 8
     | true => Nat/to_byte(Nat/and(Nat/shl(to_nat(a), count), 0xFF))
     | false => 0
@@ -56,22 +56,22 @@ pub let shl(a: Byte, count: Nat) -> Byte =
 
 -- No guard and no mask: a right shift only ever discards bits, so the result is under the byte's own bound at every count, and the oracle reads that off the operand.
 --- The byte shifted right by `count`, the bits carried past zero discarded.
-pub let shr(a: Byte, count: Nat) -> Byte =
+pub let shr(a: Byte, count: Nat) -> Byte =>
     Nat/to_byte(Nat/shr(to_nat(a), count));
 
 -- The count is taken modulo the width, which is what makes this total without a guard: the remainder carries its own bound in the term, so the shift below can never reach far enough to leave the envelope.
 --- The byte rotated left by `count`, the bits carried past the width re-entering at the bottom.
-pub let rotl(a: Byte, count: Nat) -> Byte =
+pub let rotl(a: Byte, count: Nat) -> Byte =>
     let places = count % 8;
     Nat/to_byte(Nat/and(Nat/or(Nat/shl(to_nat(a), places), Nat/shr(to_nat(a), 8 - places)), 0xFF));
 
 --- The byte rotated right by `count`, the bits carried past zero re-entering at the top.
-pub let rotr(a: Byte, count: Nat) -> Byte =
+pub let rotr(a: Byte, count: Nat) -> Byte =>
     let places = count % 8;
     Nat/to_byte(Nat/and(Nat/or(Nat/shr(to_nat(a), places), Nat/shl(to_nat(a), 8 - places)), 0xFF));
 
 --- The order of the two values.
-pub let ord(a: Byte, b: Byte) -> Ordering =
+pub let ord(a: Byte, b: Byte) -> Ordering =>
     match
     | lt(a, b) => Ordering/lt()
     | a == b => Ordering/eq()
@@ -81,7 +81,7 @@ pub let ord(a: Byte, b: Byte) -> Ordering =
 satisfy Eql(Byte) {
     eql = eql,
     eq = eq_of_eql,
-    refl(_) = True/qed(),
+    refl(_) => True/qed(),
 }
 
 satisfy And(Byte) {
@@ -93,11 +93,11 @@ satisfy Or(Byte) {
 }
 
 satisfy Show(Byte) {
-    show(b) = Nat/to_str(to_nat(b)),
+    show(b) => Nat/to_str(to_nat(b)),
 }
 
 satisfy Spell(Byte) {
-    spell(b) = Nat/to_str(to_nat(b)),
+    spell(b) => Nat/to_str(to_nat(b)),
 }
 
 -- Each law is `Nat`'s at the two values: `ord`, `lt` and `le` read a byte through `to_nat` alone.
@@ -105,22 +105,22 @@ satisfy Ord(Byte) {
     ord = ord,
     lt = lt,
     le = le,
-    flips(a, b) = Ord/flips(to_nat(a), to_nat(b)),
-    trans(a, b, c, p, q) = Ord/trans(to_nat(a), to_nat(b), to_nat(c), p, q),
-    eq(a, b, h) = Eq/cong((n) => Nat/to_byte(n % 256), Ord/eq(to_nat(a), to_nat(b), h)),
-    is_lt(a, b) = Ord/is_lt(to_nat(a), to_nat(b)),
-    is_le(a, b) = Ord/is_le(to_nat(a), to_nat(b)),
+    flips(a, b) => Ord/flips(to_nat(a), to_nat(b)),
+    trans(a, b, c, p, q) => Ord/trans(to_nat(a), to_nat(b), to_nat(c), p, q),
+    eq(a, b, h) => Eq/cong((n) => Nat/to_byte(n % 256), Ord/eq(to_nat(a), to_nat(b), h)),
+    is_lt(a, b) => Ord/is_lt(to_nat(a), to_nat(b)),
+    is_le(a, b) => Ord/is_le(to_nat(a), to_nat(b)),
 }
 
 -- Spelled as the byte rather than routed through `Bytes/of_nat` and padded back to one byte, which is the same encoding for all 256 values and says it the long way round: `of_nat` answers the empty run at zero, so the padding existed only to undo that. Written directly, `Hash/Key(Byte)` orders the encodings as the bytes by reduction alone instead of proving its way through a minimal encoding.
 --- The one byte itself.
 satisfy Hash(Byte) {
-    hash(b) = 0x[b],
+    hash(b) => 0x[b],
 }
 
 --- The one byte itself, a cons onto no bytes, ordered as its head is.
 satisfy Hash/Key(Byte) {
-    mono(a, b) =
+    mono(a, b) =>
         match a < b
         | true => Eq/refl()
         | false => match a == b | true | false => Eq/refl() end

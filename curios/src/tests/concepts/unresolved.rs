@@ -11,7 +11,7 @@ fn missing_witness_is_an_error() {
             show(A) -> Str
         }
         satisfy Show(Nat) {
-            show(n) = Nat/to_str(n)
+            show(n) => Nat/to_str(n)
         }
         let b : Bool = true;
         /std/print(Show/show(b))
@@ -63,7 +63,7 @@ fn a_missing_witness_names_a_curried_head_by_its_innermost_reference() {
 fn a_missing_witness_names_the_argument_its_premise_is_about() {
     let source = r#"
         use /std/{Nat, Bool, Show, Str};
-        let f(@A : Type, use Show(A), a : A) -> Str = Show/show(a);
+        let f(@A : Type, use Show(A), a : A) -> Str => Show/show(a);
         let s : Str = f((x = 1, y = true));
         /std/print("unreachable")
         "#;
@@ -82,8 +82,8 @@ fn a_later_premise_is_named_by_its_own_position() {
         use /std/{Nat, Str, Show};
         use /std/ops/{Eql};
         induct T : pub Type | t() end
-        satisfy Show(T) { show(x) = "t", }
-        let g(@A : Type, use Show(A), use Eql(A)) -> Str = "g";
+        satisfy Show(T) { show(x) => "t", }
+        let g(@A : Type, use Show(A), use Eql(A)) -> Str => "g";
         let s : Str = g(@T);
         /std/print("unreachable")
         "#;

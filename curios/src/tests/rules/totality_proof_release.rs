@@ -11,7 +11,7 @@ fn a_partial_carrier_releasing_a_proof_is_rejected() {
         | box(p : /std/Bool/True)
         end
 
-        let forge(n : /std/Nat) -> Box = Box/box(/std/Bool/True/qed());
+        let forge(n : /std/Nat) -> Box => Box/box(/std/Bool/True/qed());
 
         let boom : /std/Bool/True =
             match forge(0)
@@ -56,9 +56,9 @@ fn a_partial_carrier_releasing_a_proof_is_rejected() {
 fn a_proof_at_a_polymorphic_head_is_rejected() {
     control(
         r#"
-        let ignore(@A : Type, x : A, p : /std/Bool/True) -> A = x;
+        let ignore(@A : Type, x : A, p : /std/Bool/True) -> A => x;
 
-        let leak() -> /std/Nat = ignore(0, (() => let b : /std/Bool/True = /std/Bool/True/qed(); b)());
+        let leak() -> /std/Nat => ignore(0, (() => let b : /std/Bool/True = /std/Bool/True/qed(); b)());
 
         /std/print(/std/Nat/to_str(leak()))
         "#,
@@ -100,9 +100,9 @@ fn a_proof_at_an_arm_binder_head_is_rejected() {
         | hold(f : (/std/Bool/True) -> /std/Nat)
         end
 
-        let make() -> Holder = Holder/hold((p) => 0);
+        let make() -> Holder => Holder/hold((p) => 0);
 
-        let leak(h : Holder) -> /std/Nat =
+        let leak(h : Holder) -> /std/Nat =>
             match h
             | hold(f) => f((() => let b : /std/Bool/True = /std/Bool/True/qed(); b)())
             end;
@@ -140,7 +140,7 @@ fn a_proof_at_an_arm_binder_head_is_rejected() {
 fn a_proof_at_a_sequence_arm_binder_head_is_rejected() {
     control(
         r#"
-        let apply_it(fs : /std/List((/std/Bool/True) -> /std/Nat)) -> /std/Nat =
+        let apply_it(fs : /std/List((/std/Bool/True) -> /std/Nat)) -> /std/Nat =>
             match fs
             | [] => 0
             | [head, ..tail] => head((() => let b : /std/Bool/True = /std/Bool/True/qed(); b)())
@@ -185,7 +185,7 @@ fn a_proof_at_a_struct_projection_head_is_rejected() {
 
         let api : Api = Api { take = (p) => 7 };
 
-        let leak() -> /std/Nat = api.take((() => let b : /std/Bool/True = /std/Bool/True/qed(); b)());
+        let leak() -> /std/Nat => api.take((() => let b : /std/Bool/True = /std/Bool/True/qed(); b)());
 
         /std/print(/std/Nat/to_str(leak()))
         "#,
@@ -231,10 +231,10 @@ fn a_proof_at_a_concept_method_head_is_rejected() {
         }
 
         satisfy Sink(/std/Nat) {
-            drain(x, p) = x,
+            drain(x, p) => x,
         }
 
-        let leak() -> /std/Nat = Sink/drain(5, (() => let b : /std/Bool/True = /std/Bool/True/qed(); b)());
+        let leak() -> /std/Nat => Sink/drain(5, (() => let b : /std/Bool/True = /std/Bool/True/qed(); b)());
 
         /std/print(/std/Nat/to_str(leak()))
         "#,
@@ -280,8 +280,8 @@ fn a_proof_looping_through_a_projected_inner_group_is_rejected() {
         use /std/{Nat, Str};
         use /std/Bool/{True, False};
 
-        let f(n : Nat) -> True =
-            (() => let g(m : Nat) -> True = True/qed(); g)()(n);
+        let f(n : Nat) -> True =>
+            (() => let g(m : Nat) -> True => True/qed(); g)()(n);
 
         let held = f;
 
@@ -292,8 +292,8 @@ fn a_proof_looping_through_a_projected_inner_group_is_rejected() {
     .refused(&[
         ("let f(n : Nat) -> True", "let f(n : Nat) -> False"),
         (
-            "let g(m : Nat) -> True = True/qed();",
-            "let g(m : Nat) -> False = f(m);",
+            "let g(m : Nat) -> True => True/qed();",
+            "let g(m : Nat) -> False => f(m);",
         ),
         (
             "let held = f;\n\n        /std/print(\"ok\")",
@@ -321,10 +321,10 @@ fn a_proof_projecting_an_inner_group_that_does_not_call_back_is_accepted() {
         use /std/{Nat};
         use /std/Bool/{True};
 
-        let outer(n : Nat) -> True =
+        let outer(n : Nat) -> True =>
             match n
             | 0 => True/qed()
-            | p + 1 => (() => let keep(t : True) -> True = t; keep)()(outer(p))
+            | p + 1 => (() => let keep(t : True) -> True => t; keep)()(outer(p))
             end;
 
         let proved : True = outer(3);
@@ -346,7 +346,7 @@ fn a_loop_written_in_a_type_argument_is_refused() {
         | more(rest : F)
         end
 
-        let Shape(f : F) -> Type =
+        let Shape(f : F) -> Type =>
             match f
             | stop() => Nat
             | more(rest) => Shape(rest)
@@ -354,7 +354,7 @@ fn a_loop_written_in_a_type_argument_is_refused() {
 
         let inf : F = F/more(inf);
 
-        let ignore(@A : Type, x : Nat) -> Nat = x;
+        let ignore(@A : Type, x : Nat) -> Nat => x;
 
         let _ = ignore(@Shape(F/stop()), 5);
         /std/Io/pure(())
@@ -397,11 +397,11 @@ fn a_partial_argument_to_an_erased_call_is_still_reached() {
         use /std/{Nat};
         use /std/Bool/{True};
 
-        let spin(n : Nat) -> Nat = n;
+        let spin(n : Nat) -> Nat => n;
 
-        let mk_proof(n : Nat) -> True = True/qed();
+        let mk_proof(n : Nat) -> True => True/qed();
 
-        let use_it(n : Nat) -> Nat =
+        let use_it(n : Nat) -> Nat =>
             let witness : True = mk_proof(spin(0));
             n;
 
@@ -410,8 +410,8 @@ fn a_partial_argument_to_an_erased_call_is_still_reached() {
         b"5",
     )
     .refused(&[(
-        "let spin(n : Nat) -> Nat = n;",
-        "let spin(n : Nat) -> Nat = spin(n);",
+        "let spin(n : Nat) -> Nat => n;",
+        "let spin(n : Nat) -> Nat => spin(n);",
     )])
     .by_elaborator_in("/use_it", |error| {
         matches!(
@@ -440,13 +440,13 @@ fn a_partial_argument_to_a_proof_constructor_is_still_reached() {
         r#"
         use /std/{Nat};
 
-        let spin(n : Nat) -> Nat = n;
+        let spin(n : Nat) -> Nat => n;
 
         induct Tagged : pub Prop
         | tag(n : Nat)
         end
 
-        let use_it(n : Nat) -> Nat =
+        let use_it(n : Nat) -> Nat =>
             let witness : Tagged = Tagged/tag(spin(0));
             n;
 
@@ -455,8 +455,8 @@ fn a_partial_argument_to_a_proof_constructor_is_still_reached() {
         b"5",
     )
     .refused(&[(
-        "let spin(n : Nat) -> Nat = n;",
-        "let spin(n : Nat) -> Nat = spin(n);",
+        "let spin(n : Nat) -> Nat => n;",
+        "let spin(n : Nat) -> Nat => spin(n);",
     )])
     .by_elaborator_in("/use_it", |error| {
         matches!(
@@ -486,11 +486,11 @@ fn a_partial_erased_scrutinee_is_still_reached() {
         use /std/{Nat};
         use /std/Bool/{True};
 
-        let spin(n : Nat) -> Nat = n;
+        let spin(n : Nat) -> Nat => n;
 
-        let mk(n : Nat) -> True = True/qed();
+        let mk(n : Nat) -> True => True/qed();
 
-        let use_it(n : Nat) -> Nat =
+        let use_it(n : Nat) -> Nat =>
             match mk(spin(0))
             | qed() => n
             end;
@@ -500,8 +500,8 @@ fn a_partial_erased_scrutinee_is_still_reached() {
         b"5",
     )
     .refused(&[(
-        "let spin(n : Nat) -> Nat = n;",
-        "let spin(n : Nat) -> Nat = spin(n);",
+        "let spin(n : Nat) -> Nat => n;",
+        "let spin(n : Nat) -> Nat => spin(n);",
     )])
     .by_elaborator_in("/use_it", |error| {
         matches!(
@@ -531,9 +531,9 @@ fn a_partial_scrutinee_under_an_erased_binding_is_still_reached() {
         use /std/{Nat};
         use /std/Bool/{True};
 
-        let spin(n : Nat) -> Nat = n;
+        let spin(n : Nat) -> Nat => n;
 
-        let use_it(n : Nat) -> Nat =
+        let use_it(n : Nat) -> Nat =>
             let witness : True =
                 match spin(0)
                 | 0 => True/qed()
@@ -546,8 +546,8 @@ fn a_partial_scrutinee_under_an_erased_binding_is_still_reached() {
         b"5",
     )
     .refused(&[(
-        "let spin(n : Nat) -> Nat = n;",
-        "let spin(n : Nat) -> Nat = spin(n);",
+        "let spin(n : Nat) -> Nat => n;",
+        "let spin(n : Nat) -> Nat => spin(n);",
     )])
     .by_elaborator_in("/use_it", |error| {
         matches!(
@@ -582,18 +582,18 @@ fn a_partial_proof_cannot_arrive_through_witness_resolution() {
         }
 
         satisfy Trivial(Nat) {
-            fact(n) = True/qed(),
+            fact(n) => True/qed(),
         }
 
-        let needs_witness(@A : Type, use Trivial(A), x : A) -> Nat = 0;
+        let needs_witness(@A : Type, use Trivial(A), x : A) -> Nat => 0;
 
         /std/print(Nat/to_str(needs_witness(5)))
         "#,
         b"0",
     )
     .refused(&[(
-        "fact(n) = True/qed(),",
-        "fact(n) = let loop : True = loop; loop,",
+        "fact(n) => True/qed(),",
+        "fact(n) => let loop : True = loop; loop,",
     )])
     .by_elaborator_in("/witness~/Trivial(Nat)", |error| {
         matches!(
@@ -669,7 +669,7 @@ fn a_proof_naming_its_own_groups_member_is_read_as_reduced_by_the_members_name()
         concept Same(A: Type): Type { same(A, A) -> Bool, n: Nat, zero: Eq()(n, 0) }
 
         satisfy Same(Tree) {
-            same(a, b) = Same/same(a, b),
+            same(a, b) => Same/same(a, b),
             n = 0,
             zero = ((_: Bool) => Eq/refl())(Same/same(Tree/leaf(), Tree/leaf())),
         }
@@ -686,9 +686,9 @@ fn a_proof_carrying_a_loop_its_reduction_discards_is_accepted() {
     let source = r#"
         use /std/{Nat, List, Io, Vec};
 
-        let spin(n: Nat) -> Io(Nat) = Io/bind(Io/yield(), (()) => spin(n));
+        let spin(n: Nat) -> Io(Nat) => Io/bind(Io/yield(), (()) => spin(n));
 
-        let all_counted(@A: Type, actions: List(Io(A))) -> Io(Vec(A, List/length(actions))) =
+        let all_counted(@A: Type, actions: List(Io(A))) -> Io(Vec(A, List/length(actions))) =>
             match actions
             | [] => Io/pure(Vec/nil())
             | [a, ..more] =>
@@ -697,7 +697,7 @@ fn a_proof_carrying_a_loop_its_reduction_discards_is_accepted() {
                 Io/pure(Vec/cons(x, rest))
             end;
 
-        let first() -> Io(Nat) =
+        let first() -> Io(Nat) =>
             let answers = all_counted([spin(1), Io/pure(2), Io/pure(3)])!;
             Io/pure(List/get(answers.list, 2));
 
@@ -717,18 +717,18 @@ fn a_total_proof_handed_a_folded_loop_at_an_empty_type_is_refused_by_name() {
         induct Empty: Type
         end
 
-        let loop(u: {}) -> Empty = loop(u);
+        let loop(u: {}) -> Empty => loop(u);
 
-        let ex_falso(@e: Empty) -> False = match e end;
+        let ex_falso(@e: Empty) -> False => match e end;
 
-        let held(e: Empty) -> False = ex_falso(@e);
+        let held(e: Empty) -> False => ex_falso(@e);
 
         /std/print("ok")
         "#,
         b"ok",
     )
     .refused(&[(
-        "let held(e: Empty) -> False = ex_falso(@e);",
+        "let held(e: Empty) -> False => ex_falso(@e);",
         "let held: False = ex_falso(@loop(()));",
     )])
     .by_elaborator_in("/held", |error| {
@@ -764,16 +764,16 @@ fn a_match_stuck_on_a_folded_loop_at_an_instance_no_case_builds_is_refused_by_na
         | c(): (0)
         end
 
-        let loop(u: {}) -> F(1) = loop(u);
+        let loop(u: {}) -> F(1) => loop(u);
 
-        let held(x: F(1)) -> False = match x end;
+        let held(x: F(1)) -> False => match x end;
 
         /std/print("ok")
         "#,
         b"ok",
     )
     .refused(&[(
-        "let held(x: F(1)) -> False = match x end;",
+        "let held(x: F(1)) -> False => match x end;",
         "let held: False = match loop(()) end;",
     )])
     .by_elaborator_in("/held", |error| {

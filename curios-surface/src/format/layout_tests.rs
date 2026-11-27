@@ -52,7 +52,7 @@ fn spread_calls_and_nested_packed_literals_remain_breakable() {
 #[test]
 fn a_wrapped_argument_does_not_flatten_the_calls_later_arguments() {
     let output = canonical_within_width(
-        "pub let spawn(cmd: Command) -> Try(Io, Io/Error, Child) =\n\
+        "pub let spawn(cmd: Command) -> Try(Io, Io/Error, Child) =>\n\
          let _ = env_checked(cmd.env)!;\n\
          let reply = proc_spawn([Str/to_bytes(cmd.program), ..List/map(cmd.args, Str/to_bytes)], match cmd.cwd | some(p) => Path/to_bytes(p) | none() => 0x[] end, List/map(cmd.env, env_entry), stdio_of(cmd.stdin), stdio_of(cmd.stdout), stdio_of(cmd.stderr))!;\n\
          reply;\n",
@@ -67,7 +67,7 @@ fn a_wrapped_argument_does_not_flatten_the_calls_later_arguments() {
 #[test]
 fn a_list_in_an_arm_does_not_hide_the_ladders_breaks() {
     let output = canonical_within_width(
-        "let each_ready(reports: Bytes) -> List(Flag) =\n\
+        "let each_ready(reports: Bytes) -> List(Flag) =>\n\
          match reports | 0x[] => [] | 0x[r, ..rest] => [flagged(r, /sys/event/ready), ..each_ready(rest)] end;\n",
     );
     assert!(output.contains("    match reports\n    | 0x[] => []\n    | 0x[r, ..rest] => [flagged(r, /sys/event/ready), ..each_ready(rest)]\n    end;"), "{output}");
@@ -76,7 +76,7 @@ fn a_list_in_an_arm_does_not_hide_the_ladders_breaks() {
 #[test]
 fn a_list_inside_a_tuple_and_lambda_does_not_flatten_the_enclosing_call() {
     let output = canonical_within_width(
-        "let components(b: Bytes) -> {before: List(Bytes), last: Bytes} =\n\
+        "let components(b: Bytes) -> {before: List(Bytes), last: Bytes} =>\n\
          let (done, current): {List(Bytes), Bytes} =\n\
          Bytes/fold(b, ([], 0x[]), (byte, (done, current)) => match byte == separator | true => ([..done, current], 0x[]) | false => (done, 0x[..current, byte]) end);\n\
          (before = done, last = current);\n",
@@ -89,7 +89,7 @@ fn a_list_inside_a_tuple_and_lambda_does_not_flatten_the_enclosing_call() {
 fn lists_in_witness_arms_do_not_hide_the_ladders_breaks() {
     let output = canonical_within_width(
         "satisfy Show(Exit) {\n\
-         show(e) = match e | exited(code) => Str/flatten([\"exited(\", Nat/to_str(code), \")\"]) | signaled(signal) => Str/flatten([\"signaled(\", Nat/to_str(signal), \")\"]) end,\n\
+         show(e) => match e | exited(code) => Str/flatten([\"exited(\", Nat/to_str(code), \")\"]) | signaled(signal) => Str/flatten([\"signaled(\", Nat/to_str(signal), \")\"]) end,\n\
          }\n",
     );
     assert!(output.contains("match e\n"), "{output}");
@@ -128,7 +128,7 @@ fn a_packed_argument_does_not_flatten_a_call_inside_a_list() {
 #[test]
 fn a_multiline_html_child_ends_before_its_next_sibling_begins() {
     let output = canonical_within_width(
-        "pub let document(lang: Str, title: Str, head: List(Html), body: List(Html)) -> Html =\n\
+        "pub let document(lang: Str, title: Str, head: List(Html), body: List(Html)) -> Html =>\n\
          element(\"html\", [Attr/attr(\"lang\", lang)], [element(\"head\", [], [void(\"meta\", [Attr/attr(\"charset\", \"utf-8\")]), element(\"title\", [], [text(title)]), ..head]), element(\"body\", [], body)]);\n",
     );
     assert!(
@@ -149,11 +149,11 @@ fn a_multiline_html_child_ends_before_its_next_sibling_begins() {
 fn an_applied_match_breaks_its_arms_to_keep_the_argument_attached() {
     assert_eq!(
         canonical_within_width(
-            "pub let first(a: Bool, b: Bool, p: Holds(a && b)) -> Holds(a) =\n\
+            "pub let first(a: Bool, b: Bool, p: Holds(a && b)) -> Holds(a) =>\n\
              match a | true => (_) => True/qed() | false => (proof_of_a) => proof_of_a end(p);\n",
         ),
         concat!(
-            "pub let first(a: Bool, b: Bool, p: Holds(a && b)) -> Holds(a) =\n",
+            "pub let first(a: Bool, b: Bool, p: Holds(a && b)) -> Holds(a) =>\n",
             "    match a\n",
             "    | true => (_) => True/qed()\n",
             "    | false => (proof_of_a) => proof_of_a\n",
@@ -222,7 +222,7 @@ fn a_block_string_stands_where_the_code_around_it_puts_it() {
         "      kept two in\n",
         "    \"\"\";\n",
         "\n",
-        "let local(x: Nat) -> Str =\n",
+        "let local(x: Nat) -> Str =>\n",
         "    let s =\n",
         "        \"\"\"\n",
         "        a\n",

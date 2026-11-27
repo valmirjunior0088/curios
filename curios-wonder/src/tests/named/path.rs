@@ -44,7 +44,7 @@ fn keyed(described: &Described) -> Vec<&str> {
         .collect()
 }
 
-const POINT: &str = "use /std/{Nat, Show, print};\nstruct Point: Type {\n    x: Nat,\n}\nsatisfy Show(Point) {\n    show(_) = \"point\",\n}\nprint(\"\")";
+const POINT: &str = "use /std/{Nat, Show, print};\nstruct Point: Type {\n    x: Nat,\n}\nsatisfy Show(Point) {\n    show(_) => \"point\",\n}\nprint(\"\")";
 
 /// The path `path` spells.
 fn qualified(path: &str) -> Qualifier {
@@ -77,7 +77,7 @@ mod helpers
     use /std/{Nat};
     pub use /std/{Bool};
     pub use /std/Option/{some};
-    pub let twice(n: Nat) -> Nat = n + n;
+    pub let twice(n: Nat) -> Nat => n + n;
     let hidden: Nat = 3;
     pub induct Colour: pub Type
     | red()
@@ -193,7 +193,7 @@ fn a_library_definition_is_answered_with_its_type_and_text() {
     assert_eq!(described.witnesses, None);
     assert_eq!(
         described.declaration.as_ref().map(Declaration::written),
-        Some("--- The other value.\npub let not(b: Bool) -> Bool =\n    xor(b, true);"),
+        Some("--- The other value.\npub let not(b: Bool) -> Bool =>\n    xor(b, true);"),
     );
 }
 
@@ -273,7 +273,7 @@ fn a_programs_own_private_declaration_is_answered_by_its_own_path() {
 /// A definition is answered with the totality the certifier recorded of it, off the unit that declares it: the program's own, a recursion that descends and one that does not, and the library's. A structure is answered with none, its former being no definition a reader wrote.
 #[test]
 fn a_definition_is_answered_with_its_totality() {
-    let program = "use /std/{Nat, print};\nlet halve(n: Nat) -> Nat = match n | 0 => 0 | k + 1 => match k | 0 => 0 | j + 1 => halve(j) + 1 end end;\nlet spin(n: Nat) -> Nat = spin(n + 1);\nprint(\"\")";
+    let program = "use /std/{Nat, print};\nlet halve(n: Nat) -> Nat => match n | 0 => 0 | k + 1 => match k | 0 => 0 | j + 1 => halve(j) + 1 end end;\nlet spin(n: Nat) -> Nat => spin(n + 1);\nprint(\"\")";
     let totality = |path| described(program, path).expect("in scope").totality;
 
     assert_eq!(totality("/halve"), Some(Totality::Total));
@@ -296,7 +296,7 @@ fn a_path_that_names_nothing_answers_nothing() {
 /// A file one declaration of which is refused answers a dependency's name with what the dependency's check established, its type and its totality, beside the path it is exposed at and the one it is declared at.
 #[test]
 fn a_dependency_named_in_a_refused_file_answers_its_type_and_totality() {
-    const PROGRAM: &str = "use /std/{List, Nat, print};\nlet doubled(xs: List(Nat)) -> List(Nat) = List/map(xs, (x) => x + x);\nlet broken: Nat = true;\nprint(\"\")";
+    const PROGRAM: &str = "use /std/{List, Nat, print};\nlet doubled(xs: List(Nat)) -> List(Nat) => List/map(xs, (x) => x + x);\nlet broken: Nat = true;\nprint(\"\")";
     let mapped = at(PROGRAM, "List/map", 0, 5).expect("a name stands there");
     let Stands::Declaration { described, .. } = mapped.stands else {
         panic!("a name stands there");
@@ -527,7 +527,7 @@ fn a_path_answers_the_declaration_and_the_module_it_names() {
 #[test]
 fn a_loose_modules_own_path_answers_the_module() {
     let module = named_in(
-        "pub let twice(n: /std/Nat) -> /std/Nat = n + n;\n",
+        "pub let twice(n: /std/Nat) -> /std/Nat => n + n;\n",
         "/stdin",
     )
     .and_then(|named| named.module)

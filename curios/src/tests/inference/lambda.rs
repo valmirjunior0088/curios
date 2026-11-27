@@ -9,12 +9,12 @@ fn program(body: &str) -> String {
     fill!(
         r#"
         use /std/{Nat, Int, Byte, Bool, List, Str, Show, print};
-        let id(@A: Type, a: A) -> A = a;
-        let first(@A: Type, x: A, pin: A) -> A = x;
-        let second(@A: Type, pin: A, x: A) -> A = x;
+        let id(@A: Type, a: A) -> A => a;
+        let first(@A: Type, x: A, pin: A) -> A => x;
+        let second(@A: Type, pin: A, x: A) -> A => x;
         let b: Byte = 7;
         let c: Bool = true;
-        let and(s: Str, t: Str) -> Str = Str/concat(s, Str/concat(" ", t));
+        let and(s: Str, t: Str) -> Str => Str/concat(s, Str/concat(" ", t));
         ${body}
         "#,
         body
@@ -83,7 +83,7 @@ fn a_lambda_under_nested_calls_is_typed_by_the_lambda_beside_the_outermost() {
 fn a_choice_in_a_settled_lambdas_body_takes_the_type_a_lambda_beside_it_gives() {
     let source = program(
         r#"
-        let head(xs: List(Byte)) -> Byte = match xs | [] => b | [h, ..t] => h end;
+        let head(xs: List(Byte)) -> Byte => match xs | [] => b | [h, ..t] => h end;
         let numeral = and(
             Show/show(first((x: Byte) => 0, (y: Byte) => b)(b)),
             Show/show(second((y: Byte) => b, (x: Byte) => 0)(b)));
@@ -115,7 +115,7 @@ fn a_settled_lambdas_codomain_may_name_its_parameter() {
     let source = program(
         r#"
         induct Tagged: (Nat) -> Type | tag(n: Nat): (n) end
-        let untag(@n: Nat, t: Tagged(n)) -> Nat = n;
+        let untag(@n: Nat, t: Tagged(n)) -> Nat => n;
         let dep = id((n: Nat) => Tagged/tag(n));
         let pair = first((n: Nat) => Tagged/tag(n), (m: Nat) => Tagged/tag(m));
         print(and(Nat/to_str(untag(dep(3))), Nat/to_str(untag(pair(4)))))
@@ -184,7 +184,7 @@ fn lambdas_in_a_list_and_in_a_match_type_each_other() {
         r#"
         let listed = [(y) => first(y, 5), (x: Byte) => x];
         let chosen = match c | true => (y) => first(y, 5) | false => (x: Byte) => x end;
-        let head(fs: List((Byte) -> Byte)) -> Str = match fs | [] => "none" | [f, ..t] => Show/show(f(b)) end;
+        let head(fs: List((Byte) -> Byte)) -> Str => match fs | [] => "none" | [f, ..t] => Show/show(f(b)) end;
         print(and(head(listed), Show/show(chosen(b))))
         "#,
     );

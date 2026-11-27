@@ -6,12 +6,12 @@ pub use /sys/Box/{new, get, set};
 use /std/{Io};
 
 --- What `f` answers beside the value it leaves in `b`, given the value `b` holds: read and written with no wait between.
-pub let change(@A: Type, @B: Type, b: Box(A), f: (A) -> {A, B}) -> Io(B) =
+pub let change(@A: Type, @B: Type, b: Box(A), f: (A) -> {A, B}) -> Io(B) =>
     let a = get(b)!;
     let (left, answer) = f(a);
     let () = set(b, left)!;
     Io/pure(answer);
 
 --- `b` left holding what `f` makes of the value it holds, read and written with no wait between.
-pub let update(@A: Type, b: Box(A), f: (A) -> A) -> Io({}) =
+pub let update(@A: Type, b: Box(A), f: (A) -> A) -> Io({}) =>
     change(b, (a) => (f(a), ()));

@@ -12,7 +12,7 @@ fn a_misspelled_binder_is_offered_the_one_it_is_a_swap_from() {
         r#"
         use /std/{Nat};
 
-        let f(count: Nat) -> Nat = coutn + 1;
+        let f(count: Nat) -> Nat => coutn + 1;
 
         /std/print("x")
     "#,
@@ -29,9 +29,9 @@ fn a_misspelled_declaration_is_offered_its_sibling() {
         r#"
         use /std/{Nat};
 
-        let total(n: Nat) -> Nat = n;
+        let total(n: Nat) -> Nat => n;
 
-        let g(n: Nat) -> Nat = totl(n);
+        let g(n: Nat) -> Nat => totl(n);
 
         /std/print("x")
     "#,
@@ -48,9 +48,9 @@ fn a_name_that_differs_in_case_alone_is_offered() {
         r#"
         use /std/{Nat};
 
-        let Total(n: Nat) -> Nat = n;
+        let Total(n: Nat) -> Nat => n;
 
-        let g(n: Nat) -> Nat = total(n);
+        let g(n: Nat) -> Nat => total(n);
 
         /std/print("x")
     "#,
@@ -68,7 +68,7 @@ fn a_misspelled_member_names_the_module_it_stopped_in() {
         r#"
         use /std/{Nat, Option};
 
-        let g(n: Nat) -> Option(Nat) = Option/sme(n);
+        let g(n: Nat) -> Option(Nat) => Option/sme(n);
 
         /std/print("x")
     "#,
@@ -99,7 +99,7 @@ fn a_misspelled_module_is_offered_the_one_it_is_near_wherever_it_is_looked_up() 
             r#"
             use /std/{Nat};
 
-            let p(a: Nat) -> Nat = ${path};
+            let p(a: Nat) -> Nat => ${path};
 
             /std/print("x")
             "#,
@@ -131,7 +131,7 @@ fn a_module_out_of_scope_is_told_how_to_reach_it() {
         r#"
         use /std/{Nat};
 
-        let f(xs: Nat) -> Nat = List/length(xs);
+        let f(xs: Nat) -> Nat => List/length(xs);
 
         /std/print("x")
     "#,
@@ -194,11 +194,11 @@ fn each_declaration_is_refused_for_the_name_it_wrote() {
         r#"
         use /std/{Nat, Option};
 
-        let f(n: Nat) -> Nat = Nat/to_srt(n);
+        let f(n: Nat) -> Nat => Nat/to_srt(n);
 
-        let g(n: Nat) -> Option(Nat) = Option/sme(n);
+        let g(n: Nat) -> Option(Nat) => Option/sme(n);
 
-        let h(n: Nat) -> Nat = n + 1;
+        let h(n: Nat) -> Nat => n + 1;
 
         /std/print(Nat/to_str(h(1)))
     "#,
@@ -247,8 +247,8 @@ fn a_name_a_group_never_declares_is_never_read_as_its_member() {
         r#"
         use /std/{Nat};
 
-        let f(n: Nat) -> Nat = Q(n)
-        and g(m: Nat) -> Nat = match m | 0 => 100 | k + 1 => f(k) end;
+        let f(n: Nat) -> Nat => Q(n)
+        and g(m: Nat) -> Nat => match m | 0 => 100 | k + 1 => f(k) end;
 
         /std/print("x")
     "#,

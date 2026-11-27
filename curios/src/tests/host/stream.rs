@@ -6,7 +6,7 @@ use {crate::test_support::*, curios_common::fill, curios_native::test_support::*
 fn io_write() {
     assert_eq!(
         run(r#"
-let entry() -> /std/Io({}) =
+let entry() -> /std/Io({}) =>
     let _ = /std/print("hello")!;
     /std/Io/pure(());
 entry()
@@ -19,7 +19,7 @@ entry()
 fn io_write_stderr() {
     assert_eq!(
         run(r#"
-let entry() -> /std/Io({}) =
+let entry() -> /std/Io({}) =>
     let _ = /std/print_err("oops")!;
     /std/Io/pure(());
 entry()
@@ -33,7 +33,7 @@ fn io_read() {
     let (system, io) = MockHost::builder().stdin_lines(["hello"]).build();
     run_text(
         r#"
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             match /std/Try/run(std/Io/read(std/Proc/stdin, 1024))!
             | success(bytes(b, @_)) => let w = /std/Try/run(std/Io/write(std/Proc/stdout, b))!; /std/Io/pure(())
             | success(ended()) => /std/Io/pure(())
@@ -52,13 +52,13 @@ fn io_read() {
 fn io_read_short_reads_and_eof() {
     let source = r#"
         use /std/{Io, Try, Result, Proc};
-        let show(r : Result(Io/Error, Io/Chunk)) -> Io({}) =
+        let show(r : Result(Io/Error, Io/Chunk)) -> Io({}) =>
             match r
             | success(bytes(b, @_)) => let _ = Try/run(Io/write(Proc/stdout, b))!; /std/Io/pure(())
             | success(ended()) => /std/print("1")
             | failure(_) => /std/print("e")
             end;
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let _ = show(Try/run(Io/read(Proc/stdin, 2))!)!;
             let _ = show(Try/run(Io/read(Proc/stdin, 2))!)!;
             show(Try/run(Io/read(Proc/stdin, 2))!);
@@ -76,18 +76,18 @@ fn a_rest_surfaces_a_read_failure_instead_of_a_partial_prefix() {
     let source = r#"
         use /std/{Nat, Bytes, Bool, Result, Str, Try, Io, print};
         use /std/Io/{Latch};
-        let show(r : Result(Io/Error, Bytes)) -> Str =
+        let show(r : Result(Io/Error, Bytes)) -> Str =>
             match r
             | success(bytes) => Str/concat("ok:", Nat/to_str(Bytes/length(bytes)))
             | failure(_) => "error"
             end;
         struct Failing: Type { code: Nat }
         satisfy Io/Read(Failing) {
-            read(s, _) = Try/raise(Io/Error/other(s.code)),
+            read(s, _) => Try/raise(Io/Error/other(s.code)),
         }
         struct Twice: Type { calls: Latch, fails: Bool }
         satisfy Io/Read(Twice) {
-            read(s, _) =
+            read(s, _) =>
                 let again = Latch/tripped(s.calls)!;
                 let () = Latch/trip(s.calls)!;
                 match again
@@ -99,13 +99,13 @@ fn a_rest_surfaces_a_read_failure_instead_of_a_partial_prefix() {
                     end
                 end,
         }
-        let twice(fails: Bool) -> Io(Twice) =
+        let twice(fails: Bool) -> Io(Twice) =>
             let calls = Latch/new()!;
             Io/pure(Twice { calls = calls, fails = fails });
-        let rest(@S: Type, use Io/Read(S), s: S) -> Io(Result(Io/Error, Bytes)) =
+        let rest(@S: Type, use Io/Read(S), s: S) -> Io(Result(Io/Error, Bytes)) =>
             let r = Io/Reader/new(s)!;
             Try/run(Io/Reader/rest(r));
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let _ = print(show(rest(Failing { code = 247 })!))!;
             let _ = print(" / ")!;
             let failing = twice(true)!;
@@ -128,7 +128,7 @@ fn a_program_s_own_stream_proves_every_chunk_holds_a_byte() {
             use /std/{Bytes, Bool, Str, List, Result, Try, Io, print};
             use /std/Io/{Latch};
             struct Pieces: Type { List({Latch, Bytes}) }
-            let next(ps: List({Latch, Bytes})) -> Try(Io, Io/Error, Io/Chunk) =
+            let next(ps: List({Latch, Bytes})) -> Try(Io, Io/Error, Io/Chunk) =>
                 match ps
                 | [] => Try/pure(Io/Chunk/ended())
                 | [p, ..more] =>
@@ -140,12 +140,12 @@ fn a_program_s_own_stream_proves_every_chunk_holds_a_byte() {
                     end
                 end;
             satisfy Io/Read(Pieces) {
-                read(s, n) = next(s.0),
+                read(s, n) => next(s.0),
             }
-            let piece(b: Bytes) -> Io({Latch, Bytes}) =
+            let piece(b: Bytes) -> Io({Latch, Bytes}) =>
                 let c = Latch/new()!;
                 Io/pure((c, b));
-            let entry() -> /std/Io({}) =
+            let entry() -> /std/Io({}) =>
                 let a = piece(0x[])!;
                 let b = piece(Str/to_bytes("a"))!;
                 let c = piece(0x[])!;
@@ -177,18 +177,18 @@ fn a_program_s_own_stream_proves_every_chunk_holds_a_byte() {
 fn lines_read_across_the_chunks_a_stream_arrives_in() {
     let source = r#"
         use /std/{Str, Bytes, Bool, Option, Result, Try, Io, print, Proc};
-        let line(r: Result(Io/Error, Option(Bytes))) -> Str =
+        let line(r: Result(Io/Error, Option(Bytes))) -> Str =>
             match r
             | success(some(b)) => Result/unwrap_or(Str/of_bytes(b), "?")
             | success(none()) => "<end>"
             | failure(_) => "<error>"
             end;
-        let field(r: Result(Io/Error, {bytes: Bytes, met: Bool})) -> Str =
+        let field(r: Result(Io/Error, {bytes: Bytes, met: Bool})) -> Str =>
             match r
             | success(found) => Result/unwrap_or(Str/of_bytes(found.bytes), "?")
             | failure(_) => "<error>"
             end;
-        let program() -> Io({}) =
+        let program() -> Io({}) =>
             let input = Io/Reader/new(Proc/stdin)!;
             let a = Try/run(Io/Reader/line(input))!;
             let b = Try/run(Io/Reader/line(input))!;

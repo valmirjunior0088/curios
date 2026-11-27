@@ -7,7 +7,7 @@ use crate::test_support::*;
 fn a_condition_guard_may_stand_before_a_bind_guard() {
     let source = r#"
         use /std/{Bool, Nat, Option};
-        let pick(prefer_fresh : Bool, cached : Option(Nat), fresh : Nat) -> Nat =
+        let pick(prefer_fresh : Bool, cached : Option(Nat), fresh : Nat) -> Nat =>
             match
             | prefer_fresh && fresh > 0 => fresh
             | some(n) = cached => n
@@ -24,7 +24,7 @@ fn a_condition_guard_may_stand_before_a_bind_guard() {
 fn the_first_arm_whose_guards_pass_is_taken() {
     let source = r#"
         use /std/{Nat, Bytes, rand};
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let z = Bytes/length(rand/bytes(0)!);
             let n = Nat/add(z, 2);
             let result =
@@ -46,7 +46,7 @@ fn the_first_arm_whose_guards_pass_is_taken() {
 fn a_match_with_no_head_of_only_a_default_takes_it() {
     let source = r#"
         use /std/{Nat, Bytes, rand};
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let z = Bytes/length(rand/bytes(0)!);
             let result =
                 match
@@ -64,13 +64,13 @@ fn a_match_with_no_head_of_only_a_default_takes_it() {
 fn a_match_with_no_head_reads_its_arms_from_the_top() {
     let source = r#"
         use /std/{Nat, Option, Bytes, rand};
-        let pick(x: Nat, o: Option(Nat)) -> Nat =
+        let pick(x: Nat, o: Option(Nat)) -> Nat =>
             match
             | x == 0 => 0
             | some(y) = o => y + 100 / x
             | _ => 10 / x
             end;
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let z = Bytes/length(rand/bytes(0)!);
             let a = pick(z, Option/some(1));
             let b = pick(2 + z, Option/some(1));
@@ -88,12 +88,12 @@ fn a_match_with_no_head_reads_its_arms_from_the_top() {
 fn a_bind_guard_binds_where_its_pattern_matches_and_falls_through_where_it_misses() {
     let source = r#"
         use /std/{Option, Nat, Bytes, rand};
-        let f(o : Option(Nat)) -> Nat =
+        let f(o : Option(Nat)) -> Nat =>
             match
             | some(x) = o => x + 10
             | _ => 99
             end;
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let z = Bytes/length(rand/bytes(0)!);
             /std/print(Nat/to_str((f(Option/some(5)) + f(Option/none())) + z));
         entry()
@@ -107,12 +107,12 @@ fn a_bind_guard_binds_where_its_pattern_matches_and_falls_through_where_it_misse
 fn a_bind_guard_refutable_at_two_places_shares_one_fallthrough() {
     let source = r#"
         use /std/{Option, List, Nat, Bytes, rand};
-        let f(o : Option(List(Nat))) -> Nat =
+        let f(o : Option(List(Nat))) -> Nat =>
             match
             | some([h, ..t]) = o => h + 1
             | _ => 99
             end;
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let z = Bytes/length(rand/bytes(0)!);
             let a = f(Option/some([5, 6, 7]));
             let b = f(Option/some([]));
@@ -130,7 +130,7 @@ fn a_bind_guard_refutable_at_two_places_shares_one_fallthrough() {
 fn the_arms_after_a_nested_bind_guard_are_typed_at_the_matchs_type() {
     let source = r#"
         use /std/{Int, Option};
-        let g(m : Option(Option(Int))) -> Int =
+        let g(m : Option(Option(Int))) -> Int =>
             match | some(some(x)) = m => x | _ => 0 end;
         /std/print(Int/to_str(g(Option/some(Option/some(-7))) + g(Option/some(Option/none())) + g(Option/none())))
         "#;
@@ -144,7 +144,7 @@ fn the_arms_after_a_failed_condition_learn_it_and_after_a_missed_bind_nothing() 
     let condition = r#"
         use /std/{Nat, Bool};
         use /std/Bool/{True, Holds};
-        let learned(b: Bool) -> Nat =
+        let learned(b: Bool) -> Nat =>
             match
             | b => 1
             | _ => let _: Holds(Bool/not(b)) = True/qed(); 0
@@ -156,7 +156,7 @@ fn the_arms_after_a_failed_condition_learn_it_and_after_a_missed_bind_nothing() 
     let bind = r#"
         use /std/{Nat, Bool};
         use /std/Bool/{True, Holds};
-        let unlearned(b: Bool) -> Nat =
+        let unlearned(b: Bool) -> Nat =>
             match
             | true = b => 1
             | _ => let _: Holds(Bool/not(b)) = True/qed(); 0

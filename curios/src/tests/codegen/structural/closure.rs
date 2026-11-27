@@ -129,8 +129,8 @@ fn a_closure_one_arm_returns_through_a_call_is_not_absorbed() {
 fn a_recursive_performance_whose_answer_is_dropped_compiles() {
     wat(r#"
         use /std/{Io, Nat};
-        let spin(n: Nat) -> Io({}) = let m = Io/pure(n + 1)!; spin(m);
-        let entry() -> Io({}) = let _ = spin(0)!; /std/print("done");
+        let spin(n: Nat) -> Io({}) => let m = Io/pure(n + 1)!; spin(m);
+        let entry() -> Io({}) => let _ = spin(0)!; /std/print("done");
         entry()
         "#);
 }
@@ -179,14 +179,14 @@ fn a_returned_closure_every_caller_applies_is_absorbed() {
 fn a_convoy_in_a_hot_loop_allocates_no_closure() {
     const CONVOY: &str = r#"
         use /std/{Nat, Bool, Eq, List, Proc};
-        let step(x: Nat) -> Nat =
+        let step(x: Nat) -> Nat =>
             match x % 2 == 0
             | true => (_: Eq()(x, x)) => x / 2
             | false => (_: Eq()(x, x)) => 3 * x + 1
             end(Eq/refl());
-        let loop(k: Nat, x: Nat) -> Nat =
+        let loop(k: Nat, x: Nat) -> Nat =>
             match k | 0 => x | kp + 1 => loop(kp, step(x) % 65537) end;
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let taint = List/length(Proc/args()!);
             /std/print(Nat/to_str(loop(taint, 7)));
         entry()
@@ -214,9 +214,9 @@ fn a_convoy_in_a_hot_loop_allocates_no_closure() {
 fn a_closure_of_one_arity_reaches_its_call_with_nothing_to_cast() {
     const REPEAT: &str = r#"
         use /std/{Nat, List, Proc};
-        let repeat(k: Nat, f: (Nat) -> Nat, x: Nat) -> Nat =
+        let repeat(k: Nat, f: (Nat) -> Nat, x: Nat) -> Nat =>
             match k | 0 => x | kp + 1 => repeat(kp, f, f(x) % 65537) end;
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let taint = List/length(Proc/args()!);
             let step: (Nat) -> Nat =
                 match taint % 2 | 0 => (y) => y * 3 + taint | _ => (y) => y * 5 + taint end;

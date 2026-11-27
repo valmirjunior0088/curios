@@ -7,7 +7,7 @@ use crate::test_support::*;
 fn get_on_an_opaque_option_names_the_unfilled_bound() {
     let source = r#"
         use /std/{Option, Nat, Str};
-        let first(o: Option(Nat)) -> Nat = Option/get(o);
+        let first(o: Option(Nat)) -> Nat => Option/get(o);
         /std/print(Nat/to_str(first(Option/some(3))))
         "#;
 
@@ -22,7 +22,7 @@ fn reexported_option_serves_repeated_occurrences_and_higher_universes() {
     let source = r#"
         use /std/{Option, Nat, Str, Spell, Io};
         use /std/Option/{some, none};
-        let pair(@A: Type, a: A) -> {Option(A), Option(A)} = (some(a), none());
+        let pair(@A: Type, a: A) -> {Option(A), Option(A)} => (some(a), none());
         let small: {Option(Nat), Option(Nat)} = pair(7);
         let large: {Option(Type), Option(Type)} = pair(Nat);
         let carried: Type = match large.0 | some(t) => t | none() => Nat end;
@@ -37,7 +37,7 @@ fn reexported_result_serves_repeated_occurrences_and_higher_universes() {
     let source = r#"
         use /std/{Result, Nat, Str, Spell, Io};
         use /std/Result/{success, failure};
-        let pair(@E: Type, @A: Type, a: A, e: E) -> {Result(E, A), Result(E, A)} =
+        let pair(@E: Type, @A: Type, a: A, e: E) -> {Result(E, A), Result(E, A)} =>
             (success(a), failure(e));
         let small: {Result(Str, Nat), Result(Str, Nat)} = pair(7, "no");
         let large: {Result(Type, Type), Result(Type, Type)} = pair(Nat, Str);

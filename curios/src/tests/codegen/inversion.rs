@@ -13,7 +13,7 @@ const PROGRAM: &str = r#"
     use /std/{Str, Nat, List, Option, Result, Try, Io, Proc, Fmt, Bytes, Flt};
     use /std/Tui/{Style, Frame, View};
     use /std/http/{Url, Field};
-    let execute() -> Try(Io, Str, {}) =
+    let execute() -> Try(Io, Str, {}) =>
         let arguments = Proc/args()!;
         let bytes = Option/to_result(List/try_get(arguments, 1), "no input")!;
         let s = Result/map_failure(Str/of_bytes(bytes), (_) => "invalid utf-8")!;

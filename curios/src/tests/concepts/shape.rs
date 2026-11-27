@@ -11,7 +11,7 @@ fn a_concept_resolves_on_a_tuple_value() {
             tag(A) -> Str,
         }
         satisfy Tag({Nat, Bool}) {
-            tag(t) = "pair",
+            tag(t) => "pair",
         }
         let z: {Nat, Bool} = (1, true);
         /std/print(Tag/tag(z))
@@ -29,7 +29,7 @@ fn a_labeled_goal_does_not_reach_the_positional_witness() {
             tag(A) -> Str,
         }
         satisfy Tag({Nat, Bool}) {
-            tag(t) = "pair",
+            tag(t) => "pair",
         }
         let z: {x: Nat, y: Bool} = (x = 1, y = true);
         /std/print(Tag/tag(z))
@@ -51,7 +51,7 @@ fn a_later_declared_tuple_witness_serves_an_earlier_use() {
         let z: {Nat, Bool} = (1, true);
         let named: Str = Tag/tag(z);
         satisfy Tag({Nat, Bool}) {
-            tag(t) = "pair",
+            tag(t) => "pair",
         }
         /std/print(named)
         "#;
@@ -67,7 +67,7 @@ fn the_unit_type_is_a_key() {
             tag(A) -> Str,
         }
         satisfy Tag({}) {
-            tag(t) = "unit",
+            tag(t) => "unit",
         }
         /std/print(Tag/tag(()))
         "#;
@@ -80,12 +80,12 @@ fn the_unit_type_is_a_key() {
 fn a_constructor_whose_body_is_a_tuple_type_is_keyed() {
     let source = r#"
         use /std/{Nat, Str};
-        let Pair(A: Type) -> Type = {Nat, A};
+        let Pair(A: Type) -> Type => {Nat, A};
         pub concept Fun(M: (Type) -> Type): pub Type {
             name() -> Str,
         }
         satisfy Fun(Pair) {
-            name() = "Pair",
+            name() => "Pair",
         }
         /std/print(Fun/name(@Pair))
         "#;
@@ -101,8 +101,8 @@ fn a_variable_head_is_still_not_a_key() {
         pub concept Tag(A: Type): pub Type {
             tag(A) -> Str,
         }
-        satisfy (@A: Type) => Tag(A) {
-            tag(t) = "any",
+        satisfy (@A: Type) -> Tag(A) {
+            tag(t) => "any",
         }
         /std/print("x")
         "#;
@@ -122,7 +122,7 @@ fn a_witness_keyed_on_a_function_type_cannot_be_keyed() {
             name() -> Str,
         }
         satisfy Tag((Nat) -> Nat) {
-            name() = "a function",
+            name() => "a function",
         }
         /std/print("hi\n")
         "#,

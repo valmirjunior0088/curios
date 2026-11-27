@@ -3,7 +3,7 @@ use /std/Str/{At};
 use /std/Bool/{Holds};
 
 --- The first character at or after `from` that `pred` accepts, and where it is, or `none`: one walk over the bytes from `from`, which stops before it.
-pub let seek(s: Str, from: At(s), pred: (Char) -> Bool) -> Option({at: At(s), char: Char}) =
+pub let seek(s: Str, from: At(s), pred: (Char) -> Bool) -> Option({at: At(s), char: Char}) =>
     let rest = Str/after(s, from);
     let walked =
         Str/leading(
@@ -23,7 +23,7 @@ pub let seek(s: Str, from: At(s), pred: (Char) -> Bool) -> Option({at: At(s), ch
     end;
 
 --- An occurrence of a needle at or after `from`: where it starts, which is not before `from`, and the position past it, which is past the start — the needle holds a character.
-pub let Found(s: Str, from: At(s)) -> Type =
+pub let Found(s: Str, from: At(s)) -> Type =>
     {
         start: At(s),
         past: At(s),
@@ -36,7 +36,7 @@ let starts_concat(
     r: Bytes,
     some: Holds(0 < Bytes/length(a)),
     at: Holds(At/starts(a)),
-) -> Holds(At/starts(0x[..a, ..r])) =
+) -> Holds(At/starts(0x[..a, ..r])) =>
     match a
     | 0x[] => match some end
     | 0x[_, .._] => at
@@ -49,7 +49,7 @@ pub let occurrence(
     from: At(s),
     needle: Str,
     first: {char: Char, past: At(needle), progress: Holds(0 < past.offset)},
-) -> Option(Found(s, from)) =
+) -> Option(Found(s, from)) =>
     let n = Bytes/length(needle.bytes);
     let some: Holds(0 < n) =
         Nat/lt/of_lt_le(0, first.past.offset, n, first.progress, first.past.within);
@@ -60,7 +60,7 @@ pub let occurrence(
         k: Nat,
         @w: Holds(k <= Bytes/length(rest.bytes)),
         @e: Eq()(Bytes/drop(rest.bytes, k, @w), b),
-    ) -> Option(Found(s, from)) =
+    ) -> Option(Found(s, from)) =>
         match b
         | 0x[] => Option/none()
         | 0x[h, ..t] =>
@@ -133,7 +133,7 @@ pub let occurrence(
     go(rest.bytes, 0, @proved(), @Eq/refl());
 
 --- The first occurrence of `needle` in `s`: where it starts and the position past it, or `none`. An empty needle occurs at the start.
-pub let first_occurrence(s: Str, needle: Str) -> Option({start: At(s), past: At(s)}) =
+pub let first_occurrence(s: Str, needle: Str) -> Option({start: At(s), past: At(s)}) =>
     match At/try_next(needle, At/start(needle))
     | none() => Option/some((start = At/start(s), past = At/start(s)))
     | some(first) =>
@@ -144,7 +144,7 @@ pub let first_occurrence(s: Str, needle: Str) -> Option({start: At(s), past: At(
     end;
 
 --- The last position at or before `from` past which `s` holds only characters `pred` accepts: one walk back.
-pub let back_over(s: Str, from: At(s), pred: (Char) -> Bool) -> At(s) =
+pub let back_over(s: Str, from: At(s), pred: (Char) -> Bool) -> At(s) =>
     At/backward(
         (_) => At(s),
         (at, again) =>

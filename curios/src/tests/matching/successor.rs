@@ -8,14 +8,14 @@ fn a_successor_pattern_takes_its_step_apart() {
     let source = r#"
         use /std/{Eq, List, Nat, Str};
 
-        let half(n: Nat) -> Nat =
+        let half(n: Nat) -> Nat =>
             match n
             | 0 => 0
             | p + 2 => 1 + half(p)
             | _ => 0
             end;
 
-        let law(k: Nat) -> Eq()(half(k + 2), 1 + half(k)) = Eq/refl();
+        let law(k: Nat) -> Eq()(half(k + 2), 1 + half(k)) => Eq/refl();
 
         /std/print(Str/join(" ", List/map([half(0), half(1), half(2), half(7), half(10)], Nat/to_str)))
         "#;
@@ -29,7 +29,7 @@ fn a_binder_past_a_step_stands_for_the_value_it_leaves() {
     let source = r#"
         use /std/{Eq, Nat};
 
-        let f(n: Nat) -> Nat =
+        let f(n: Nat) -> Nat =>
             match n
             | 0 => 0
             | p + 2 => p
@@ -48,7 +48,7 @@ fn a_nested_successor_pattern_takes_its_step_apart() {
     let source = r#"
         use /std/{List, Nat, Option, Str};
 
-        let f(o: Option(Nat)) -> Nat =
+        let f(o: Option(Nat)) -> Nat =>
             match o
             | some(0) => 0
             | some(p + 3) => p
@@ -68,7 +68,7 @@ fn a_successor_row_reached_at_several_places_takes_its_step_apart() {
     let source = r#"
         use /std/{Bool, List, Nat, Str};
 
-        let f(b: Bool, n: Nat) -> Nat =
+        let f(b: Bool, n: Nat) -> Nat =>
             match (b, n)
             | (true, 0) => 1
             | (_, p + 2) => p + 10
@@ -92,7 +92,7 @@ fn a_step_past_a_value_no_arm_takes_names_it() {
         let error = error(&fill!(
             r#"
             use /std/{Nat};
-            let f(n: Nat) -> Nat = match n ${arms} end;
+            let f(n: Nat) -> Nat => match n ${arms} end;
             /std/print(Nat/to_str(f(4)))
             "#,
             arms
@@ -110,14 +110,14 @@ fn literals_beside_a_step_refine_each_arm() {
     let source = r#"
         use /std/{Eq, Nat};
 
-        let fib(n: Nat) -> Nat =
+        let fib(n: Nat) -> Nat =>
             match n
             | 0 => 0
             | 1 => 1
             | p + 2 => fib(p) + fib(p + 1)
             end;
 
-        let law(k: Nat) -> Eq()(fib(k + 2), fib(k) + fib(k + 1)) = Eq/refl();
+        let law(k: Nat) -> Eq()(fib(k + 2), fib(k) + fib(k + 1)) => Eq/refl();
 
         /std/print(Nat/to_str(fib(10)))
         "#;
@@ -153,7 +153,7 @@ fn literals_beside_a_step_answer_as_stated() {
         let source = fill!(
             r#"
             use /std/{List, Nat, Str};
-            let f(n: Nat) -> Nat = match n ${arms} end;
+            let f(n: Nat) -> Nat => match n ${arms} end;
             /std/print(Str/join(" ", List/map([${calls}], Nat/to_str)))
             "#,
             arms,
@@ -170,9 +170,9 @@ fn a_step_past_an_exception_knows_the_exception_is_not_its_value() {
     let source = r#"
         use /std/{Bool, Nat};
 
-        let need(n: Nat, @ok: Bool/Holds(n != 7)) -> Nat = n;
+        let need(n: Nat, @ok: Bool/Holds(n != 7)) -> Nat => n;
 
-        let f(n: Nat) -> Nat =
+        let f(n: Nat) -> Nat =>
             match n
             | 0 => 0
             | 1 => 1
@@ -192,7 +192,7 @@ fn literals_beside_a_nested_step_answer_as_stated() {
     let source = r#"
         use /std/{List, Nat, Option, Str};
 
-        let f(o: Option(Nat)) -> Nat =
+        let f(o: Option(Nat)) -> Nat =>
             match o
             | some(0) => 10
             | some(1) => 11
@@ -212,7 +212,7 @@ fn a_literal_row_reached_at_several_places_meets_a_step() {
     let source = r#"
         use /std/{Bool, List, Nat, Str};
 
-        let f(b: Bool, n: Nat) -> Nat =
+        let f(b: Bool, n: Nat) -> Nat =>
             match (b, n)
             | (true, 0) => 1
             | (_, 7) => 70
@@ -236,7 +236,7 @@ fn a_literal_past_a_step_is_refused_as_unreachable() {
         let error = error(&fill!(
             r#"
             use /std/{Nat};
-            let f(n: Nat) -> Nat = match n ${arms} end;
+            let f(n: Nat) -> Nat => match n ${arms} end;
             /std/print(Nat/to_str(f(4)))
             "#,
             arms

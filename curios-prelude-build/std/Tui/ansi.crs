@@ -2,30 +2,30 @@ use /std/{Nat, Bool, Str, Bytes, List, Byte, Fmt};
 use /std/Tui/{Color, Style, Mode};
 
 --- `ESC [` and `body`.
-pub let csi(body: Str) -> Bytes =
+pub let csi(body: Str) -> Bytes =>
     0x[0x1B, '[', ..Str/to_bytes(body)];
 
 --- The cursor to column `x` of row `y`, both from zero.
-pub let move_to(x: Nat, y: Nat) -> Bytes =
+pub let move_to(x: Nat, y: Nat) -> Bytes =>
     csi(Fmt/render("%;%H")(y + 1)(x + 1));
 
 pub let clear: Bytes =
     csi("2J");
 
 -- `m`'s number between `?` and `final`, as a DEC private mode's sequences are written.
-let private(m: Mode, final: Str) -> Bytes =
+let private(m: Mode, final: Str) -> Bytes =>
     csi(Str/flatten(["?", Nat/to_str(Mode/number(m)), final]));
 
 --- Set `m`.
-pub let on(m: Mode) -> Bytes =
+pub let on(m: Mode) -> Bytes =>
     private(m, "h");
 
 --- Reset `m`.
-pub let off(m: Mode) -> Bytes =
+pub let off(m: Mode) -> Bytes =>
     private(m, "l");
 
 --- Ask whether the terminal supports `m`, which it answers with a report of the mode.
-pub let ask(m: Mode) -> Bytes =
+pub let ask(m: Mode) -> Bytes =>
     private(m, "$p");
 
 pub let cursor_show: Bytes =
@@ -54,7 +54,7 @@ pub let attributes_ask: Bytes =
 pub let reset: Bytes =
     csi("0m");
 
-let color_params(c: Color, base: Nat) -> List(Str) =
+let color_params(c: Color, base: Nat) -> List(Str) =>
     match c
     | default() => []
     | ansi(n) =>
@@ -73,8 +73,8 @@ let color_params(c: Color, base: Nat) -> List(Str) =
     end;
 
 --- The whole of `s` as one attribute sequence, from a reset.
-pub let sgr(s: Style) -> Bytes =
-    let flag(on: Bool, code: Str) -> List(Str) =
+pub let sgr(s: Style) -> Bytes =>
+    let flag(on: Bool, code: Str) -> List(Str) =>
         match on | true => [code] | false => [] end;
     csi(
         Str/concat(

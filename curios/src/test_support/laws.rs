@@ -12,7 +12,7 @@ pub fn nested(depth: usize) -> String {
         right = format!("Nat/and(Nat/or(y{level}, x{level}), {right})");
     }
     fill!(
-        "use /std/{Nat, Eq, Io};\nlet nested(${binders}) -> Eq()(${left}, ${right}) = Eq/refl();\nIo/pure(())",
+        "use /std/{Nat, Eq, Io};\nlet nested(${binders}) -> Eq()(${left}, ${right}) => Eq/refl();\nIo/pure(())",
         binders,
         left,
         right
@@ -35,7 +35,7 @@ pub fn summed(summands: usize) -> String {
         .collect::<Vec<_>>()
         .join(" + ");
     fill!(
-        "use /std/{Nat, Eq, Io};\nlet summed(${binders}) -> Eq()(${left}, ${right}) = Eq/refl();\nIo/pure(())",
+        "use /std/{Nat, Eq, Io};\nlet summed(${binders}) -> Eq()(${left}, ${right}) => Eq/refl();\nIo/pure(())",
         binders,
         left,
         right

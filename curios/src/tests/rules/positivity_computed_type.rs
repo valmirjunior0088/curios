@@ -12,7 +12,7 @@ fn a_negative_occurrence_behind_an_alias_is_rejected() {
         r#"
         use /std/{Bool};
 
-        let Arrow(X : Type) -> Type = (Bool) -> X;
+        let Arrow(X : Type) -> Type => (Bool) -> X;
 
         induct Bad : pub Type
         | c(Arrow(Bad))
@@ -41,7 +41,7 @@ fn a_non_strict_occurrence_behind_an_alias_is_rejected() {
         r#"
         use /std/{Bool};
 
-        let Arrow(X : Type) -> Type = (Bool) -> X;
+        let Arrow(X : Type) -> Type => (Bool) -> X;
 
         induct Bad : pub Type
         | c(Arrow(Arrow(Bad)))
@@ -87,7 +87,7 @@ fn a_negative_occurrence_behind_a_decided_type_level_match_is_rejected() {
         r#"
         use /std/{Bool};
 
-        let Pick(b : Bool, X : Type) -> Type =
+        let Pick(b : Bool, X : Type) -> Type =>
             match b
             | true => (X) -> Bool
             | false => X
@@ -120,7 +120,7 @@ fn an_occurrence_behind_a_stuck_type_level_match_is_read_where_its_arms_put_it()
         r#"
         use /std/{Bool, Nat};
 
-        let Pick(b : Bool, X : Type) -> Type =
+        let Pick(b : Bool, X : Type) -> Type =>
             match b
             | true => {Nat, X}
             | false => X
@@ -154,7 +154,7 @@ fn a_parameter_a_stuck_match_only_selects_on_is_unused() {
         r#"
         use /std/{Bool, Nat};
 
-        let Pick(b : Bool, X : Type) -> Type =
+        let Pick(b : Bool, X : Type) -> Type =>
             match b
             | true => {Nat, X}
             | false => X
@@ -207,7 +207,7 @@ fn a_list_matchs_element_type_is_read_for_its_declarations_alone() {
         r#"
         use /std/{Nat, List};
 
-        let Head(@X: Type, l: List(X), Y: Type) -> Type =
+        let Head(@X: Type, l: List(X), Y: Type) -> Type =>
             match l | [] => {} | [_, .._] => Y end;
 
         struct L(T: Type, Y: Type): pub Type { l: List(T), f: Head(l, Y) }
@@ -289,7 +289,7 @@ fn a_field_type_a_self_calling_rec_computes_is_admitted() {
         | cons(Str, Labels)
         end
 
-        let Count(L : Labels) -> Type =
+        let Count(L : Labels) -> Type =>
             match L
             | nil() => {}
             | cons(l, rest) => {Nat, Count(rest)}
@@ -316,7 +316,7 @@ fn a_computed_field_type_under_a_parameterized_family_is_admitted() {
         | cons(Str, Labels)
         end
 
-        let Count(L : Labels) -> Type =
+        let Count(L : Labels) -> Type =>
             match L
             | nil() => {}
             | cons(l, rest) => Option(Count(rest))
@@ -342,7 +342,7 @@ fn a_computed_field_type_that_is_a_bare_recursive_call_is_admitted() {
         | cons(Str, Labels)
         end
 
-        let Count(L : Labels) -> Type =
+        let Count(L : Labels) -> Type =>
             match L
             | nil() => {}
             | cons(l, rest) => Count(rest)
@@ -363,7 +363,7 @@ fn a_field_type_computed_by_recursion_over_a_numeral_is_admitted() {
     let source = r#"
         use /std/{Nat, Bool};
 
-        let Rep(n : Nat) -> Type =
+        let Rep(n : Nat) -> Type =>
             match n
             | 0 => {}
             | p + 1 => {Bool, Rep(p)}
@@ -389,7 +389,7 @@ fn a_constructor_payload_a_self_calling_rec_computes_is_admitted() {
         | cons(Str, Labels)
         end
 
-        let Count(L : Labels) -> Type =
+        let Count(L : Labels) -> Type =>
             match L
             | nil() => {}
             | cons(l, rest) => {Nat, Count(rest)}
@@ -417,13 +417,13 @@ fn a_refinement_field_over_a_self_calling_fold_is_admitted() {
         use /std/{Bytes, Bool};
         use /std/Bool/{True, False};
 
-        let always(b : Bytes) -> Bool =
+        let always(b : Bytes) -> Bool =>
             match b
             | 0x[] => true
             | 0x[h, ..t] => always(t)
             end;
 
-        let Certified(b : Bytes) -> Prop =
+        let Certified(b : Bytes) -> Prop =>
             match always(b) | true => True | false => False end;
 
         struct Wrapped : Type {
@@ -442,10 +442,10 @@ fn a_refinement_field_over_a_self_calling_fold_is_admitted() {
 #[test]
 fn a_family_read_under_a_short_budget_is_never_refused_as_not_positive() {
     let aliases = (1..=12)
-        .map(|k| format!("let W{k}(A: Type) -> Type = W{}(W{}(A));\n", k - 1, k - 1))
+        .map(|k| format!("let W{k}(A: Type) -> Type => W{}(W{}(A));\n", k - 1, k - 1))
         .collect::<String>();
     let source = fill!(
-        "struct Box(A: Type): pub Type { held: A }\nlet W0(A: Type) -> Type = A;\n${aliases}induct Wrap(A: Type): Type | wrap(Box(W12(A))) end\ninduct Outer: Type | leaf() | node(Wrap(Outer)) end\n/std/print(\"ok\")\n",
+        "struct Box(A: Type): pub Type { held: A }\nlet W0(A: Type) -> Type => A;\n${aliases}induct Wrap(A: Type): Type | wrap(Box(W12(A))) end\ninduct Outer: Type | leaf() | node(Wrap(Outer)) end\n/std/print(\"ok\")\n",
         aliases
     );
 

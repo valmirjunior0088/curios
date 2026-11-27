@@ -25,7 +25,7 @@ satisfy Hash/Key(Timestamp) {
 
 --- As its constructor's call: `Timestamp/of_unix_nanos(+1500000000)`.
 satisfy Spell(Timestamp) {
-    spell(t) = Fmt/render("Timestamp/of_unix_nanos(#)")(t.nanos),
+    spell(t) => Fmt/render("Timestamp/of_unix_nanos(#)")(t.nanos),
 }
 
 --- The moment as ISO 8601 writes it in UTC with the local offset unknown, `Z`: `1994-11-06T08:49:37Z`, the fraction where there is one.
@@ -34,45 +34,45 @@ satisfy Show(Timestamp) {
 }
 
 --- The moment `n` seconds after the epoch.
-pub let of_unix_secs(n: Int) -> Timestamp =
+pub let of_unix_secs(n: Int) -> Timestamp =>
     Timestamp { nanos = n * 1000000000 };
 
 --- The moment `n` nanoseconds after the epoch.
-pub let of_unix_nanos(n: Int) -> Timestamp =
+pub let of_unix_nanos(n: Int) -> Timestamp =>
     Timestamp { nanos = n };
 
 --- The Unix second the moment lies in, as POSIX counts it: floored, so a moment half a second before the epoch lies in its second `-1`.
-pub let to_unix_secs(t: Timestamp) -> Int =
+pub let to_unix_secs(t: Timestamp) -> Int =>
     t.nanos / 1000000000;
 
 --- The nanoseconds since the epoch, exactly.
-pub let to_unix_nanos(t: Timestamp) -> Int =
+pub let to_unix_nanos(t: Timestamp) -> Int =>
     t.nanos;
 
 --- The wall clock: seconds since the Unix epoch, signed, and the nanoseconds past them.
 foreign clock_wall() -> {secs: Int, nanos: Nat};
 
 --- The wall clock now.
-pub let now() -> Io(Timestamp) =
+pub let now() -> Io(Timestamp) =>
     let r = clock_wall()!;
     Io/pure(Timestamp { nanos = r.secs * 1000000000 + Nat/to_int(r.nanos) });
 
 --- The moment `d` after `t`.
-pub let add(t: Timestamp, d: Duration) -> Timestamp =
+pub let add(t: Timestamp, d: Duration) -> Timestamp =>
     Timestamp { nanos = t.nanos + Duration/to_nanos(d) };
 
 --- The moment `d` before `t`.
-pub let sub(t: Timestamp, d: Duration) -> Timestamp =
+pub let sub(t: Timestamp, d: Duration) -> Timestamp =>
     Timestamp { nanos = t.nanos - Duration/to_nanos(d) };
 
 --- How long after `b` the moment `a` is: below zero where `a` is the earlier.
-pub let diff(a: Timestamp, b: Timestamp) -> Duration =
+pub let diff(a: Timestamp, b: Timestamp) -> Duration =>
     Duration/of_nanos(a.nanos - b.nanos);
 
 --- The moment as ISO 8601 writes it in UTC with the local offset unknown, `Z`, which is what a moment with no offset of its own is (RFC 9557 §2).
-pub let to_str(t: Timestamp) -> Str =
+pub let to_str(t: Timestamp) -> Str =>
     iso8601/write_offset_date_time(OffsetDateTime/of_timestamp(t, Offset/unknown()));
 
 --- The moment a date-time at an offset names, written as ISO 8601 writes one, or `none` for text that names none.
-pub let of_str(s: Str) -> Option(Timestamp) =
+pub let of_str(s: Str) -> Option(Timestamp) =>
     Option/map(iso8601/whole(iso8601/offset_date_time(), s), OffsetDateTime/to_timestamp);

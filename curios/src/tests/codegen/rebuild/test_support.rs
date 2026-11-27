@@ -17,7 +17,7 @@ pub fn program(definitions: &str, result: &str) -> String {
         r#"
         use /std/{Str, Nat, Bool, Map, List, Option, Result, Try, Io, Proc, Fmt};
         ${definitions}
-        let execute() -> Try(Io, Str, {}) =
+        let execute() -> Try(Io, Str, {}) =>
             let arguments = Proc/args()!;
             let bytes = Option/to_result(List/try_get(arguments, 1), "no input")!;
             let s = Result/map_failure(Str/of_bytes(bytes), (_) => "invalid utf-8")!;
@@ -92,7 +92,7 @@ pub fn run(module: &Module, n: &str) -> (u8, Vec<u8>) {
 
 /// A map threaded once through a loop of inserts.
 pub const SPINES: &str = r#"
-    let walk(n: Nat, x: Nat, m: Map(Nat, Nat)) -> Map(Nat, Nat) =
+    let walk(n: Nat, x: Nat, m: Map(Nat, Nat)) -> Map(Nat, Nat) =>
         match n
         | 0 => m
         | k + 1 =>
@@ -103,14 +103,14 @@ pub const SPINES: &str = r#"
 
 /// A map threaded once through a loop of inserts that counts its rounds, which two calls each start with a map of its own.
 pub const TWO_WALKS: &str = r#"
-    let walk(n: Nat, i: Nat, x: Nat, m: Map(Nat, Nat)) -> Map(Nat, Nat) =
+    let walk(n: Nat, i: Nat, x: Nat, m: Map(Nat, Nat)) -> Map(Nat, Nat) =>
         match n
         | 0 => m
         | k + 1 =>
             let y = 75 * x % 65537;
             walk(k, i + 1, y, Map/insert(m, y, i % 1000003))
         end;
-    let sum(m: Map(Nat, Nat)) -> Nat = Map/fold(m, 0, (_, v, acc) => (acc + v) % 1000003);
+    let sum(m: Map(Nat, Nat)) -> Nat => Map/fold(m, 0, (_, v, acc) => (acc + v) % 1000003);
 "#;
 
 /// The two walks of [`TWO_WALKS`] unioned, the union summed.
@@ -133,7 +133,7 @@ pub const SEARCH_TREE: &str = r#"
     | leaf()
     | node(left: Tree, key: Nat, right: Tree)
     end
-    let insert(t: Tree, k: Nat) -> Tree =
+    let insert(t: Tree, k: Nat) -> Tree =>
         match t
         | leaf() => Tree/node(Tree/leaf(), k, Tree/leaf())
         | node(l, x, r) =>
@@ -143,17 +143,17 @@ pub const SEARCH_TREE: &str = r#"
             | _ => Tree/node(l, x, r)
             end
         end;
-    let size(t: Tree) -> Nat = match t | leaf() => 0 | node(l, _, r) => size(l) + 1 + size(r) end;
-    let walk(n: Nat, x: Nat, t: Tree) -> Tree =
+    let size(t: Tree) -> Nat => match t | leaf() => 0 | node(l, _, r) => size(l) + 1 + size(r) end;
+    let walk(n: Nat, x: Nat, t: Tree) -> Tree =>
         match n | 0 => t | k + 1 => let y = 75 * x % 65537; walk(k, y, insert(t, y)) end;
-    let shared(n: Nat) -> Tree = Tree/node(Tree/leaf(), n + 1, Tree/leaf());
+    let shared(n: Nat) -> Tree => Tree/node(Tree/leaf(), n + 1, Tree/leaf());
 "#;
 
 /// A map filled with `n` keys, then drained of every other one and of keys it never held.
 pub const REMOVALS: &str = r#"
-    let fill(n: Nat, m: Map(Nat, Nat)) -> Map(Nat, Nat) =
+    let fill(n: Nat, m: Map(Nat, Nat)) -> Map(Nat, Nat) =>
         match n | 0 => m | k + 1 => fill(k, Map/insert(m, k * 7 % 1009, k)) end;
-    let drain(n: Nat, m: Map(Nat, Nat)) -> Map(Nat, Nat) =
+    let drain(n: Nat, m: Map(Nat, Nat)) -> Map(Nat, Nat) =>
         match n | 0 => m | k + 1 => drain(k, Map/remove(m, k * 14 % 1009)) end;
 "#;
 
@@ -165,14 +165,14 @@ pub const ACCESSED_TRIE: &str = r#"
     | leaf(key: Nat, value: Nat)
     | branch(twigs: T(N))
     end
-    let get(@X: Type, t: T(X), d: Nat) -> X = match d | 0 => t.c0 | 1 => t.c1 | 2 => t.c2 | 3 => t.c3 | 4 => t.c4 | 5 => t.c5 | 6 => t.c6 | _ => t.c7 end;
-    let set(@X: Type, t: T(X), d: Nat, x: X) -> T(X) = match d | 0 => T { ..t, c0 = x } | 1 => T { ..t, c1 = x } | 2 => T { ..t, c2 = x } | 3 => T { ..t, c3 = x } | 4 => T { ..t, c4 = x } | 5 => T { ..t, c5 = x } | 6 => T { ..t, c6 = x } | _ => T { ..t, c7 = x } end;
-    let take(t: T(N), d: Nat) -> {N, T(N)} = match d | 0 => (t.c0, T { ..t, c0 = N/empty() }) | 1 => (t.c1, T { ..t, c1 = N/empty() }) | 2 => (t.c2, T { ..t, c2 = N/empty() }) | 3 => (t.c3, T { ..t, c3 = N/empty() }) | 4 => (t.c4, T { ..t, c4 = N/empty() }) | 5 => (t.c5, T { ..t, c5 = N/empty() }) | 6 => (t.c6, T { ..t, c6 = N/empty() }) | _ => (t.c7, T { ..t, c7 = N/empty() }) end;
-    let build(depth: Nat, k: Nat) -> N =
+    let get(@X: Type, t: T(X), d: Nat) -> X => match d | 0 => t.c0 | 1 => t.c1 | 2 => t.c2 | 3 => t.c3 | 4 => t.c4 | 5 => t.c5 | 6 => t.c6 | _ => t.c7 end;
+    let set(@X: Type, t: T(X), d: Nat, x: X) -> T(X) => match d | 0 => T { ..t, c0 = x } | 1 => T { ..t, c1 = x } | 2 => T { ..t, c2 = x } | 3 => T { ..t, c3 = x } | 4 => T { ..t, c4 = x } | 5 => T { ..t, c5 = x } | 6 => T { ..t, c6 = x } | _ => T { ..t, c7 = x } end;
+    let take(t: T(N), d: Nat) -> {N, T(N)} => match d | 0 => (t.c0, T { ..t, c0 = N/empty() }) | 1 => (t.c1, T { ..t, c1 = N/empty() }) | 2 => (t.c2, T { ..t, c2 = N/empty() }) | 3 => (t.c3, T { ..t, c3 = N/empty() }) | 4 => (t.c4, T { ..t, c4 = N/empty() }) | 5 => (t.c5, T { ..t, c5 = N/empty() }) | 6 => (t.c6, T { ..t, c6 = N/empty() }) | _ => (t.c7, T { ..t, c7 = N/empty() }) end;
+    let build(depth: Nat, k: Nat) -> N =>
         match depth | 0 => N/leaf(k, 0) | d + 1 => N/branch(T { c0 = build(d, 8 * k + 0), c1 = build(d, 8 * k + 1), c2 = build(d, 8 * k + 2), c3 = build(d, 8 * k + 3), c4 = build(d, 8 * k + 4), c5 = build(d, 8 * k + 5), c6 = build(d, 8 * k + 6), c7 = build(d, 8 * k + 7) }) end;
-    let near(t: N, k: Nat) -> Nat =
+    let near(t: N, k: Nat) -> Nat =>
         match t | empty() => 0 | leaf(k0, _) => k0 | branch(tw) => near(get(tw, k % 8), k / 8) end;
-    let replace(t: N, k: Nat, v: Nat) -> N =
+    let replace(t: N, k: Nat, v: Nat) -> N =>
         match t
         | empty() => t
         | leaf(k0, _) => N/leaf(k0, v)
@@ -181,12 +181,12 @@ pub const ACCESSED_TRIE: &str = r#"
             let (s, rest) = take(tw, d);
             N/branch(set(rest, d, replace(s, k / 8, v)))
         end;
-    let put(t: N, k: Nat, v: Nat) -> N = match near(t, k) != 1000000007 | true => replace(t, k, v) | false => t end;
-    let fold_twigs(tw: T(N), i: Nat, acc: Nat) -> Nat =
+    let put(t: N, k: Nat, v: Nat) -> N => match near(t, k) != 1000000007 | true => replace(t, k, v) | false => t end;
+    let fold_twigs(tw: T(N), i: Nat, acc: Nat) -> Nat =>
         match i < 8 | false => acc | true => fold_twigs(tw, i + 1, fold(get(tw, i), acc)) end
-    and fold(t: N, acc: Nat) -> Nat =
+    and fold(t: N, acc: Nat) -> Nat =>
         match t | empty() => acc | leaf(_, v) => acc + v | branch(tw) => fold_twigs(tw, 0, acc) end;
-    let walk(n: Nat, t: N) -> N = match n | 0 => t | j + 1 => walk(j, put(t, j % 64, j)) end;
+    let walk(n: Nat, t: N) -> N => match n | 0 => t | j + 1 => walk(j, put(t, j % 64, j)) end;
 "#;
 
 /// What the trie of [`ACCESSED_TRIE`] holds after a walk of `n` puts, summed.

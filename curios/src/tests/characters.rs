@@ -7,11 +7,11 @@ fn a_character_realizes_at_the_expected_carrier() {
     assert_eq!(
         run(r#"
         use /std/{Nat, Int, Byte, Bool, Char, Str, Io, Show, print};
-        let line(s: Str) -> Io({}) = print(Str/concat(s, "\n"));
+        let line(s: Str) -> Io({}) => print(Str/concat(s, "\n"));
         let n: Nat = 'a';
         let b: Byte = 'a';
         let i: Int = 'a';
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let c = 'a';
             let _ = line(Nat/to_str(n))!;
             let _ = line(Show/show(b))!;
@@ -109,7 +109,7 @@ fn a_character_dispatches_as_a_nat_literal() {
     assert_eq!(
         run(r#"
         use /std/{Nat, Char, Str, Io};
-        let name(c: Char) -> Str =
+        let name(c: Char) -> Str =>
             match Char/to_nat(c)
             | '\n' => "newline"
             | '\\' => "backslash"
@@ -117,7 +117,7 @@ fn a_character_dispatches_as_a_nat_literal() {
             | 0 => "nul"
             | _ => "other"
             end;
-        let entry() -> /std/Io({}) =
+        let entry() -> /std/Io({}) =>
             let _ = /std/print(Str/concat(name('\n'), "\n"))!;
             let _ = /std/print(Str/concat(name('\\'), "\n"))!;
             let _ = /std/print(Str/concat(name('a'), "\n"))!;
@@ -150,7 +150,7 @@ fn a_character_pattern_nests_inside_a_constructor() {
 fn a_character_case_joins_successor_peeling() {
     let source = r#"
         use /std/{List, Nat, Str};
-        let f(n: Nat) -> Nat =
+        let f(n: Nat) -> Nat =>
             match n
             | 'a' => 0
             | p + 1 => p
@@ -167,7 +167,7 @@ fn a_character_dispatch_requires_a_default() {
     let report = error(
         r#"
         use /std/{Nat, Io};
-        let f(n: Nat) -> Nat = match n | 'a' => 0 end;
+        let f(n: Nat) -> Nat => match n | 'a' => 0 end;
         /std/print("")
         "#,
     );

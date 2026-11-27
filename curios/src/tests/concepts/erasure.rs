@@ -11,9 +11,9 @@ fn prop_concept_resolves_and_erases() {
             proof(x : A) -> Eq()(x, x)
         }
         satisfy Refl(Nat) {
-            proof(x) = Eq/refl()
+            proof(x) => Eq/refl()
         }
-        let ignore_proof(p : Eq()(2, 2), n : Nat) -> Nat = n;
+        let ignore_proof(p : Eq()(2, 2), n : Nat) -> Nat => n;
         /std/print(Nat/to_str(ignore_proof(Refl/proof(2), 3)))
         "#;
 
@@ -29,9 +29,9 @@ fn prop_method_in_top_level_binding_collapses() {
             proof(x : A) -> Eq()(x, x)
         }
         satisfy Refl(Nat) {
-            proof(x) = Eq/refl()
+            proof(x) => Eq/refl()
         }
-        let probe(@A : Type, x : A, use Refl(A)) -> Eq()(x, x) = Refl/proof(x);
+        let probe(@A : Type, x : A, use Refl(A)) -> Eq()(x, x) => Refl/proof(x);
         let direct : Eq()(2, 2) = Refl/proof(2);
         let routed : Eq()(3, 3) = probe(3);
         /std/print("ok")
@@ -49,7 +49,7 @@ fn type_concept_prop_method_binding_collapses() {
             proof(x : A) -> Eq()(x, x)
         }
         satisfy Refl(Nat) {
-            proof(x) = Eq/refl()
+            proof(x) => Eq/refl()
         }
         let evidence : Eq()(2, 2) = Refl/proof(2);
         /std/print("ok")
@@ -67,9 +67,9 @@ fn prop_laws_concept_resolves() {
             stable(use Show(A), x : A) -> Eq()(Show/show(x), Show/show(x))
         }
         satisfy ShowLaws(Nat) {
-            stable(use _, x) = Eq/refl()
+            stable(use _, x) => Eq/refl()
         }
-        let take(q : Eq()(Show/show(7), Show/show(7)), n : Nat) -> Nat = n;
+        let take(q : Eq()(Show/show(7), Show/show(7)), n : Nat) -> Nat => n;
         /std/print(Nat/to_str(take(ShowLaws/stable(7), 42)))
         "#;
 
@@ -86,8 +86,8 @@ fn a_witness_must_prove_its_concepts_law() {
             law(x : A) -> Eq()(op(op(x)), op(x)),
         }
         satisfy Idem(Nat) {
-            op(x) = x,
-            law(x) = Eq/refl(),
+            op(x) => x,
+            law(x) => Eq/refl(),
         }
         let n : Nat = 42;
         /std/print(Nat/to_str(Idem/op(n)))
@@ -96,7 +96,7 @@ fn a_witness_must_prove_its_concepts_law() {
     assert_eq!(run(source), b"42");
 }
 
-// The same law against an implementation that breaks it: `op(x) = x + 1` reduces `op(op(x))` to `x + 2` where the law demands `x + 1`, so the witness must be refused. The assertion names `type mismatch` rather than merely requiring some error, because an `unbound variable` — a method's field type read in a scope binding no sibling — would arrive before the law is ever checked, and pass for the wrong reason.
+// The same law against an implementation that breaks it: `op(x) => x + 1` reduces `op(op(x))` to `x + 2` where the law demands `x + 1`, so the witness must be refused. The assertion names `type mismatch` rather than merely requiring some error, because an `unbound variable` — a method's field type read in a scope binding no sibling — would arrive before the law is ever checked, and pass for the wrong reason.
 #[test]
 fn a_witness_violating_its_concepts_law_is_rejected() {
     let source = r#"
@@ -106,8 +106,8 @@ fn a_witness_violating_its_concepts_law_is_rejected() {
             law(x : A) -> Eq()(op(op(x)), op(x)),
         }
         satisfy Idem(Nat) {
-            op(x) = x + 1,
-            law(x) = Eq/refl(),
+            op(x) => x + 1,
+            law(x) => Eq/refl(),
         }
         let n : Nat = 1;
         /std/print(Nat/to_str(Idem/op(n)))

@@ -35,18 +35,18 @@ pub struct Char: pub Type {
 }
 
 --- The code point.
-pub let to_nat(c: Char) -> Nat =
+pub let to_nat(c: Char) -> Nat =>
     c.code;
 
 --- The character with code point `code`, or `none` for a surrogate or a value past `U+10FFFF`.
-pub let of_nat(code: Nat) -> Option(Char) =
+pub let of_nat(code: Nat) -> Option(Char) =>
     match Valid/try(code)
     | some(valid) => Option/some(Char { code = code })
     | none() => Option/none()
     end;
 
 --- Equal code points are equal characters.
-pub let eq_of_code(a: Char, b: Char, proof: Eq()(a.code, b.code)) -> Eq()(a, b) =
+pub let eq_of_code(a: Char, b: Char, proof: Eq()(a.code, b.code)) -> Eq()(a, b) =>
     Eq/subst(
         (code: Nat) => (valid: Valid(code)) -> Eq()(a, Char { code = code }),
         proof,
@@ -54,66 +54,66 @@ pub let eq_of_code(a: Char, b: Char, proof: Eq()(a.code, b.code)) -> Eq()(a, b) 
         b.valid);
 
 --- Whether the two are equal.
-pub let eql(a: Char, b: Char) -> Bool =
+pub let eql(a: Char, b: Char) -> Bool =>
     a.code == b.code;
 
 --- Code-point order.
-pub let ord(a: Char, b: Char) -> Ordering =
+pub let ord(a: Char, b: Char) -> Ordering =>
     Nat/ord(a.code, b.code);
 
 -- Read through `ord` it would be a stuck match on an `Ordering`, which no law relates to another.
 --- Whether `a` is below `b` in code-point order.
 ---
 --- Defined on the code points, as `Byte`'s order is on its values, so it reduces to a comparison of naturals with the same laws: its negation is the dual comparison, and swapping the operands mirrors it.
-pub let lt(a: Char, b: Char) -> Bool =
+pub let lt(a: Char, b: Char) -> Bool =>
     a.code < b.code;
 
 --- Whether `a` is at most `b` in code-point order.
-pub let le(a: Char, b: Char) -> Bool =
+pub let le(a: Char, b: Char) -> Bool =>
     a.code <= b.code;
 
 --- Whether `a` is above `b` in code-point order.
-pub let gt(a: Char, b: Char) -> Bool =
+pub let gt(a: Char, b: Char) -> Bool =>
     a.code > b.code;
 
 --- Whether `a` is at least `b` in code-point order.
-pub let ge(a: Char, b: Char) -> Bool =
+pub let ge(a: Char, b: Char) -> Bool =>
     a.code >= b.code;
 
 --- Space, tab, newline, vertical tab, form feed or carriage return.
-pub let is_ascii_whitespace(c: Char) -> Bool =
+pub let is_ascii_whitespace(c: Char) -> Bool =>
     c.code == ' ' || Nat/in_range(c.code, '\t', '\r');
 
 --- Whether `c` is `Extended_Pictographic`, which rule GB11 of UAX #29 reads to keep an emoji sequence in one cluster.
-pub let is_extended_pictographic(c: Char) -> Bool =
+pub let is_extended_pictographic(c: Char) -> Bool =>
     unicode/held(/sys/unicode/extended_pictographic, c);
 
 --- Whether `c` presents as an emoji where nothing asks otherwise (`Emoji_Presentation`).
-pub let is_emoji_presentation(c: Char) -> Bool =
+pub let is_emoji_presentation(c: Char) -> Bool =>
     unicode/held(/sys/unicode/emoji_presentation, c);
 
 --- `0` through `9`.
-pub let is_ascii_digit(c: Char) -> Bool =
+pub let is_ascii_digit(c: Char) -> Bool =>
     Nat/in_range(c.code, '0', '9');
 
 --- `a` through `z`.
-pub let is_ascii_lower(c: Char) -> Bool =
+pub let is_ascii_lower(c: Char) -> Bool =>
     Nat/in_range(c.code, 'a', 'z');
 
 --- `A` through `Z`.
-pub let is_ascii_upper(c: Char) -> Bool =
+pub let is_ascii_upper(c: Char) -> Bool =>
     Nat/in_range(c.code, 'A', 'Z');
 
 --- An ASCII letter.
-pub let is_ascii_alpha(c: Char) -> Bool =
+pub let is_ascii_alpha(c: Char) -> Bool =>
     is_ascii_lower(c) || is_ascii_upper(c);
 
 --- An ASCII letter or digit.
-pub let is_ascii_alphanumeric(c: Char) -> Bool =
+pub let is_ascii_alphanumeric(c: Char) -> Bool =>
     is_ascii_alpha(c) || is_ascii_digit(c);
 
 --- An ASCII uppercase letter lowered; anything else unchanged.
-pub let to_ascii_lower(c: Char) -> Char =
+pub let to_ascii_lower(c: Char) -> Char =>
     match is_ascii_upper(c)
     | true =>
         Char { code = c.code + 0x20, @valid = Valid/below_surrogates(c.code + 0x20, proved()) }
@@ -121,7 +121,7 @@ pub let to_ascii_lower(c: Char) -> Char =
     end;
 
 --- An ASCII lowercase letter raised; anything else unchanged.
-pub let to_ascii_upper(c: Char) -> Char =
+pub let to_ascii_upper(c: Char) -> Char =>
     match is_ascii_lower(c)
     | true =>
         Char { code = c.code - 0x20, @valid = Valid/below_surrogates(c.code - 0x20, proved()) }
@@ -133,7 +133,7 @@ let upper_lands: Holds(unicode/every_record_lands(/sys/unicode/upper)) =
     True/qed();
 
 --- `c` in upper case: its full mapping, the database's `Uppercase_Mapping`, as text — one to three characters, `ß` becoming `SS` — and `c` itself where the database maps it to no other. What `Str/to_upper` writes for each character of a text.
-pub let to_upper(c: Char) -> Str =
+pub let to_upper(c: Char) -> Str =>
     unicode/mapping(/sys/unicode/upper, upper_lands, c);
 
 -- Every record of `/sys/unicode/lower` maps onto scalar values, decided by reading each when `/std` is built.
@@ -141,7 +141,7 @@ let lower_lands: Holds(unicode/every_record_lands(/sys/unicode/lower)) =
     True/qed();
 
 --- `c` in lower case, as text: its full mapping, the database's `Lowercase_Mapping` (`İ` becomes `i̇`), or `c` itself where there is none. It reads no context, so `Σ` becomes `σ`; `Str/to_lower` writes a word's final sigma as `ς`.
-pub let to_lower(c: Char) -> Str =
+pub let to_lower(c: Char) -> Str =>
     unicode/mapping(/sys/unicode/lower, lower_lands, c);
 
 -- Every record of `/sys/unicode/fold` maps onto scalar values, decided by reading each when `/std` is built.
@@ -149,7 +149,7 @@ let fold_lands: Holds(unicode/every_record_lands(/sys/unicode/fold)) =
     True/qed();
 
 --- `c` folded for caseless comparison, as text: its full folding, the database's `Case_Folding` common and full rows (`ß` and `ẞ` become `ss`, `Σ` and `ς` both become `σ`), or `c` itself where there is none. `Str/to_casefold` applies it to each character.
-pub let to_casefold(c: Char) -> Str =
+pub let to_casefold(c: Char) -> Str =>
     unicode/mapping(/sys/unicode/fold, fold_lands, c);
 
 -- Every place of the canonical decomposition's characters spells a scalar value, decided by reading each when `/std` is built.
@@ -181,11 +181,11 @@ let composites_land: Holds(unicode/every_composite_lands(/sys/unicode/compositio
     True/qed();
 
 --- `c`'s canonical combining class (UAX #15): `0` for a starter, and for a combining mark the class that orders it among the marks beside it, a dot below's 220 before an acute accent's 230. What `Str/normalize` puts a text's marks in order by.
-pub let combining_class(c: Char) -> Nat =
+pub let combining_class(c: Char) -> Nat =>
     unicode/class(/sys/unicode/combining_class, 0, c);
 
 --- `c` decomposed fully under canonical equivalence (UAX #15), as text: its base and its marks, `é` becoming `e` and a combining acute accent, a Hangul syllable its jamo, and `c` itself where it decomposes to no other. What `Str/normalize` writes for it under `nfd()`, before a text's marks are put in order.
-pub let canonical_decomposition(c: Char) -> Str =
+pub let canonical_decomposition(c: Char) -> Str =>
     match hangul/decomposed(c)
     | some(jamo) => jamo
     | none() =>
@@ -201,7 +201,7 @@ pub let canonical_decomposition(c: Char) -> Str =
     end;
 
 --- `c` decomposed fully under compatibility equivalence (UAX #15), as text: what a ligature, a width variant or a superscript stands for, `ﬁ` becoming `fi` and `²` becoming `2`, and its canonical decomposition where it stands for nothing more. What `Str/normalize` writes for it under `nfkd()`, before a text's marks are put in order.
-pub let compatibility_decomposition(c: Char) -> Str =
+pub let compatibility_decomposition(c: Char) -> Str =>
     match unicode/decomposition(
         /sys/unicode/compatibility_decomposition,
         /sys/unicode/compatibility_decomposition_scalars,
@@ -213,46 +213,46 @@ pub let compatibility_decomposition(c: Char) -> Str =
     end;
 
 --- The primary composite of `first` then `second` (UAX #15): the one character whose canonical decomposition is the two and which no exclusion keeps from composing, a Hangul syllable of its jamo, or `none` where the two compose to none. What `Str/normalize` composes a text's characters by under `nfc()`.
-pub let primary_composite(first: Char, second: Char) -> Option(Char) =
+pub let primary_composite(first: Char, second: Char) -> Option(Char) =>
     match hangul/composed(first, second)
     | some(syllable) => Option/some(syllable)
     | none() => unicode/composite(/sys/unicode/composition, composites_land, first, second)
     end;
 
 --- Whether `c` is `Lowercase`, as the database states: a lower letter of any script, or a character it counts among them; `is_ascii_lower` asks of `a`–`z` alone.
-pub let is_lower(c: Char) -> Bool =
+pub let is_lower(c: Char) -> Bool =>
     unicode/held(/sys/unicode/lowercase, c);
 
 --- Whether `c` is `Uppercase`, as the database states: an upper letter of any script, or a character it counts among them; a titlecase letter such as `ǅ` is neither, and `is_ascii_upper` asks of `A`–`Z` alone.
-pub let is_upper(c: Char) -> Bool =
+pub let is_upper(c: Char) -> Bool =>
     unicode/held(/sys/unicode/uppercase, c);
 
 --- Whether `c` is `Alphabetic`, as the database states: a letter of any script, or a mark or number it counts among them — what an identifier begins with. `is_ascii_alpha` asks of `a`–`z` and `A`–`Z` alone.
-pub let is_alpha(c: Char) -> Bool =
+pub let is_alpha(c: Char) -> Bool =>
     unicode/held(/sys/unicode/alphabetic, c);
 
 --- Whether `c` is `White_Space`, as the database states: the six `is_ascii_whitespace` asks of, the next line, the line and paragraph separators, and every space separator (`Zs`), the no-break and the ideographic spaces among them.
-pub let is_whitespace(c: Char) -> Bool =
+pub let is_whitespace(c: Char) -> Bool =>
     unicode/held(/sys/unicode/white_space, c);
 
 --- Whether `c` is `Cased`: a letter with case, or one the database counts among them.
-pub let is_cased(c: Char) -> Bool =
+pub let is_cased(c: Char) -> Bool =>
     unicode/held(/sys/unicode/cased, c);
 
 --- Whether `c` is `Case_Ignorable`: a mark, a modifier or a mark of punctuation the case of a word reads past, as the database states.
-pub let is_case_ignorable(c: Char) -> Bool =
+pub let is_case_ignorable(c: Char) -> Bool =>
     unicode/held(/sys/unicode/case_ignorable, c);
 
 -- Both codes are scalar values by reduction, since a remainder sits below its divisor.
 --- The lowercase hexadecimal digit for `nibble` modulo sixteen.
-pub let hex_digit(nibble: Nat) -> Char =
+pub let hex_digit(nibble: Nat) -> Char =>
     match nibble % 0x10 < 10
     | true => Char { code = nibble % 0x10 + '0' }
     | false => Char { code = nibble % 0x10 - 10 + 'a' }
     end;
 
 --- The value of a hexadecimal digit in either case, or `none`.
-pub let of_hex_digit(c: Char) -> Option(Nat) =
+pub let of_hex_digit(c: Char) -> Option(Nat) =>
     match
     | is_ascii_digit(c) => Option/some(c.code - '0')
     | Nat/in_range(c.code, 'a', 'f') => Option/some(c.code - 'a' + 10)
@@ -261,14 +261,14 @@ pub let of_hex_digit(c: Char) -> Option(Nat) =
     end;
 
 --- The character a byte below 128 encodes, or `none`.
-pub let of_ascii(byte: Byte) -> Option(Char) =
+pub let of_ascii(byte: Byte) -> Option(Char) =>
     match Byte/to_nat(byte) < 0x80
     | true => of_nat(Byte/to_nat(byte))
     | false => Option/none()
     end;
 
 --- The byte a character below 128 encodes, or `none`.
-pub let to_ascii(c: Char) -> Option(Byte) =
+pub let to_ascii(c: Char) -> Option(Byte) =>
     match c.code < 0x80
     | true => Option/some(Nat/to_byte(c.code % 0x80))
     | false => Option/none()
@@ -276,7 +276,7 @@ pub let to_ascii(c: Char) -> Option(Byte) =
 
 -- Each byte is built under the bound it is proved to satisfy, and none is masked. A continuation byte's six bits are below `0x40` by the remainder that selects them, which reduction decides. A lead byte's payload is below its family's width because the code point is below the family's end: the guard says so for the first three families, and for the fourth, which has no guard, `c.valid` does — a scalar value is at most `U+10FFFF`, so its lead byte is at most `F4`.
 --- The UTF-8 encoding, one to four bytes: `/std/Str/Valid/encoded` proves them well-formed.
-pub let to_utf8(c: Char) -> Bytes =
+pub let to_utf8(c: Char) -> Bytes =>
     let code = c.code;
     match
     | code < 0x80 => 0x[Nat/to_byte(code)]
@@ -296,14 +296,14 @@ pub let to_utf8(c: Char) -> Bytes =
     end;
 
 -- A congruence written over the fields and applied at the projections, where an equation between two projections solves nothing. The law is applied outside it, at the projections: a field is below its record, so a family nested through this one descends through the law as it does through `eql`.
-let eq_of_eql(a: Char, b: Char, h: Holds(eql(a, b))) -> Eq()(a, b) =
+let eq_of_eql(a: Char, b: Char, h: Holds(eql(a, b))) -> Eq()(a, b) =>
     let fields(
         code1: Nat,
         valid1: Valid(code1),
         code2: Nat,
         valid2: Valid(code2),
         code: Eq()(code1, code2),
-    ) -> Eq()(Char { code = code1, @valid = valid1 }, Char { code = code2, @valid = valid2 }) =
+    ) -> Eq()(Char { code = code1, @valid = valid1 }, Char { code = code2, @valid = valid2 }) =>
         let refl() = code;
         Eq/refl();
     fields(a.code, a.valid, b.code, b.valid, proved());
@@ -311,16 +311,16 @@ let eq_of_eql(a: Char, b: Char, h: Holds(eql(a, b))) -> Eq()(a, b) =
 satisfy Eql(Char) {
     eql = eql,
     eq = eq_of_eql,
-    refl(c) = Eql/refl(c.code),
+    refl(c) => Eql/refl(c.code),
 }
 
 satisfy Show(Char) {
-    show(c) = Str/of_char(c),
+    show(c) => Str/of_char(c),
 }
 
 --- A character literal, escaped where the literal grammar needs it.
 satisfy Spell(Char) {
-    spell(c) =
+    spell(c) =>
         let body =
             match to_nat(c)
             | '\n' => "\\n"
@@ -338,9 +338,9 @@ satisfy Ord(Char) {
     ord = ord,
     lt = lt,
     le = le,
-    flips(a, b) = Ord/flips(a.code, b.code),
-    trans(a, b, c, p, q) = Ord/trans(a.code, b.code, c.code, p, q),
-    eq(a, b, h) = eq_of_code(a, b, Ord/eq(a.code, b.code, h)),
-    is_lt(a, b) = Ord/is_lt(a.code, b.code),
-    is_le(a, b) = Ord/is_le(a.code, b.code),
+    flips(a, b) => Ord/flips(a.code, b.code),
+    trans(a, b, c, p, q) => Ord/trans(a.code, b.code, c.code, p, q),
+    eq(a, b, h) => eq_of_code(a, b, Ord/eq(a.code, b.code, h)),
+    is_lt(a, b) => Ord/is_lt(a.code, b.code),
+    is_le(a, b) => Ord/is_le(a.code, b.code),
 }

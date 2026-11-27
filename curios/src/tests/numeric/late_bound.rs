@@ -9,7 +9,7 @@ fn a_bound_whose_subject_a_later_argument_pins_discharges() {
         run(r#"
         use /std/{Nat, Eq};
         use /std/Bool/{Holds};
-        let need(@n: Nat, @_ok: Holds(n < 10), _witness: Eq()(n, 3)) -> Nat = n;
+        let need(@n: Nat, @_ok: Holds(n < 10), _witness: Eq()(n, 3)) -> Nat => n;
         let g: Nat = need(Eq/refl());
         /std/print(Nat/to_str(g))
         "#),
@@ -24,7 +24,7 @@ fn a_bound_whose_subject_the_expected_type_pins_discharges() {
         run(r#"
         use /std/{Nat, Vec};
         use /std/Bool/{Holds};
-        let mk(@n: Nat, @_ok: Holds(n < 10)) -> Vec(Nat, n) = Vec/replicate(n, 0);
+        let mk(@n: Nat, @_ok: Holds(n < 10)) -> Vec(Nat, n) => Vec/replicate(n, 0);
         let v: Vec(Nat, 3) = mk();
         /std/print(Nat/to_str(Vec/length(v)))
         "#),
@@ -40,7 +40,7 @@ fn a_bound_in_a_witness_telescope_discharges_once_the_goal_pins_it() {
         use /std/{Nat, Str, Show};
         use /std/Bool/{Holds};
         struct Small(n: Nat): pub Type { Nat }
-        satisfy (@n: Nat, @_ok: Holds(n < 10)) => Show(Small(n)) { show(_s) = "small" }
+        satisfy (@n: Nat, @_ok: Holds(n < 10)) -> Show(Small(n)) { show(_s) => "small" }
         /std/print(Show/show(Small(3) { 0 }))
         "#),
         b"small"
@@ -54,7 +54,7 @@ fn a_late_pinned_bound_that_fails_reports_what_it_reduces_to() {
         r#"
         use /std/{Nat, Eq};
         use /std/Bool/{Holds};
-        let need(@n: Nat, @_ok: Holds(n < 10), _witness: Eq()(n, 30)) -> Nat = n;
+        let need(@n: Nat, @_ok: Holds(n < 10), _witness: Eq()(n, 30)) -> Nat => n;
         let g: Nat = need(Eq/refl());
         /std/print("unreachable")
         "#,
@@ -74,7 +74,7 @@ fn a_refused_bound_reduction_does_not_move_is_said_once() {
         r#"
         use /std/{Nat, proved};
         induct Even: (Nat) -> Prop | zero(): (0) end
-        let other(n: Nat, m: Nat, p: Even(m)) -> Even(n) = proved();
+        let other(n: Nat, m: Nat, p: Even(m)) -> Even(n) => proved();
         /std/print("unreachable")
         "#,
     )
@@ -91,8 +91,8 @@ fn a_late_pinned_bound_holds_under_the_guard_its_slot_was_born_under() {
         r#"
         use /std/{Nat, Eq};
         use /std/Bool/{Holds};
-        let need(m: Nat, @n: Nat, @_ok: Holds(n < 10), _witness: Eq()(n, m)) -> Nat = n;
-        let f(m: Nat) -> Nat =
+        let need(m: Nat, @n: Nat, @_ok: Holds(n < 10), _witness: Eq()(n, m)) -> Nat => n;
+        let f(m: Nat) -> Nat =>
             match m < 10 | true => need(m, Eq/refl()) | false => 0 end;
         /std/print("ok")
         "#,
@@ -103,8 +103,8 @@ fn a_late_pinned_bound_holds_under_the_guard_its_slot_was_born_under() {
         r#"
         use /std/{Nat, Eq};
         use /std/Bool/{Holds};
-        let need(m: Nat, @n: Nat, @_ok: Holds(n < 10), _witness: Eq()(n, m)) -> Nat = n;
-        let f(m: Nat) -> Nat =
+        let need(m: Nat, @n: Nat, @_ok: Holds(n < 10), _witness: Eq()(n, m)) -> Nat => n;
+        let f(m: Nat) -> Nat =>
             need(m, match m < 10 | true => Eq/refl() | false => Eq/refl() end);
         /std/print("unreachable")
         "#,
@@ -124,8 +124,8 @@ fn a_bound_whose_proposition_is_pinned_later_is_filled_on_retry() {
         run(r#"
         use /std/{Nat};
         use /std/Bool/{Holds};
-        let proved(@P: Prop, @p: P) -> P = p;
-        let filled(n : Nat) -> Holds(n <= n + 1) = proved();
+        let proved(@P: Prop, @p: P) -> P => p;
+        let filled(n : Nat) -> Holds(n <= n + 1) => proved();
         /std/print("ok")
         "#),
         b"ok"
@@ -135,8 +135,8 @@ fn a_bound_whose_proposition_is_pinned_later_is_filled_on_retry() {
         r#"
         use /std/{Nat, Bool};
         use /std/Bool/{Holds};
-        let proved(@P: Prop, @p: P) -> P = p;
-        let refused(n : Nat) -> Holds(n + 1 <= n) = proved();
+        let proved(@P: Prop, @p: P) -> P => p;
+        let refused(n : Nat) -> Holds(n + 1 <= n) => proved();
         /std/print("unreachable")
         "#,
     )
@@ -155,8 +155,8 @@ fn a_bound_pinned_later_holds_under_the_guard_its_slot_was_born_under() {
         run(r#"
         use /std/{Nat};
         use /std/Bool/{Holds};
-        let proved(@P: Prop, @p: P) -> P = p;
-        let guarded(a : Nat, b : Nat) -> Nat =
+        let proved(@P: Prop, @p: P) -> P => p;
+        let guarded(a : Nat, b : Nat) -> Nat =>
             match a < b | true => let q: Holds(a < b) = proved(); a | false => b end;
         /std/print("ok")
         "#),
@@ -167,8 +167,8 @@ fn a_bound_pinned_later_holds_under_the_guard_its_slot_was_born_under() {
         r#"
         use /std/{Nat};
         use /std/Bool/{Holds};
-        let proved(@P: Prop, @p: P) -> P = p;
-        let guarded(a : Nat, b : Nat) -> Nat =
+        let proved(@P: Prop, @p: P) -> P => p;
+        let guarded(a : Nat, b : Nat) -> Nat =>
             let early = proved();
             match a < b | true => let q: Holds(a < b) = early; a | false => b end;
         /std/print("unreachable")

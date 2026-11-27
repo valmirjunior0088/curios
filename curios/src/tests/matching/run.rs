@@ -7,7 +7,7 @@ use crate::test_support::*;
 fn a_run_matches_the_lists_it_spells() {
     let source = r#"
         use /std/{List, Nat, Str};
-        let shape(l: List(Nat)) -> Nat =
+        let shape(l: List(Nat)) -> Nat =>
             match l
             | [] => 0
             | [_] => 1
@@ -25,7 +25,7 @@ fn a_run_matches_the_lists_it_spells() {
 fn an_element_is_taken_apart_as_a_payload_is() {
     let source = r#"
         use /std/{List, Nat, Option, Str};
-        let present(l: List(Option(Nat))) -> List(Nat) =
+        let present(l: List(Option(Nat))) -> List(Nat) =>
             match l
             | [] => []
             | [none(), ..rest] => present(rest)
@@ -42,7 +42,7 @@ fn an_element_is_taken_apart_as_a_payload_is() {
 fn a_natural_element_splits_as_induction() {
     let source = r#"
         use /std/{List, Nat};
-        let zeros(l: List(Nat)) -> Nat =
+        let zeros(l: List(Nat)) -> Nat =>
             match l
             | [] => 0
             | [0, ..rest] => 1 + zeros(rest)
@@ -59,7 +59,7 @@ fn a_natural_element_splits_as_induction() {
 fn a_run_of_one_is_an_exception_to_an_open_run() {
     let source = r#"
         use /std/{List, Nat, Option};
-        let last(l: List(Nat)) -> Option(Nat) =
+        let last(l: List(Nat)) -> Option(Nat) =>
             match l
             | [] => Option/none()
             | [only] => Option/some(only)
@@ -76,7 +76,7 @@ fn a_run_of_one_is_an_exception_to_an_open_run() {
 fn a_rest_two_elements_down_is_smaller_than_the_list() {
     let source = r#"
         use /std/{List, Nat};
-        let pairs(l: List(Nat)) -> Nat =
+        let pairs(l: List(Nat)) -> Nat =>
             match l
             | [a, b, ..rest] => a * b + pairs(rest)
             | _ => 0
@@ -92,7 +92,7 @@ fn a_rest_two_elements_down_is_smaller_than_the_list() {
 fn two_runs_that_meet_are_refused_at_the_run_they_share() {
     let source = r#"
         use /std/{List, Nat};
-        let f(l: List(Nat)) -> Nat =
+        let f(l: List(Nat)) -> Nat =>
             match l
             | [0, .._] => 0
             | [_, 1] => 1
@@ -113,7 +113,7 @@ fn two_runs_that_meet_are_refused_at_the_run_they_share() {
 fn a_closed_run_an_open_one_covers_is_unreachable() {
     let source = r#"
         use /std/{List, Nat};
-        let f(l: List(Nat)) -> Nat =
+        let f(l: List(Nat)) -> Nat =>
             match l
             | [a, .._] => a
             | [_, b] => b
@@ -136,7 +136,7 @@ fn a_run_no_arm_matches_is_reported_as_a_run() {
         (
             r#"
             use /std/{List, Nat};
-            let f(l: List(Nat)) -> Nat =
+            let f(l: List(Nat)) -> Nat =>
                 match l
                 | [] => 0
                 | [_] => 1
@@ -148,7 +148,7 @@ fn a_run_no_arm_matches_is_reported_as_a_run() {
         (
             r#"
             use /std/{List, Nat, Option};
-            let f(l: List(Option(Nat))) -> Nat =
+            let f(l: List(Option(Nat))) -> Nat =>
                 match l
                 | [] => 0
                 | [none(), .._] => 1
@@ -168,13 +168,13 @@ fn a_run_no_arm_matches_is_reported_as_a_run() {
 fn a_run_takes_guards_alternatives_and_a_bind() {
     let source = r#"
         use /std/{List, Nat, Str};
-        let gap(l: List(Nat)) -> Nat =
+        let gap(l: List(Nat)) -> Nat =>
             match l
             | [a, b], a < b => b - a
             | [a] | [a, _] => a
             | _ => 0
             end;
-        let ending(l: List(Nat)) -> Nat =
+        let ending(l: List(Nat)) -> Nat =>
             match
             | [last, .._] = List/reverse(l) => last
             | _ => 0
@@ -190,7 +190,7 @@ fn a_run_takes_guards_alternatives_and_a_bind() {
 fn a_packed_run_reads_its_bytes_from_the_front() {
     let source = r#"
         use /std/{Byte, Bytes, Nat};
-        let second(b: Bytes) -> Nat =
+        let second(b: Bytes) -> Nat =>
             match b
             | 0x[_, s, .._] => Byte/to_nat(s)
             | _ => 0

@@ -3,14 +3,14 @@ use /std/http/{Limits, Refusal, Framing, Field};
 use /std/Io/{Reader};
 use /std/Bool/{Holds};
 
-let is(b: Bytes, i: Nat, byte: Nat) -> Bool =
+let is(b: Bytes, i: Nat, byte: Nat) -> Bool =>
     match Bytes/try_get(b, i)
     | some(x) => Byte/to_nat(x) == byte
     | none() => false
     end;
 
 --- Where a search of `b` from `from` on found what it sought: an index at or after `from`, with `room` bytes of `b` from it on, so a cut there needs no bound decided again.
-pub let Found(b: Bytes, from: Nat, room: Nat) -> Type =
+pub let Found(b: Bytes, from: Nat, room: Nat) -> Type =>
     {at: Nat, onward: Holds(from <= at), within: Holds(at + room <= Bytes/length(b))};
 
 -- The search behind `line_end`, the index it began at carried down so the answer states it and the walk is a loop.
@@ -19,7 +19,7 @@ let line_end_from(
     from: Nat,
     i: Nat,
     @onward: Holds(from <= i),
-) -> Option(Found(b, from, 2)) =
+) -> Option(Found(b, from, 2)) =>
     match Bool/holds(i + 1 < Bytes/length(b))
     | none() => Option/none()
     | some(room) =>
@@ -30,7 +30,7 @@ let line_end_from(
     end;
 
 --- Where the first line end at or after `i` begins in `b`, both its bytes within `b`, or `none`.
-pub let line_end(b: Bytes, i: Nat) -> Option(Found(b, i, 2)) =
+pub let line_end(b: Bytes, i: Nat) -> Option(Found(b, i, 2)) =>
     line_end_from(b, i, i);
 
 --- How far a head's reading has come in the bytes held.
@@ -57,13 +57,13 @@ let head_from(
     lenient: Bool,
     s: Searched,
     held: Bytes,
-) -> Reader/Step(Searched, Refusal, Bytes) =
+) -> Reader/Step(Searched, Refusal, Bytes) =>
     let i = s.through;
     let next(
         ending: Nat,
         lined: Bool,
         @ok: Holds(s.start + ending <= i + 1),
-    ) -> Reader/Step(Searched, Refusal, Bytes) =
+    ) -> Reader/Step(Searched, Refusal, Bytes) =>
         head_from(
             limits,
             lenient,
@@ -123,18 +123,18 @@ pub let head(
     lenient: Bool,
     searched: Searched,
     held: Bytes,
-) -> Reader/Step(Searched, Refusal, Bytes) =
+) -> Reader/Step(Searched, Refusal, Bytes) =>
     head_from(limits, lenient, searched, held);
 
 --- A body of `n` bytes: the bytes held once there are that many. One longer than `limits.content` is refused before any of it is read.
-pub let length(limits: Limits, n: Nat, held: Bytes) -> Reader/Step({}, Refusal, Bytes) =
+pub let length(limits: Limits, n: Nat, held: Bytes) -> Reader/Step({}, Refusal, Bytes) =>
     match
     | n > limits.content => Reader/Step/refused(Refusal/content_too_large())
     | n <= Bytes/length(held) => Reader/Step/took(Bytes/slice(held, 0, n), Bytes/drop(held, n))
     | _ => Reader/Step/more((), held)
     end;
 
-let hex(byte: Byte) -> Option(Nat) =
+let hex(byte: Byte) -> Option(Nat) =>
     let n = Byte/to_nat(byte);
     match
     | Nat/in_range(n, '0', '9') => Option/some(n - '0')
@@ -144,8 +144,8 @@ let hex(byte: Byte) -> Option(Nat) =
     end;
 
 -- A chunk's size, read from its size line: hexadecimal digits, one or more, then nothing or an extension, which begins with `;` and holds no control octet. Anything else is no size line.
-let chunk_size(line: Bytes) -> Option(Nat) =
-    let go(i: Nat, value: Nat, digits: Nat) -> Option(Nat) =
+let chunk_size(line: Bytes) -> Option(Nat) =>
+    let go(i: Nat, value: Nat, digits: Nat) -> Option(Nat) =>
         match Bool/holds(i < Bytes/length(line))
         | none() =>
             match digits | 0 => Option/none() | _ => Option/some(value) end
@@ -186,7 +186,7 @@ pub let undecoded: Decoded =
     Decoded { content = 0x[], at = Chunking/size_line(0, false) };
 
 -- How many octets a carriage return the searched octets end with adds to what is known.
-let carried(ending: Bool) -> Nat =
+let carried(ending: Bool) -> Nat =>
     match ending | true => 1 | false => 0 end;
 
 -- A chunk's size line searched from `i` on, `ending` saying whether the octet before `i` is a carriage return: the chunk it states once it ends, more wanted until then. Its length is measured as a head's is, by what is known to be the line's.
@@ -196,7 +196,7 @@ let size_from(
     i: Nat,
     ending: Bool,
     held: Bytes,
-) -> Reader/Step(Decoded, Refusal, Bytes) =
+) -> Reader/Step(Decoded, Refusal, Bytes) =>
     match Bool/holds(i < Bytes/length(held))
     | none() =>
         match Bytes/length(held) - carried(ending) <= limits.chunk_line
@@ -237,7 +237,7 @@ and data_from(
     at: Nat,
     size: Nat,
     held: Bytes,
-) -> Reader/Step(Decoded, Refusal, Bytes) =
+) -> Reader/Step(Decoded, Refusal, Bytes) =>
     match at + 2 + size + 2 <= Bytes/length(held)
     | false => Reader/Step/more(Decoded { content = content, at = Chunking/data(at, size) }, held)
     | true =>
@@ -262,7 +262,7 @@ let trailers_from(
     i: Nat,
     ending: Bool,
     held: Bytes,
-) -> Reader/Step(Decoded, Refusal, Bytes) =
+) -> Reader/Step(Decoded, Refusal, Bytes) =>
     match Bool/holds(i < Bytes/length(held))
     | none() =>
         match Bytes/length(held) - carried(ending) - at <= limits.head
@@ -290,7 +290,7 @@ pub let chunked(
     limits: Limits,
     decoded: Decoded,
     held: Bytes,
-) -> Reader/Step(Decoded, Refusal, Bytes) =
+) -> Reader/Step(Decoded, Refusal, Bytes) =>
     match decoded.at
     | size_line(searched, ending) => size_from(limits, decoded.content, searched, ending, held)
     | data(at, size) => data_from(limits, decoded.content, at, size, held)
@@ -304,7 +304,7 @@ pub let body(
     framing: Framing,
     decoded: Decoded,
     held: Bytes,
-) -> Reader/Step(Decoded, Refusal, Bytes) =
+) -> Reader/Step(Decoded, Refusal, Bytes) =>
     match framing
     | none() => Reader/Step/took(0x[], held)
     | length(n) =>
@@ -322,7 +322,7 @@ pub let body(
     end;
 
 --- A whole body from bytes that will not grow, as `framing` delimits it: what whoever holds the entire message is answered. A body that has not all arrived is `incomplete`, and one framed by the close is everything held.
-pub let whole(limits: Limits, framing: Framing, held: Bytes) -> Result(Refusal, {Bytes, Bytes}) =
+pub let whole(limits: Limits, framing: Framing, held: Bytes) -> Result(Refusal, {Bytes, Bytes}) =>
     match body(limits, framing, undecoded, held)
     | took(taken, rest) => Result/success((taken, rest))
     | refused(why) => Result/failure(why)

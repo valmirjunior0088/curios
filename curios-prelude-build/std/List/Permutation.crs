@@ -22,14 +22,14 @@ end
 
 pub use Permutation/*;
 
-pub let refl(@T: Type, l: List(T)) -> Permutation()(l, l) =
+pub let refl(@T: Type, l: List(T)) -> Permutation()(l, l) =>
     match l
     | [] => Permutation/nil()
     | [_, ..t] => Permutation/skip(refl(t))
     end;
 
 --- A permutation read the other way.
-pub let sym(@T: Type, @l: List(T), @m: List(T), p: Permutation()(l, m)) -> Permutation()(m, l) =
+pub let sym(@T: Type, @l: List(T), @m: List(T), p: Permutation()(l, m)) -> Permutation()(m, l) =>
     match p
     | nil() => Permutation/nil()
     | skip(rest) => Permutation/skip(sym(rest))
@@ -44,7 +44,7 @@ pub let prefixed(
     @l: List(T),
     @m: List(T),
     p: Permutation()(l, m),
-) -> Permutation()([..prefix, ..l], [..prefix, ..m]) =
+) -> Permutation()([..prefix, ..l], [..prefix, ..m]) =>
     match prefix
     | [] => p
     | [_, ..t] => Permutation/skip(prefixed(t, p))
@@ -57,7 +57,7 @@ pub let suffixed(
     @l: List(T),
     @m: List(T),
     p: Permutation()(l, m),
-) -> Permutation()([..l, ..suffix], [..m, ..suffix]) =
+) -> Permutation()([..l, ..suffix], [..m, ..suffix]) =>
     match p
     | nil() => refl(suffix)
     | skip(rest) => Permutation/skip(suffixed(suffix, rest))
@@ -71,7 +71,7 @@ pub let fronted(
     y: T,
     run: List(T),
     rest: List(T),
-) -> Permutation()([..run, y, ..rest], [y, ..run, ..rest]) =
+) -> Permutation()([..run, y, ..rest], [y, ..run, ..rest]) =>
     match run
     | [] => refl([y, ..rest])
     | [_, ..t] => Permutation/trans(Permutation/skip(fronted(y, t, rest)), Permutation/swap())
@@ -85,7 +85,7 @@ pub let member(
     @m: List(T),
     p: Permutation()(l, m),
     i: Member()(z, l),
-) -> Member()(z, m) =
+) -> Member()(z, m) =>
     match p
     | nil() => i
     | skip(@_, @_, @m, rest) =>

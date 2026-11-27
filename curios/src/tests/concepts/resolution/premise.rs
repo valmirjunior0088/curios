@@ -11,10 +11,10 @@ fn premised_witness_resolves_recursively() {
             show(A) -> Str
         }
         satisfy Show(Nat) {
-            show(n) = Nat/to_str(n)
+            show(n) => Nat/to_str(n)
         }
-        satisfy (@A : Type, use Show(A)) => Show(List(A)) {
-            show(l) =
+        satisfy (@A : Type, use Show(A)) -> Show(List(A)) {
+            show(l) =>
                 List/fold(l, "[", (x, acc) => Str/concat(acc, Show/show(x)))
         }
         let l : List(Nat) = [1, 2, 3];
@@ -29,8 +29,8 @@ fn premised_witness_resolves_recursively() {
 fn a_witness_whose_head_is_computed_is_refused_at_its_declaration() {
     let source = r#"
         use /std/{Nat, Bool, Show, Str};
-        let Chosen(flag: Bool) -> Type = match flag | true => Nat | false => Bool end;
-        satisfy Show(Chosen(true)) { show(n) = "chosen" }
+        let Chosen(flag: Bool) -> Type => match flag | true => Nat | false => Bool end;
+        satisfy Show(Chosen(true)) { show(n) => "chosen" }
         /std/print("no")
         "#;
 
@@ -51,7 +51,7 @@ fn a_witness_whose_head_is_computed_is_refused_at_its_declaration() {
 #[test]
 fn a_witness_keyed_through_a_definition_under_its_binder_cannot_be_keyed() {
     for through in [
-        "let through(S: Type, A: Type) -> Type = Box(S, A);",
+        "let through(S: Type, A: Type) -> Type => Box(S, A);",
         "let through : (Type, Type) -> Type = Box;",
     ] {
         let source = fill!(
@@ -60,7 +60,7 @@ fn a_witness_keyed_through_a_definition_under_its_binder_cannot_be_keyed() {
             induct Box(S: Type, A: Type): Type | box(A) end
             concept Tag(F: (Type) -> Type): Type { name: Nat }
             ${through}
-            satisfy (@S: Type) => Tag((A: Type) => through(S, A)) { name = 1 }
+            satisfy (@S: Type) -> Tag((A: Type) => through(S, A)) { name = 1 }
             /std/print("no")
             "#,
             through,
@@ -85,23 +85,23 @@ fn a_premise_naming_a_constant_beside_a_binder_resolves_through_the_constant_edg
         use /std/{Monad, Result, Io, Nat, Str, print};
         use /std/Monad/{Lift};
         pub struct Try(M: (Type) -> Type, E: Type, A: Type): Type { M(Result(E, A)) }
-        let pure(@M: (Type) -> Type, @E: Type, @A: Type, use Monad(M), a: A) -> Try(M, E, A) =
+        let pure(@M: (Type) -> Type, @E: Type, @A: Type, use Monad(M), a: A) -> Try(M, E, A) =>
             Try { Monad/pure(Result/success(a)) };
-        let bind(@M: (Type) -> Type, @E: Type, @A: Type, @B: Type, use Monad(M), m: Try(M, E, A), f: (A) -> Try(M, E, B)) -> Try(M, E, B) =
+        let bind(@M: (Type) -> Type, @E: Type, @A: Type, @B: Type, use Monad(M), m: Try(M, E, A), f: (A) -> Try(M, E, B)) -> Try(M, E, B) =>
             Try { Monad/bind(m.0, (r: Result(E, A)) => match r | success(a) => f(a).0 | failure(e) => Monad/pure(Result/failure(e)) end) };
-        satisfy (@M: (Type) -> Type, @E: Type, use Monad(M)) => Monad((A: Type) => Try(M, E, A)) {
-            pure(@A, a) = pure(a),
-            bind(@A, @B, m, f) = bind(m, f),
+        satisfy (@M: (Type) -> Type, @E: Type, use Monad(M)) -> Monad((A: Type) => Try(M, E, A)) {
+            pure(@A, a) => pure(a),
+            bind(@A, @B, m, f) => bind(m, f),
         }
-        satisfy (@M: (Type) -> Type, @E: Type, use Monad(M), use Lift(Io, M)) => Lift(Io, (A: Type) => Try(M, E, A)) {
-            lift(@A, m) = Try { Monad/bind(Lift/lift(m), (a: A) => Monad/pure(Result/success(a))) },
+        satisfy (@M: (Type) -> Type, @E: Type, use Monad(M), use Lift(Io, M)) -> Lift(Io, (A: Type) => Try(M, E, A)) {
+            lift(@A, m) => Try { Monad/bind(Lift/lift(m), (a: A) => Monad/pure(Result/success(a))) },
         }
-        let body() -> Try(Io, Nat, Nat) =
+        let body() -> Try(Io, Nat, Nat) =>
             let _ = print("a")!;
             let _ = Io/yield()!;
             let _ = print("b")!;
             pure(3);
-        let program() -> Io({}) =
+        let program() -> Io({}) =>
             let r = body().0!;
             match r
             | success(n) => print(Nat/to_str(n))
@@ -121,8 +121,8 @@ fn a_premise_no_smaller_than_its_head_is_refused() {
         pub concept Show(A : Type) : pub Type {
             show(A) -> Str
         }
-        satisfy (@A: Type, use Show(List(A))) => Show(List(A)) {
-            show(l) = Show/show(l)
+        satisfy (@A: Type, use Show(List(A))) -> Show(List(A)) {
+            show(l) => Show/show(l)
         }
         /std/print("unreached")
         "#;
@@ -141,7 +141,7 @@ fn a_use_parameter_at_a_proposition_is_refused_where_it_is_declared() {
         r#"
         use /std/{Nat};
         use /std/Bool/{Holds};
-        let f(n: Nat, use Holds(n < 10)) -> Nat = n;
+        let f(n: Nat, use Holds(n < 10)) -> Nat => n;
         let g: Nat = f(3);
         /std/print("unreachable")
         "#,
@@ -163,8 +163,8 @@ fn a_witness_premise_at_a_proposition_is_refused() {
         use /std/{Nat, Show};
         use /std/Bool/{Holds};
         struct Foo: Type { Nat }
-        satisfy (@A: Type, use Holds(0 < 1)) => Show(Foo) {
-            show(_x) = "foo"
+        satisfy (@A: Type, use Holds(0 < 1)) -> Show(Foo) {
+            show(_x) => "foo"
         }
         /std/print("unreachable")
         "#,
@@ -199,7 +199,7 @@ fn a_use_parameter_through_an_alias_of_a_concept_application_resolves() {
     let source = r#"
         use /std/{Nat, Show, Str};
         let ShowNat: Type = Show(Nat);
-        let f(use ShowNat, n: Nat) -> Str = Show/show(n);
+        let f(use ShowNat, n: Nat) -> Str => Show/show(n);
         /std/print(f(3))
         "#;
 
@@ -212,7 +212,7 @@ fn an_implicit_parameter_at_a_concept_nothing_mentions_is_refused_where_it_is_de
     let report = error(
         r#"
         use /std/{Nat, Str, Show};
-        let shown(@A: Type, @s: Show(A), x: A) -> Str = "x";
+        let shown(@A: Type, @s: Show(A), x: A) -> Str => "x";
         /std/print("unreachable")
         "#,
     );
@@ -230,15 +230,15 @@ fn an_implicit_parameter_at_a_concept_nothing_mentions_is_refused_where_it_is_de
             same(K, K) -> Bool
         }
         satisfy Key(Nat) {
-            same(a, b) = a == b
+            same(a, b) => a == b
         }
         pub struct Slot(K: Type, use Key(K), V: Type): pub Type {
             key: K,
             value: V
         }
-        let under(@K: Type, @from: Key(K), @V: Type, at: Slot(K, use from, V), key: K) -> Bool =
+        let under(@K: Type, @from: Key(K), @V: Type, at: Slot(K, use from, V), key: K) -> Bool =>
             Key/same(@_, use from, at.key, key);
-        let never: Key(Nat) = Key { same(a, b) = false };
+        let never: Key(Nat) = Key { same(a, b) => false };
         let bare: Slot(Nat, use never, Str) = Slot { key = 2, value = "two" };
         print(Bool/to_str(under(bare, 2)))
         "#;
@@ -253,7 +253,7 @@ fn an_operator_under_a_local_premise_decides_nothing_the_carriers_witness_would(
         use /std/{Nat};
         use /std/ops/{Eql};
         use /std/Bool/{True, Holds};
-        let _under(use Eql(Nat), x: Nat) -> Holds(x == x) = True/qed();
+        let _under(use Eql(Nat), x: Nat) -> Holds(x == x) => True/qed();
         /std/print("")
         "#;
     let report = error(reduced);
@@ -265,7 +265,7 @@ fn an_operator_under_a_local_premise_decides_nothing_the_carriers_witness_would(
     let guarded = r#"
         use /std/{Nat, List};
         use /std/ops/{Eql};
-        let _under(use Eql(Nat), x: Nat, y: Nat) -> Nat =
+        let _under(use Eql(Nat), x: Nat, y: Nat) -> Nat =>
             match x == y | true => List/get([1], y - x) | false => 0 end;
         /std/print("")
         "#;

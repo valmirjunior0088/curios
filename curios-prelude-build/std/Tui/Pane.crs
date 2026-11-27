@@ -18,7 +18,7 @@ pub let Pane: Type =
     (w: Nat, h: Nat) -> View/Sized(w, h);
 
 --- `parts` stacked down an axis of `h` rows, each at the height its constraint claims as `Constraint/distribute` shares it, the whole fitted to the size asked for.
-pub let rows(parts: List({Constraint, Pane})) -> Pane =
+pub let rows(parts: List({Constraint, Pane})) -> Pane =>
     (w, h) =>
         let heights = Constraint/distribute(List/map(parts, (part) => part.0), h);
         let stacked =
@@ -29,7 +29,7 @@ pub let rows(parts: List({Constraint, Pane})) -> Pane =
         View/fit(stacked, w, h);
 
 --- `parts` set side by side along an axis of `w` columns, each at the width its constraint claims as `Constraint/distribute` shares it, the whole fitted to the size asked for.
-pub let cols(parts: List({Constraint, Pane})) -> Pane =
+pub let cols(parts: List({Constraint, Pane})) -> Pane =>
     (w, h) =>
         let widths = Constraint/distribute(List/map(parts, (part) => part.0), w);
         let set =
@@ -40,7 +40,7 @@ pub let cols(parts: List({Constraint, Pane})) -> Pane =
         View/fit(set, w, h);
 
 -- `lines` one above another, as many as fit `h`, and the whole fitted to `w` by `h`.
-let stack(style: Style, lines: List(Line), w: Nat, h: Nat) -> View/Sized(w, h) =
+let stack(style: Style, lines: List(Line), w: Nat, h: Nat) -> View/Sized(w, h) =>
     let stacked =
         List/fold(
             List/reverse(List/take(lines, h)),
@@ -49,7 +49,7 @@ let stack(style: Style, lines: List(Line), w: Nat, h: Nat) -> View/Sized(w, h) =
     View/fit(stacked, w, h);
 
 --- `s` in `style`, broken at its line breaks, each line wrapped at spaces to the width it is given, and as many lines as fit its height shown.
-pub let paragraph(style: Style, s: Str) -> Pane =
+pub let paragraph(style: Style, s: Str) -> Pane =>
     (w, h) =>
         stack(
             style,
@@ -58,5 +58,5 @@ pub let paragraph(style: Style, s: Str) -> Pane =
             h);
 
 --- A window onto `inner`: the part of it from column `x` and row `y` on, at the size it is given, blank past its edge.
-pub let window(inner: View, x: Nat, y: Nat) -> Pane =
+pub let window(inner: View, x: Nat, y: Nat) -> Pane =>
     (w, h) => View/fit(View/crop(inner, x, y), w, h);

@@ -86,7 +86,7 @@ fn a_module_on_standard_input_is_checked_as_a_unit_of_its_own() {
 fn a_loose_module_is_reprinted_at_a_units_rungs_and_no_other() {
     let root = temporary("loose-rungs");
     fs::create_dir_all(&root).unwrap();
-    let module = "pub let double(n: /std/Nat) -> /std/Nat =\n    n + n;\n";
+    let module = "pub let double(n: /std/Nat) -> /std/Nat =>\n    n + n;\n";
     write(&root, "double.crs", module);
 
     for (subject, stdin, mounted) in [
@@ -143,7 +143,7 @@ fn an_entry_of_declarations_alone_is_refused_for_its_term_by_every_reader() {
 fn a_module_file_whose_stem_is_no_name_is_refused_for_it() {
     let root = temporary("stemless");
     fs::create_dir_all(&root).unwrap();
-    let module = "use /std/{Nat};\n\npub let double(n: Nat) -> Nat =\n    n * 2;\n";
+    let module = "use /std/{Nat};\n\npub let double(n: Nat) -> Nat =>\n    n * 2;\n";
     write(&root, "my-file.crs", module);
     write(&root, "myfile.crs", module);
 

@@ -18,7 +18,7 @@ struct Churn: Type {
     f: Nat,
 }
 
-let walk(n: Nat, p: Nat, x: Nat, r: Churn) -> Churn =
+let walk(n: Nat, p: Nat, x: Nat, r: Churn) -> Churn =>
     match n
     | 0 => r
     | m + 1 =>
@@ -36,7 +36,7 @@ let walk(n: Nat, p: Nat, x: Nat, r: Churn) -> Churn =
         end
     end;
 
-let execute() -> Try(Io, Str, {}) =
+let execute() -> Try(Io, Str, {}) =>
     let arguments = Proc/args()!;
     let bytes = Option/to_result(List/try_get(arguments, 1), "no input")!;
     let s = Result/map_failure(Str/of_bytes(bytes), (_) => "invalid utf-8")!;

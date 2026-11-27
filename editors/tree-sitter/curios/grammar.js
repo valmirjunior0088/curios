@@ -85,14 +85,14 @@ module.exports = grammar({
 
     let_member: ($) => seq(field("name", $._declared_name), $._signature),
 
-    // `(params) -> type = body` or `: type = body`: a top-level definition's body, which may be a chain.
+    // `(params) -> type => body` or `: type = body`: a top-level definition's body, which may be a chain.
     _signature: ($) =>
       choice(
         seq(
           field("parameters", $.parameters),
           "->",
-          field("type", $._term),
-          "=",
+          field("type", $._result_type),
+          "=>",
           field("body", $._body),
         ),
         seq(":", field("type", $._term), "=", field("body", $._body)),
@@ -106,8 +106,8 @@ module.exports = grammar({
           seq(
             field("parameters", $.parameters),
             "->",
-            field("type", $._term),
-            "=",
+            field("type", $._result_type),
+            "=>",
             field("body", $._body),
           ),
           seq(":", field("type", $._term), "=", field("body", $._term)),
@@ -278,7 +278,7 @@ module.exports = grammar({
 
     satisfy_member: ($) =>
       seq(
-        optional(seq(field("parameters", $.parameters), "=>")),
+        optional(seq(field("parameters", $.parameters), "->")),
         field("concept", $.path),
         optional(field("arguments", $.arguments)),
         "{",
@@ -286,13 +286,13 @@ module.exports = grammar({
         "}",
       ),
 
-    // `label = value`, a term, or the definition sugar `label(params) = body`, a function's body.
+    // `label = value`, a term, or the definition sugar `label(params) => body`, a function's body.
     field_definition: ($) =>
       choice(
         seq(
           field("name", $._name),
           field("parameters", $.sugar_parameters),
-          "=",
+          "=>",
           field("value", $._body),
         ),
         seq(field("name", $._name), "=", field("value", $._term)),
@@ -319,12 +319,12 @@ module.exports = grammar({
         ";",
       ),
 
-    // A test declaration: `test name = body;`. Never `pub`, and never parameterized — a claim about every instantiation is a `let` whose type states it, so there is no telescope here to hold.
+    // A test declaration: `test name => body;`. Never `pub`, and never parameterized — a claim about every instantiation is a `let` whose type states it, so there is no telescope here to hold.
     test_item: ($) =>
       seq(
         "test",
         field("name", $._declared_name),
-        "=",
+        "=>",
         field("body", $._body),
         ";",
       ),
@@ -376,6 +376,9 @@ module.exports = grammar({
 
     _term: ($) => choice($.function_type, $.lambda, $._infix),
 
+    // A function's stated result, short of a lambda: the `=>` past it begins the body, so `-> (T) => …` reads `(T)` as the result.
+    _result_type: ($) => choice($.function_type, $._infix),
+
     let_term: ($) => seq($.let_binding, field("body", $._body)),
 
     let_binding: ($) =>
@@ -383,11 +386,11 @@ module.exports = grammar({
         "let",
         field("pattern", $._pattern),
         choice(
+          // A local function: each parameter's type and the result optional, as a lambda's are, the stated function being the one that writes them all.
           seq(
-            field("parameters", $.parameters),
-            "->",
-            field("type", $._term),
-            "=",
+            field("parameters", $.sugar_parameters),
+            optional(seq("->", field("type", $._result_type))),
+            "=>",
             field("value", $._body),
           ),
           seq(
@@ -438,11 +441,12 @@ module.exports = grammar({
         optional(seq("=", field("value", $._infix))),
       ),
 
+    // A function type's result is a type, never a lambda, so a `=>` past it ends the type: `-> (A) -> () => …` is a stated result and a body.
     function_type: ($) =>
       seq(
         field("parameters", $.function_type_parameters),
         "->",
-        field("result", $._term),
+        field("result", $._result_type),
       ),
 
     lambda: ($) =>

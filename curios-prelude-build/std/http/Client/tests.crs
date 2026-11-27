@@ -16,7 +16,7 @@ let sent: Request =
         body = 0x['h', 'i'] };
 
 -- The method, the URL, the fields' names and the content's length a request carries.
-let carried(r: Request) -> Str =
+let carried(r: Request) -> Str =>
     Str/join(" ", [
         Method/to_str(r.method),
         Url/to_str(r.url),
@@ -24,7 +24,7 @@ let carried(r: Request) -> Str =
         Nat/to_str(Bytes/length(r.body))]);
 
 -- A `303` turns a `POST` into a `GET` without its content or the fields describing it, as does a `302`; a `307` and a `308` keep both; within the origin the credentials go on.
-test a_redirect_keeps_the_method_and_content_its_status_says =
+test a_redirect_keeps_the_method_and_content_its_status_says =>
     let next = Url/lit("https://a.example/next");
     Test/all([
         Test/equal(
@@ -44,7 +44,7 @@ test a_redirect_keeps_the_method_and_content_its_status_says =
             "HEAD https://a.example/next authorization,cookie,content-type,accept 0")]);
 
 -- Another host, another port and a fall from `https` to `http` are each another origin, and the credentials stay behind.
-test a_redirect_to_another_origin_hands_on_no_credentials =
+test a_redirect_to_another_origin_hands_on_no_credentials =>
     Test/all([
         Test/equal(
             carried(redirected(sent, 307, Url/lit("https://b.example/"))),

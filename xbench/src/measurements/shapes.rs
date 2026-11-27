@@ -160,13 +160,13 @@ induct F: Type
 | right()
 end
 
-let build(n: Nat, acc: List(F)) -> List(F) =
+let build(n: Nat, acc: List(F)) -> List(F) =>
     match n
     | 0 => acc
     | m + 1 => build(m, [..acc, match m % 2 | 0 => F/left() | _ => F/right() end])
     end;
 
-let rounds(r: Nat, l: List(F), s: Nat) -> Nat =
+let rounds(r: Nat, l: List(F), s: Nat) -> Nat =>
     match r
     | 0 => s
     | q + 1 =>
@@ -174,7 +174,7 @@ let rounds(r: Nat, l: List(F), s: Nat) -> Nat =
             match e | left() => (t + 1) % 1000003 | right() => (t + 2) % 1000003 end))
     end;
 
-let entry() -> /std/Io({}) =
+let entry() -> /std/Io({}) =>
     let arguments = /std/Proc/args()!;
     let input = /std/List/try_get(arguments, 1);
     match input
@@ -200,13 +200,13 @@ induct F: Type
 | right(Nat)
 end
 
-let build(n: Nat, acc: List(F)) -> List(F) =
+let build(n: Nat, acc: List(F)) -> List(F) =>
     match n
     | 0 => acc
     | m + 1 => build(m, [..acc, match m % 2 | 0 => F/left(m) | _ => F/right(m) end])
     end;
 
-let rounds(r: Nat, l: List(F), s: Nat) -> Nat =
+let rounds(r: Nat, l: List(F), s: Nat) -> Nat =>
     match r
     | 0 => s
     | q + 1 =>
@@ -214,7 +214,7 @@ let rounds(r: Nat, l: List(F), s: Nat) -> Nat =
             match e | left(v) => (t + v) % 1000003 | right(v) => (t + v + 1) % 1000003 end))
     end;
 
-let entry() -> /std/Io({}) =
+let entry() -> /std/Io({}) =>
     let arguments = /std/Proc/args()!;
     let input = /std/List/try_get(arguments, 1);
     match input

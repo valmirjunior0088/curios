@@ -14,7 +14,7 @@ fn two_terms_on_one_line_are_refused_as_standing_side_by_side() {
         "f(add 1 2)",
         "match b | true => add 1 2 | false => 0 end",
         // Glued, as another language indexes.
-        "let first(xs : List(Nat)) -> Nat = xs[0];\nfirst([1])",
+        "let first(xs : List(Nat)) -> Nat => xs[0];\nfirst([1])",
     ] {
         let report = refusal(source);
         assert!(
@@ -42,7 +42,7 @@ fn the_refusal_of_two_terms_stands_at_the_second() {
 #[test]
 fn what_rightly_follows_a_term_is_not_a_second_term() {
     for source in [
-        "let f(n : Nat) -> Nat = n and g(n : Nat) -> Nat = f(n);\ng(1)",
+        "let f(n : Nat) -> Nat => n and g(n : Nat) -> Nat => f(n);\ng(1)",
         "let f = (n) => n and g : Nat = f(1); g",
         "let x = 1; let y = f (x); y",
         "match b | true => 1 | false => 0 end",
@@ -95,7 +95,7 @@ fn a_form_missing_its_part_is_refused_by_naming_the_part() {
             "let f = (x, 1 + 2) => x; f(1, 2)",
             "a parameter is a name or a pattern",
         ),
-        ("(g(x + 1) = 2)", "a parameter is a name or a pattern"),
+        ("(g(x + 1) => 2)", "a parameter is a name or a pattern"),
         (
             "induct Color : Type | red | green end\n0",
             "a constructor is declared with its payload list",
@@ -133,11 +133,11 @@ fn a_word_another_language_reserves_is_named_with_the_form_written_instead() {
     let trailing = ["then", "else"];
     let written = leading
         .iter()
-        .map(|word| (word, format!("let f(n : Nat) -> Nat = {word} n;\nf(1)")))
+        .map(|word| (word, format!("let f(n : Nat) -> Nat => {word} n;\nf(1)")))
         .chain(
             trailing
                 .iter()
-                .map(|word| (word, format!("let f(n : Nat) -> Nat = n {word} 1;\nf(1)"))),
+                .map(|word| (word, format!("let f(n : Nat) -> Nat => n {word} 1;\nf(1)"))),
         );
     for (word, source) in written {
         let error = source.parse::<Entrypoint>().unwrap_err();
@@ -157,7 +157,7 @@ fn a_word_another_language_reserves_is_named_with_the_form_written_instead() {
             "{source:?} reported {report}"
         );
 
-        let declared = format!("let {word}(n : Nat) -> Nat = n;\n{word}(1)");
+        let declared = format!("let {word}(n : Nat) -> Nat => n;\n{word}(1)");
         if let Err(error) = declared.parse::<Entrypoint>() {
             panic!("{declared:?} stopped parsing: {}", error.format());
         }
@@ -205,8 +205,8 @@ fn a_missing_semicolon_is_refused_where_it_is_written() {
         ),
         ("use /std/{Nat}\n\n-- next\n()", (1, 15), "a `use`"),
         (
-            "test t = Test/assert(true)\n\n-- next\nlet b: Nat = 2;\nb",
-            (1, 27),
+            "test t => Test/assert(true)\n\n-- next\nlet b: Nat = 2;\nb",
+            (1, 28),
             "a `test`",
         ),
         (
@@ -215,7 +215,7 @@ fn a_missing_semicolon_is_refused_where_it_is_written() {
             "a `foreign` declaration",
         ),
         (
-            "let f(n: Nat) -> Nat =\n    let m = n + 1\n\n    -- next\n    m;\nf(1)",
+            "let f(n: Nat) -> Nat =>\n    let m = n + 1\n\n    -- next\n    m;\nf(1)",
             (2, 18),
             "a `let`",
         ),

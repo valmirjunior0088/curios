@@ -48,7 +48,7 @@ satisfy Spell(Html) {
 }
 
 --- A page: `html` in `lang`, a head stating the charset and `title` before `head`'s own trees, and `body`.
-pub let document(lang: Str, title: Str, head: List(Html), body: List(Html)) -> Html =
+pub let document(lang: Str, title: Str, head: List(Html), body: List(Html)) -> Html =>
     element(
         "html",
         [Attr/attr("lang", lang)],
@@ -62,7 +62,7 @@ pub let document(lang: Str, title: Str, head: List(Html), body: List(Html)) -> H
                     ..head]),
             element("body", [], body)]);
 
-let escape_char(c: Char) -> Str =
+let escape_char(c: Char) -> Str =>
     match c
     | '&' => "&amp;"
     | '<' => "&lt;"
@@ -73,27 +73,27 @@ let escape_char(c: Char) -> Str =
     end;
 
 --- `s` with the five characters markup reads — `&`, `<`, `>`, `"` and `'` — written as references.
-pub let escape(s: Str) -> Str =
+pub let escape(s: Str) -> Str =>
     Str/flatten(List/map(Str/to_list(s), escape_char));
 
 --- Whether `name` is an element whose content the browser reads as text, references undecoded: `script` and `style`.
-let is_raw_text(name: Str) -> Bool =
+let is_raw_text(name: Str) -> Bool =>
     Str/eql_ignoring_ascii_case(name, "script") || Str/eql_ignoring_ascii_case(name, "style");
 
-let attr_name(a: Attr) -> Str =
+let attr_name(a: Attr) -> Str =>
     match a | attr(name, _) | flag(name) => name end;
 
-let attr_value(a: Attr) -> Str =
+let attr_value(a: Attr) -> Str =>
     match a | attr(_, value) => value | flag(_) => "" end;
 
-let render_attr(a: Attr) -> Str =
+let render_attr(a: Attr) -> Str =>
     match a
     | attr(name, value) => Fmt/render(" %=\"%\"")(name)(escape(value))
     | flag(name) => Str/concat(" ", name)
     end;
 
 --- The text a tree holds: its own, or its descendants' in order; a comment holds none.
-pub let text_of(h: Html) -> Str =
+pub let text_of(h: Html) -> Str =>
     match h
     | text(s) => s
     | void(_, _) | comment(_) => ""
@@ -101,20 +101,20 @@ pub let text_of(h: Html) -> Str =
     end;
 
 --- Whether `h` is an element called `name`, compared without case.
-pub let is_named(h: Html, name: Str) -> Bool =
+pub let is_named(h: Html, name: Str) -> Bool =>
     match h
     | element(tag, _, _) | void(tag, _) => Str/eql_ignoring_ascii_case(tag, name)
     | _ => false
     end;
 
 --- The tree as markup, the doctype written first when the root is `html`. Text and attribute values are escaped, and the content of `script` and `style` is written as it is, since the browser decodes nothing there, so nothing untrusted belongs in them.
-pub let encode(h: Html) -> Str =
+pub let encode(h: Html) -> Str =>
     match is_named(h, "html")
     | true => Str/concat("<!doctype html>", render_tree(h))
     | false => render_tree(h)
     end;
 
-let render_tree(h: Html) -> Str =
+let render_tree(h: Html) -> Str =>
     match h
     | text(s) => escape(s)
     | comment(s) => Fmt/render("<!--%-->")(Str/replace(s, "--", "- -"))
@@ -128,10 +128,10 @@ let render_tree(h: Html) -> Str =
             end;
         Str/flatten(["<", name, render_attrs(attrs), ">", inner, "</", name, ">"])
     end
-and render_all(trees: List(Html)) -> Str =
+and render_all(trees: List(Html)) -> Str =>
     Str/flatten(List/map(trees, render_tree));
 
-let render_attrs(attrs: List(Attr)) -> Str =
+let render_attrs(attrs: List(Attr)) -> Str =>
     Str/flatten(List/map(attrs, render_attr));
 
 --- Shown as the markup it renders to.
@@ -139,40 +139,40 @@ satisfy Show(Html) {
     show = encode,
 }
 
-let attribute_in(attrs: List(Attr), name: Str) -> Option(Str) =
+let attribute_in(attrs: List(Attr), name: Str) -> Option(Str) =>
     Option/map(
         List/find(attrs, (a) => Str/eql_ignoring_ascii_case(attr_name(a), name)),
         attr_value);
 
 --- The value of the attribute `name` on an element, `""` for a flag, compared without case; `none` on any other tree or when the element lacks it.
-pub let attribute(h: Html, name: Str) -> Option(Str) =
+pub let attribute(h: Html, name: Str) -> Option(Str) =>
     match h
     | element(_, attrs, _) | void(_, attrs) => attribute_in(attrs, name)
     | _ => Option/none()
     end;
 
 --- The children of an element or a fragment; nothing for any other tree.
-pub let children(h: Html) -> List(Html) =
+pub let children(h: Html) -> List(Html) =>
     match h | element(_, _, cs) | fragment(cs) => cs | _ => [] end;
 
 --- `h` and every tree beneath it, in document order, that `pred` accepts.
-pub let all(h: Html, pred: (Html) -> Bool) -> List(Html) =
+pub let all(h: Html, pred: (Html) -> Bool) -> List(Html) =>
     let below = all_in(children(h), pred);
     match pred(h) | true => [h, ..below] | false => below end
-and all_in(trees: List(Html), pred: (Html) -> Bool) -> List(Html) =
+and all_in(trees: List(Html), pred: (Html) -> Bool) -> List(Html) =>
     match trees
     | [] => []
     | [t, ..rest] => List/flatten([all(t, pred), all_in(rest, pred)])
     end;
 
 --- The first of `h` and the trees beneath it that `pred` accepts.
-pub let find(h: Html, pred: (Html) -> Bool) -> Option(Html) =
+pub let find(h: Html, pred: (Html) -> Bool) -> Option(Html) =>
     List/try_get(all(h, pred), 0);
 
 --- The elements called `name` in `h` and beneath it, in document order.
-pub let named(h: Html, name: Str) -> List(Html) =
+pub let named(h: Html, name: Str) -> List(Html) =>
     all(h, (t) => is_named(t, name));
 
 --- The text of the first `title` element in `h`, trimmed, or `none`.
-pub let title_of(h: Html) -> Option(Str) =
+pub let title_of(h: Html) -> Option(Str) =>
     Option/map(List/try_get(named(h, "title"), 0), (t) => Str/trim(text_of(t)));

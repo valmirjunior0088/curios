@@ -21,14 +21,14 @@ end
 induct Both: pub Type
 | both(first: Holds(0 < 10), second: Holds(0 < 10))
 end
-let through(n: Nat, e: Zero(n)) -> Nat = match e | zero() => 1 end;
-let into(n: Nat, e: Zero(n)) -> (Nat) -> Nat = match e | zero() => (x: Nat) => x end;
-let pair(n: Nat, e: Zero(n)) -> {Nat, Nat} = match e | zero() => (1, 2) end;
-let forward(h: (Nat) -> Nat) -> (Nat) -> Nat = h;
-let shifted(h: (Nat) -> Nat) -> (Nat) -> Nat = (x: Nat) => h(x + 1);
-let hold(@A: Type, a: A, count: Nat) -> A = match count | 0 => a | pred + 1 => a end;
-let carry(@A: Type, count: Nat, a: A) -> A = match count | 0 => a | pred + 1 => carry(pred, a) end;
-let Sel(A: Type, maybe: Option(Nat)) -> Type = match maybe | some(_) => A | none() => Nat end;";
+let through(n: Nat, e: Zero(n)) -> Nat => match e | zero() => 1 end;
+let into(n: Nat, e: Zero(n)) -> (Nat) -> Nat => match e | zero() => (x: Nat) => x end;
+let pair(n: Nat, e: Zero(n)) -> {Nat, Nat} => match e | zero() => (1, 2) end;
+let forward(h: (Nat) -> Nat) -> (Nat) -> Nat => h;
+let shifted(h: (Nat) -> Nat) -> (Nat) -> Nat => (x: Nat) => h(x + 1);
+let hold(@A: Type, a: A, count: Nat) -> A => match count | 0 => a | pred + 1 => a end;
+let carry(@A: Type, count: Nat, a: A) -> A => match count | 0 => a | pred + 1 => carry(pred, a) end;
+let Sel(A: Type, maybe: Option(Nat)) -> Type => match maybe | some(_) => A | none() => Nat end;";
 
 /// The seeds at one type, under the binders they share.
 pub struct Seeds {

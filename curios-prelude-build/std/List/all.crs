@@ -2,7 +2,7 @@ use /std/{List, Bool};
 use /std/Bool/{Holds};
 
 --- Whether `pred` accepts every element.
-pub let all(@T: Type, l: List(T), pred: (T) -> Bool) -> Bool =
+pub let all(@T: Type, l: List(T), pred: (T) -> Bool) -> Bool =>
     match l
     | [] => true
     | [h, ..t] =>
@@ -17,7 +17,7 @@ pub let cons(
     t: List(T),
     first: Holds(pred(h)),
     rest: Holds(all(t, pred)),
-) -> Holds(all([h, ..t], pred)) =
+) -> Holds(all([h, ..t], pred)) =>
     match pred(h)
     | true => rest
     | false => match first end

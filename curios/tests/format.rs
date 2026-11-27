@@ -334,7 +334,7 @@ fn a_painted_report_stripped_of_its_codes_is_the_plain_one() {
 }
 
 /// A match the default keeps on one line, of two arms.
-const DECIDED: &str = "let f(n: Nat) -> Nat =\n    match n | 0 => 1 | p + 1 => p end;\n";
+const DECIDED: &str = "let f(n: Nat) -> Nat =>\n    match n | 0 => 1 | p + 1 => p end;\n";
 
 /// `--flat-match-arms` and `--flat-match-width` hold a match on standard input to what they state, and a manifest's `[format]` holds a package's file to the same: a match of more arms than stated, or wider than the span, is broken. A flat match wider than its lines is refused, by the flag on the command line and by the key in the manifest.
 #[test]

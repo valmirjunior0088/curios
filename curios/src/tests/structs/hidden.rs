@@ -9,8 +9,8 @@ fn a_hidden_field_is_filled_where_the_value_is_built_and_a_fact_where_it_is_read
         use /std/{Nat, Str, print};
         use /std/Bool/{Holds};
         struct Positive: pub Type { n: Nat, @Holds(0 < n) }
-        let halve(n: Nat, @_: Holds(0 < n)) -> Nat = n / 2;
-        let below(p: Positive) -> Nat = halve(p.n);
+        let halve(n: Nat, @_: Holds(0 < n)) -> Nat => n / 2;
+        let below(p: Positive) -> Nat => halve(p.n);
         print(Nat/to_str(below(Positive { n = 4 })))
         "#;
 
@@ -48,8 +48,8 @@ fn a_hidden_field_takes_no_position_where_the_value_is_read() {
         | cons(@n: Nat, head: T, tail: Vec(T)(n)): (n + 1)
         end
         struct Sized: pub Type { @len: Nat, items: Vec(Nat)(len) }
-        let count(@n: Nat, v: Vec(Nat)(n)) -> Nat = n;
-        let read(s: Sized) -> Nat =
+        let count(@n: Nat, v: Vec(Nat)(n)) -> Nat => n;
+        let read(s: Sized) -> Nat =>
             let Sized { items } = s;
             let Sized { @len = n, items = again } = s;
             let Sized { @m, _ } = s;
@@ -68,10 +68,10 @@ fn a_pattern_writes_a_hidden_field_under_its_mark() {
         use /std/Bool/{Holds};
         struct Positive: pub Type { n: Nat, @Holds(0 < n) }
         struct Sized: pub Type { @len: Nat, items: Nat }
-        let halve(n: Nat, @_: Holds(0 < n)) -> Nat = n / 2;
-        let proved(p: Positive) -> Nat = let Positive { n, @ok } = p; halve(n, @ok);
+        let halve(n: Nat, @_: Holds(0 < n)) -> Nat => n / 2;
+        let proved(p: Positive) -> Nat => let Positive { n, @ok } = p; halve(n, @ok);
         let lambda: (Sized) -> Nat = (Sized { @len = l, items }) => l + items;
-        let arm(s: Sized) -> Nat = match s | Sized { @l, items } => l * items end;
+        let arm(s: Sized) -> Nat => match s | Sized { @l, items } => l * items end;
         print(Nat/to_str(proved(Positive { n = 8 }) * 100 + lambda(Sized { @len = 2, items = 3 }) * 10 + arm(Sized { @len = 2, items = 3 })))
         "#;
 
@@ -83,7 +83,7 @@ fn refused_pattern(pattern: &str) -> String {
     error(&fill!(
         "use /std/{Nat, Str, print};
         struct Sized: pub Type { @len: Nat, items: Nat }
-        let read(s: Sized) -> Nat = let ${pattern} = s; 0;
+        let read(s: Sized) -> Nat => let ${pattern} = s; 0;
         print(Nat/to_str(read(Sized { items = 1 })))",
         pattern,
     ))
@@ -121,7 +121,7 @@ fn a_hidden_field_nothing_fills_is_refused_at_the_literal() {
         use /std/{Nat, Str, print};
         use /std/Bool/{Holds};
         struct Positive: pub Type { n: Nat, @Holds(0 < n) }
-        let first(m: Nat) -> Nat = Positive { n = m }.n;
+        let first(m: Nat) -> Nat => Positive { n = m }.n;
         print(Nat/to_str(first(1)))
         "#;
 
@@ -174,8 +174,8 @@ fn a_spread_fills_a_hidden_field_anew() {
         struct Positive: pub Type { n: Nat, @ok: Holds(0 < n) }
         let p: Positive = Positive { n = 4 };
         let q: Positive = Positive { ..p, n = 9 };
-        let keep(p: Positive) -> Positive = Positive { ..p };
-        let same(p: Positive) -> Positive = Positive { ..p, @ok = p.ok };
+        let keep(p: Positive) -> Positive => Positive { ..p };
+        let same(p: Positive) -> Positive => Positive { ..p, @ok = p.ok };
         print(Nat/to_str(q.n + keep(p).n + same(p).n))
         "#;
 

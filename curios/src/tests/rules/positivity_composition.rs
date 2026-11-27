@@ -312,7 +312,7 @@ fn a_negative_cycle_through_a_mutual_group_is_rejected() {
 //
 // `curios-analysis/src/positivity.rs` names this obligation deliberately out of scope: `F` is a binder with no known polarity, so `Mu` cannot be checked from its own body, and discharging it properly needs an inferred per-binder obligation in a side store. Out of scope leaves open which way the analysis falls, and only one way is safe — an unknown former must read as `Mixed`, never as `Strict`. Nothing in the corpus takes a type-former parameter on an `induct`, so nothing else exercises the choice, and a later improvement to `occurrences` that taught it to see through `F(Mu(F))` would flip it silently.
 //
-// What the wrong direction costs is Curry's paradox with no recursion in sight. Admitting `Mu` lets it be instantiated at a negative former — `let Neg(X : Type) -> Type = (X) -> False` — and `Mu(Neg)`'s constructor is then `fix : ((Mu(Neg)) -> False) -> Mu(Neg)`, the negative occurrence this gate exists to forbid, spelled through a parameter instead of directly. `out(m) = match m | fix(f) => f end` and `delta(m) = out(m)(m)` give `delta(Mu/fix(delta)) : False`.
+// What the wrong direction costs is Curry's paradox with no recursion in sight. Admitting `Mu` lets it be instantiated at a negative former — `let Neg(X : Type) -> Type => (X) -> False` — and `Mu(Neg)`'s constructor is then `fix : ((Mu(Neg)) -> False) -> Mu(Neg)`, the negative occurrence this gate exists to forbid, spelled through a parameter instead of directly. `out(m) = match m | fix(f) => f end` and `delta(m) = out(m)(m)` give `delta(Mu/fix(delta)) : False`.
 //
 // Refused as it stands rather than a closed hole, and the diagnostic is asserted so the fixture cannot pass on an unrelated failure. Its control applies the same former to `Nat` and builds a `Mu(Box)`, which shows the refusal is about the declaration reaching itself through a former whose polarity nothing knows, its diagonal being what decides, and not a blanket ban on higher-kinded parameters — a ban would take `/std`'s `Monad`-shaped abstractions with it.
 #[test]
@@ -413,7 +413,7 @@ fn a_negative_occurrence_a_generic_witness_chooses_is_rejected() {
 
         struct Box(A : Type) : pub Type { held : A }
 
-        satisfy (@A : Type) => Fam(Box(A)) { Carrier = Sq(A) }
+        satisfy (@A : Type) -> Fam(Box(A)) { Carrier = Sq(A) }
 
         struct Bad : pub Type { x : Fam/Carrier(@Box(Bad)) }
 
@@ -479,7 +479,7 @@ fn a_negative_occurrence_projected_from_a_record_is_rejected() {
 
         struct Pack : pub Type { T : Prop }
 
-        let pack(X : Type) -> Pack = Pack { T = Sq(X) };
+        let pack(X : Type) -> Pack => Pack { T = Sq(X) };
 
         struct Bad : pub Type { x : pack(Bad).T }
 
@@ -512,7 +512,7 @@ fn a_negative_occurrence_a_derived_witness_selects_is_rejected() {
 
         satisfy Eql(Tag) { .. }
 
-        let Sel(t : Tag, X : Type) -> Prop = match t == Tag/a() | true => (X) -> False | false => True end;
+        let Sel(t : Tag, X : Type) -> Prop => match t == Tag/a() | true => (X) -> False | false => True end;
 
         struct Bad : pub Type { x : Sel(Tag/b(), Bad) }
 

@@ -11,5 +11,5 @@ pub let split(
     i: Nat,
     j: Nat,
     fits: Holds(j <= i),
-) -> Eq()(shl(x, i), shl(shl(x, i - j), j)) =
+) -> Eq()(shl(x, i), shl(shl(x, i - j), j)) =>
     Eq/cong((count: Nat) => shl(x, count), Eq/sym(Nat/le/add_sub_cancel(j, i, fits)));

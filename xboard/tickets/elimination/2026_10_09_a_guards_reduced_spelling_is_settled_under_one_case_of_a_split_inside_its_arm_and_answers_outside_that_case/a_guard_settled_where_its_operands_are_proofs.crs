@@ -7,7 +7,7 @@ induct Two: Prop
 | b()
 end
 
-let F(c: Bool) -> Type =
+let F(c: Bool) -> Type =>
     match c | true => Two | false => Nat end;
 
 let f(
@@ -17,7 +17,7 @@ let f(
     p: F(c),
     q: F(c),
     guard: Holds(match h(p) == h(q) | true => k(0) | false => k(1) end),
-) -> Holds(k(0)) =
+) -> Holds(k(0)) =>
     match match h(p) == h(q) | true => k(0) | false => k(1) end
     | false => match guard end
     | true =>

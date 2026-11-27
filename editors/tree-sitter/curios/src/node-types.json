@@ -1354,10 +1354,6 @@
             "named": true
           },
           {
-            "type": "lambda",
-            "named": true
-          },
-          {
             "type": "list_literal",
             "named": true
           },
@@ -2263,7 +2259,7 @@
         "required": false,
         "types": [
           {
-            "type": "parameters",
+            "type": "sugar_parameters",
             "named": true
           }
         ]

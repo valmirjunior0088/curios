@@ -9,7 +9,7 @@ fn a_hypothesis_only_a_proof_in_the_result_type_reads_is_used() {
         "use /std/{Nat, Eq};
 use /std/Bool/{Holds};
 
-pub let halves(n: Nat, ok: Holds(0 < n)) -> Eq()(10 / n, 10 / n) = Eq/refl();
+pub let halves(n: Nat, ok: Holds(0 < n)) -> Eq()(10 / n, 10 / n) => Eq/refl();
 ",
     );
 
@@ -24,13 +24,13 @@ fn a_kept_declarations_proof_reads_its_hypothesis_beside_a_refusal() {
     let accepted = "use /std/{Nat, Eq};
 use /std/Bool/{Holds};
 
-let _halves(n: Nat, ok: Holds(0 < n)) -> Eq()(10 / n, 10 / n) = Eq/refl();
+let _halves(n: Nat, ok: Holds(0 < n)) -> Eq()(10 / n, 10 / n) => Eq/refl();
 
-let _other(n: Nat) -> Nat = n;
+let _other(n: Nat) -> Nat => n;
 
 /std/print(\"x\")
 ";
-    let refused = accepted.replace("-> Nat = n;", "-> Nat = \"s\";");
+    let refused = accepted.replace("-> Nat => n;", "-> Nat => \"s\";");
     let cache = Keeping::default();
 
     assert!(checked_through(accepted, &cache).verdict.is_ok());
@@ -54,7 +54,7 @@ let _other(n: Nat) -> Nat = n;
 fn a_refused_program_words_its_declarations_sites_by_what_they_bind() {
     let source = "use /std/{Nat};
 
-let _one(_: {}) -> Nat = 1;
+let _one(_: {}) -> Nat => 1;
 
 let _bad: Nat = \"s\";
 
@@ -83,10 +83,10 @@ fn a_proof_in_a_group_members_type_credits_that_member() {
         "use /std/{Nat, Eq};
 use /std/Bool/{Holds};
 
-pub let first(n: Nat, idle: Nat) -> Nat =
+pub let first(n: Nat, idle: Nat) -> Nat =>
     let _ = second;
     n
-pub and second(n: Nat, ok: Holds(0 < n)) -> {Nat, Eq()(10 / n, 10 / n)} = (first(n, n), Eq/refl());
+pub and second(n: Nat, ok: Holds(0 < n)) -> {Nat, Eq()(10 / n, 10 / n)} => (first(n, n), Eq/refl());
 ",
     );
 
@@ -103,9 +103,9 @@ fn a_declaration_holding_anothers_type_is_credited_nothing_by_it() {
         "use /std/{Nat, Eq};
 use /std/Bool/{Holds};
 
-pub let lemma(n: Nat, ok: Holds(0 < n)) -> Eq()(10 / n, 10 / n) = Eq/refl();
+pub let lemma(n: Nat, ok: Holds(0 < n)) -> Eq()(10 / n, 10 / n) => Eq/refl();
 
-pub let holder(m: Nat, idle: Nat) -> Nat =
+pub let holder(m: Nat, idle: Nat) -> Nat =>
     let _ = lemma;
     m;
 ",
@@ -124,7 +124,7 @@ fn a_wildcard_a_proof_reads_is_used() {
         "use /std/{Bytes, Nat, proved};
 use /std/Bool/{Holds};
 
-pub let bounded(t: Bytes) -> Holds(Bytes/to_nat(t) < Nat/pow(256, Bytes/length(t))) =
+pub let bounded(t: Bytes) -> Holds(Bytes/to_nat(t) < Nat/pow(256, Bytes/length(t))) =>
     let _ = Bytes/to_nat/below(t);
     proved();
 ",
@@ -139,7 +139,7 @@ fn an_action_bound_and_never_run_is_reported() {
     let unit = unit_of(
         "use /std/{Io, print};
 
-pub let greet() -> Io({}) =
+pub let greet() -> Io({}) =>
     let _ = print(\"never printed\\n\");
     print(\"ran\\n\");
 ",
@@ -159,7 +159,7 @@ fn a_test_bound_and_never_run_is_reported() {
     let unit = unit_of(
         "use /std/{Test};
 
-pub let dropped() -> Test({}) =
+pub let dropped() -> Test({}) =>
     let failed = Test/assert(\"it fails\", false);
     Test/pure(());
 ",
@@ -179,7 +179,7 @@ fn a_fallible_action_bound_and_never_run_is_an_action() {
     let unit = unit_of(
         "use /std/{Io, File, Path, print};
 
-pub let greet() -> Io({}) =
+pub let greet() -> Io({}) =>
     let read = File/read_all_text(Path/of_str(\"notes.txt\"));
     print(\"ran\\n\");
 ",
@@ -203,13 +203,13 @@ pub struct Steps(A: Type): pub Type {
     value: A,
 }
 
-pub let run() -> Steps(Nat) =
+pub let run() -> Steps(Nat) =>
     let skipped = Steps { value = 1 };
     Steps { value = 2 };
 
 satisfy Monad(Steps) {
-    pure(a) = Steps { value = a },
-    bind(m, f) = f(m.value),
+    pure(a) => Steps { value = a },
+    bind(m, f) => f(m.value),
 }
 ",
     );
@@ -228,7 +228,7 @@ fn a_value_bound_and_never_read_is_deleted() {
     let unit = unit_of(
         "use /std/{Nat};
 
-pub let count() -> Nat =
+pub let count() -> Nat =>
     let unread = [1, 2, 3];
     3;
 ",
@@ -248,7 +248,7 @@ fn a_binder_of_unit_nothing_reads_is_told_to_write_unit() {
     let unit = unit_of(
         "use /std/{Nat};
 
-pub let one(done: {}) -> Nat = 1;
+pub let one(done: {}) -> Nat => 1;
 ",
     );
 
@@ -264,20 +264,20 @@ fn a_wildcard_of_unit_is_told_to_write_unit_wherever_it_stands() {
     let unit = unit_of(
         "use /std/{Io, Nat, Result, Str, print};
 
-pub let run() -> Io({}) =
+pub let run() -> Io({}) =>
     let _ = print(\"one\\n\")!;
     let (line, _) = (\"two\\n\", ());
     Io/bind(print(line), (_) => print(\"three\\n\"));
 
-pub let one(_: {}) -> Nat = 1;
+pub let one(_: {}) -> Nat => 1;
 
-pub let succeeded(r: Result(Str, {})) -> Nat =
+pub let succeeded(r: Result(Str, {})) -> Nat =>
     match r
     | success(_) => 1
     | failure(_) => 0
     end;
 
-pub let first(p: {Nat, {}}) -> Nat =
+pub let first(p: {Nat, {}}) -> Nat =>
     match p
     | (k, _) => k
     end;
@@ -303,17 +303,17 @@ fn a_wildcard_of_anything_else_is_never_reported() {
     let unit = unit_of(
         "use /std/{Nat, Option};
 
-pub let second(p: {Nat, Nat}) -> Nat =
+pub let second(p: {Nat, Nat}) -> Nat =>
     let (_, b) = p;
     b;
 
-pub let fallback(o: Option(Nat)) -> Nat =
+pub let fallback(o: Option(Nat)) -> Nat =>
     match o
     | some(_) => 1
     | none() => 0
     end;
 
-pub let whole(u: {}) -> Nat =
+pub let whole(u: {}) -> Nat =>
     match u
     | _ => 1
     end;
@@ -328,19 +328,19 @@ pub let whole(u: {}) -> Nat =
 fn a_default_renaming_its_head_is_reported_and_one_naming_a_value_is_not() {
     let source = "use /std/{Nat};
 
-let _renamed(n: Nat) -> Nat =
+let _renamed(n: Nat) -> Nat =>
     match n
     | 0 => 1
     | m => m
     end;
 
-let _named(n: Nat) -> Nat =
+let _named(n: Nat) -> Nat =>
     match n + 1
     | 0 => 1
     | m => m
     end;
 
-let _lone(n: Nat) -> Nat =
+let _lone(n: Nat) -> Nat =>
     match n
     | m => m
     end;
@@ -373,7 +373,7 @@ let _lone(n: Nat) -> Nat =
 fn a_binder_a_refusal_names_is_refused_there_and_linted_no_further() {
     let source = "use /std/{Nat, Option};
 
-let pick(o: Option(Nat)) -> Nat =
+let pick(o: Option(Nat)) -> Nat =>
     match o | some(x) => x | none => 0 end;
 
 /std/print(\"x\")
@@ -403,7 +403,7 @@ fn a_match_whose_one_arm_reads_nothing_its_case_states_is_reported_at_its_head()
     let source = "use /std/{Nat};
 use /std/Bool/{Holds};
 
-pub let capped(n: Nat, ok: Holds(n <= 10)) -> Nat =
+pub let capped(n: Nat, ok: Holds(n <= 10)) -> Nat =>
     match n > 20
     | false => n
     end;
@@ -448,12 +448,12 @@ fn a_lone_arm_whose_body_rests_on_its_case_or_reads_its_binder_is_kept() {
         "use /std/{Nat, Eq};
 use /std/Bool/{Holds};
 
-pub let less(a: Nat, b: Nat, ok: Holds(a < b)) -> Eq()(a < b, true) =
+pub let less(a: Nat, b: Nat, ok: Holds(a < b)) -> Eq()(a < b, true) =>
     match a < b
     | true => Eq/refl()
     end;
 
-pub let pred(n: Nat, ok: Holds(0 < n)) -> Nat =
+pub let pred(n: Nat, ok: Holds(0 < n)) -> Nat =>
     match n
     | m + 1 => m
     end;
@@ -470,7 +470,7 @@ fn a_lone_arm_reported_reports_none_of_its_binders() {
         "use /std/{Nat};
 use /std/Bool/{Holds};
 
-pub let one(n: Nat, ok: Holds(0 < n)) -> Nat =
+pub let one(n: Nat, ok: Holds(0 < n)) -> Nat =>
     match n
     | m + 1 => 1
     end;

@@ -822,7 +822,7 @@ pub fn carried_variances(unit: &Unit, family: &str) -> Vec<Variance> {
 /// Three items: `twice` reaches `double`, and `unrelated` reaches neither.
 pub const BASE: &str = "use /std/{Nat};
 
-pub let double(n: Nat) -> Nat = n + n;
+pub let double(n: Nat) -> Nat => n + n;
 
 pub let twice: Nat = double(2);
 
@@ -885,7 +885,7 @@ pub fn placed(unit: &Unit, name: &str) -> Vec<(usize, String)> {
 /// `f` names `spin` in an arm no reduction takes, a `false` arm under the literal `true`, which the certifier does not type: what it mentions there is in the totality it is classified at, and no read of `spin` is recorded.
 pub const UNTAKEN: &str = "use /std/{Nat};
 
-pub let spin(n: Nat) -> Nat = spin(n);
+pub let spin(n: Nat) -> Nat => spin(n);
 
 pub let f: Nat =
     match true

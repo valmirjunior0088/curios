@@ -10,15 +10,15 @@ fn a_callee_is_typed_through_a_comparison_of_two_spellings_of_one_call() {
     let source = r#"
         use /std/{Nat, Bool};
 
-        let Pick(c: Bool) -> Type =
+        let Pick(c: Bool) -> Type =>
             match c
             | true => (Nat) -> Nat
             | false => Nat
             end;
 
-        let same(n: Nat) -> Nat = n;
+        let same(n: Nat) -> Nat => n;
 
-        let applied(f: (Nat) -> Nat, n: Nat, g: Pick(f(same(n)) == f(n))) -> Nat = g(3);
+        let applied(f: (Nat) -> Nat, n: Nat, g: Pick(f(same(n)) == f(n))) -> Nat => g(3);
 
         /std/print(Nat/to_str(applied((m) => m + 1, 2, (m) => m + 40)))
         "#;
@@ -32,15 +32,15 @@ fn a_callee_is_typed_through_an_arms_equation_met_at_another_spelling() {
     let source = r#"
         use /std/{Nat, Bool};
 
-        let Pick(c: Bool) -> Type =
+        let Pick(c: Bool) -> Type =>
             match c
             | true => (Nat) -> Nat
             | false => Nat
             end;
 
-        let same(n: Nat) -> Nat = n;
+        let same(n: Nat) -> Nat => n;
 
-        let guarded(f: (Nat) -> Bool, n: Nat, g: Pick(f(same(n)))) -> Nat =
+        let guarded(f: (Nat) -> Bool, n: Nat, g: Pick(f(same(n)))) -> Nat =>
             match f(n)
             | true => g(3)
             | false => 0
@@ -59,7 +59,7 @@ fn a_callee_is_typed_through_a_comparison_of_calls_differing_in_a_proof() {
         use /std/{Nat, Bool};
         use /std/Bool/{True, Holds};
 
-        let Pick(c: Bool) -> Type =
+        let Pick(c: Bool) -> Type =>
             match c
             | true => (Nat) -> Nat
             | false => Nat
@@ -71,7 +71,7 @@ fn a_callee_is_typed_through_a_comparison_of_calls_differing_in_a_proof() {
             q: Holds(0 < n),
             k: (Holds(0 < n)) -> Nat,
             g: Pick(k(p) == k(q)),
-        ) -> Nat = g(3);
+        ) -> Nat => g(3);
 
         /std/print(Nat/to_str(weighed(1, True/qed(), True/qed(), (_) => 5, (m) => m + 40)))
         "#;
@@ -85,7 +85,7 @@ fn a_callee_is_typed_through_a_comparison_of_a_function_and_its_expansion() {
     let source = r#"
         use /std/{Nat, Bool};
 
-        let Pick(c: Bool) -> Type =
+        let Pick(c: Bool) -> Type =>
             match c
             | true => (Nat) -> Nat
             | false => Nat
@@ -95,7 +95,7 @@ fn a_callee_is_typed_through_a_comparison_of_a_function_and_its_expansion() {
             h: ((Nat) -> Nat) -> Nat,
             f: (Nat) -> Nat,
             g: Pick(h((x) => f(x)) == h(f)),
-        ) -> Nat = g(3);
+        ) -> Nat => g(3);
 
         /std/print(Nat/to_str(through((f) => f(1), (m) => m + 1, (m) => m + 40)))
         "#;

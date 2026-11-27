@@ -232,7 +232,7 @@ fn a_program_reads_no_form_of_core_text() {
 /// A file's items: a group of definitions joined by `and`, each under its decorator, a later one by its name alone and the `;` owed after the last; a group of nominal declarations of one kind, each under its word; a test and a foreign row; then the entry and the type it states.
 #[test]
 fn a_file_reads_its_items_and_its_entry() {
-    let file = "#{totality = partial}\nlet /std/Nat/double(n: Nat) -> Nat = n\n#{proof = true}\nand /Read : Type = Nat;\ninduct /Box: #{level = u} Type\n| box()\nend\nand induct /Crate: Type\n| crate()\nend\nstruct /Pair: (/T) { x: Nat }\ntest /t = x;\nforeign /host_echo(Bytes) -> Bytes;\nmain\n: Nat\n"
+    let file = "#{totality = partial}\nlet /std/Nat/double(n: Nat) -> Nat => n\n#{proof = true}\nand /Read : Type = Nat;\ninduct /Box: #{level = u} Type\n| box()\nend\nand induct /Crate: Type\n| crate()\nend\nstruct /Pair: (/T) { x: Nat }\ntest /t => x;\nforeign /host_echo(Bytes) -> Bytes;\nmain\n: Nat\n"
         .parse::<CoreFile>()
         .unwrap();
     let kinds = file

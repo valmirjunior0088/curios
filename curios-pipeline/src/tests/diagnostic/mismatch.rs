@@ -8,7 +8,7 @@ fn a_proposition_where_a_proof_belongs_is_named_and_its_metavariables_are_not_nu
     let source = r#"
         use /std/{Nat, Eq, Io};
 
-        let step(n: Nat, ih: Eq()(n + n, n * 2)) -> Eq()((n + 1) + (n + 1), (n + 1) * 2) =
+        let step(n: Nat, ih: Eq()(n + n, n * 2)) -> Eq()((n + 1) + (n + 1), (n + 1) * 2) =>
             Eq/cong((x) => x + 2, Eq()(n + n, n * 2));
 
         Io/pure(())
@@ -31,7 +31,7 @@ fn a_proof_handed_to_an_implicit_type_is_reported_as_a_proposition() {
         use /std/{Io};
         use /std/Bool/{True};
 
-        let keep(@A: Type, a: A) -> A = a;
+        let keep(@A: Type, a: A) -> A => a;
         let proof: True = keep(True/qed());
 
         Io/pure(())
@@ -49,7 +49,7 @@ fn a_proof_handed_to_an_implicit_type_is_reported_as_a_proposition() {
     let source = r#"
         use /std/{Nat, Io};
 
-        let keep(@A: Type, a: A) -> A = a;
+        let keep(@A: Type, a: A) -> A => a;
         let data: Nat = keep(3);
 
         Io/pure(())
@@ -63,7 +63,7 @@ fn a_value_handed_to_an_implicit_proposition_is_reported_as_a_type() {
     let source = r#"
         use /std/{Nat, Io};
 
-        let proves(@P: Prop, p: P) -> Nat = 0;
+        let proves(@P: Prop, p: P) -> Nat => 0;
         let count: Nat = proves(5);
 
         Io/pure(())
@@ -84,7 +84,7 @@ fn a_refusal_at_the_tail_of_a_let_is_placed_at_the_tail() {
     let source = r#"
         use /std/{Nat, Bool, Io};
 
-        let pick(x: Nat) -> Bool =
+        let pick(x: Nat) -> Bool =>
             let n = 5;
             Nat/add(n, x);
 
@@ -103,7 +103,7 @@ fn an_unbound_name_is_offered_its_reachable_spelling_or_its_import() {
     let source = r#"
         use /std/{Nat, Eq, Io};
 
-        let step(n: Nat, ih: Eq()(n + n, n * 2)) -> Eq()((n + 1) + (n + 1), (n + 1) * 2) =
+        let step(n: Nat, ih: Eq()(n + n, n * 2)) -> Eq()((n + 1) + (n + 1), (n + 1) * 2) =>
             cong((x) => x + 2, ih);
 
         Io/pure(())
@@ -120,7 +120,7 @@ fn an_unbound_name_is_offered_its_reachable_spelling_or_its_import() {
     let source = r#"
         use /std/{Io};
 
-        let f(b: Bool) -> Bool = b;
+        let f(b: Bool) -> Bool => b;
 
         Io/pure(())
     "#;
@@ -165,8 +165,8 @@ fn goal_reports_spell_no_universe_instances() {
     // A goal under a match over a universe-polymorphic family must not report an instance such as `Eq.{?u311}(…)` — a spelling Curios does not even have. Report display erases universe instances, so no `.{` (and no `?u`) ever appears.
     let source = r#"
         use /std/{Nat, Eq};
-        let double(n : Nat) -> Nat = n + n;
-        let double_correct(n : Nat) -> Eq()(double(n), n * 2) =
+        let double(n : Nat) -> Nat => n + n;
+        let double_correct(n : Nat) -> Eq()(double(n), n * 2) =>
             match n
             | 0 => ?
             | p + 1 => ?
@@ -211,7 +211,7 @@ fn a_mismatch_over_a_polymorphic_head_spells_no_universe_metas() {
     // The instance suffixes are gone by the sibling above, but a `Type`'s *own* level is a separate node, and a diagnostic over a polymorphic head is where unsolved ones cluster: unsuppressed, this fixture would read `(A: Type.{?u263}) -> Nat` against `(#…: (#…: Type.{?u261}) -> Type.{?u262}) -> Nat`. Three placeholders, none of them the disagreement. A concrete level still prints — only a metavariable-headed one is suppressed, which `curios-core`'s `a_concrete_level_prints_where_a_metavariable_headed_one_is_suppressed` holds over terms built by hand: a declaration's levels are its callers', so a program's report meets none above zero that is decided.
     let source = r#"
         use /std/{Nat};
-        let g(A : Type) -> Nat = 0;
+        let g(A : Type) -> Nat => 0;
         let f : ((Type) -> Type) -> Nat = g;
         /std/Io/pure(())
     "#;
@@ -293,12 +293,12 @@ fn a_stuck_call_under_a_constructor_is_spelled_by_its_name() {
         | s(N)
         end
 
-        let add(a: N, b: N) -> N =
+        let add(a: N, b: N) -> N =>
             match a | z() => b | s(k) => N/s(add(k, b)) end;
 
-        let step(k: N) -> Eq()(add(N/s(k), N/z()), N/s(add(k, N/z()))) = Eq/refl();
+        let step(k: N) -> Eq()(add(N/s(k), N/z()), N/s(add(k, N/z()))) => Eq/refl();
 
-        let wrong(k: N) -> Eq()(add(N/s(k), N/z()), N/s(k)) = step(k);
+        let wrong(k: N) -> Eq()(add(N/s(k), N/z()), N/s(k)) => step(k);
 
         Io/pure(())
     "#;
@@ -406,7 +406,7 @@ fn a_hard_error_beside_a_goal_is_reported_with_it() {
 fn a_mismatch_at_a_polymorphic_reference_keeps_its_caret() {
     let source = r#"
         use /std/{Nat};
-        let g(A : Type) -> Nat = 0;
+        let g(A : Type) -> Nat => 0;
         let f : ((Type) -> Type) -> Nat = g;
         /std/Io/pure(())
     "#;
@@ -438,7 +438,7 @@ fn a_typed_mistake_names_what_is_written_instead() {
         r#"
         use /std/{Io};
 
-        let go() -> Io(()) = Io/pure(());
+        let go() -> Io(()) => Io/pure(());
 
         go()
     "#,
@@ -481,7 +481,7 @@ fn a_typed_mistake_names_what_is_written_instead() {
         r#"
         use /std/{Nat, Io};
 
-        let double(n: Nat) -> Nat = n + n;
+        let double(n: Nat) -> Nat => n + n;
         let four: Nat = double(1, 2);
 
         Io/pure(())

@@ -20,7 +20,7 @@ fn two_holes_held_to_one_type_report_the_implicit_a_reader_can_write() {
     let source = r#"
         use /std/{Nat, Option, Io};
 
-        let same(@A: Type, a: A, b: A) -> {} = ();
+        let same(@A: Type, a: A, b: A) -> {} => ();
 
         let stuck: {} = same(Option/none(), Option/none());
 
@@ -63,7 +63,7 @@ fn a_candidate_over_a_lambdas_binder_commits_and_leaves_the_implicit_to_its_own_
     let source = r#"
         use /std/{Nat, Option, Io};
 
-        let f(@A: Type, a: A) -> {} = ();
+        let f(@A: Type, a: A) -> {} => ();
 
         let stuck: {} = f((n: Nat) => Option/none());
 
@@ -91,7 +91,7 @@ fn a_conversion_parked_under_refinements_notes_the_dependence() {
         | mk(@code: Nat, proof: Holds(code < 0xD800)): (code)
         end
 
-        let f(code: Nat) -> {} =
+        let f(code: Nat) -> {} =>
             match code < 0xD800
             | true =>
                 let s = Below/mk(True/qed());
@@ -120,9 +120,9 @@ fn a_metavariable_blocked_match_comparison_parks_until_the_index_lands() {
         use /std/{Nat, Byte, Bytes, Io};
         use /std/Bool/{True, Holds};
 
-        let proof_first(@b: Bytes, nz: Holds(0 < Bytes/length(b)), w: Valid(b)) -> {} = ();
+        let proof_first(@b: Bytes, nz: Holds(0 < Bytes/length(b)), w: Valid(b)) -> {} => ();
 
-        let call(h: Byte, t: Bytes, valid: Valid(0x[h, ..t])) -> {} =
+        let call(h: Byte, t: Bytes, valid: Valid(0x[h, ..t])) -> {} =>
             proof_first(True/qed(), valid);
 
         Io/pure(())
@@ -137,10 +137,10 @@ fn a_packed_literal_decomposes_against_its_folded_spine() {
         use /std/{Byte, Bytes, Eq, Io};
         use /std/Bool/{True, False, Holds};
 
-        let head_of(x: Bytes) -> Byte =
+        let head_of(x: Bytes) -> Byte =>
             match x | 0x[] => 0 | 0x[h, .._] => h end;
 
-        let heads_agree(@s: Bytes, @t: Bytes, p: Eq()(s, t)) -> Eq()(head_of(s), head_of(t)) =
+        let heads_agree(@s: Bytes, @t: Bytes, p: Eq()(s, t)) -> Eq()(head_of(s), head_of(t)) =>
             match p | refl(@z) => Eq/refl() end;
 
         let cons_inj_head(
@@ -149,16 +149,16 @@ fn a_packed_literal_decomposes_against_its_folded_spine() {
             @h2: Byte,
             @t2: Bytes,
             p: Eq()(0x[h1, ..t1], 0x[h2, ..t2]),
-        ) -> Eq()(h1, h2) =
+        ) -> Eq()(h1, h2) =>
             heads_agree(p);
 
-        let raw(x: Bytes) -> Bytes =
+        let raw(x: Bytes) -> Bytes =>
             match x
             | 0x[] => 0x[1]
             | 0x[h, ..t] => match h == 1 | true => 0x[0, ..raw(t)] | false => 0x[1, ..t] end
             end;
 
-        let probe(zt: Bytes, p: Eq()(raw(0x[]), raw(0x[1, ..zt]))) -> False =
+        let probe(zt: Bytes, p: Eq()(raw(0x[]), raw(0x[1, ..zt]))) -> False =>
             Eq/subst((m: Byte) => Holds(m == 1), cons_inj_head(p), True/qed());
 
         Io/pure(())
@@ -173,7 +173,7 @@ fn a_dependent_result_action_auto_lifts_through_bang() {
         use /std/{Nat, Option, Io, Try};
         use /std/Io/{Future};
 
-        let program() -> Try(Io, Io/Error, Nat) =
+        let program() -> Try(Io, Io/Error, Nat) =>
             let f = Future/new()!;
             let () = Future/fill(f, 7)!;
             let n = Option/unwrap_or(Future/poll(f)!, 0);
@@ -190,7 +190,7 @@ fn a_list_element_lambda_body_solves_against_the_element_metavariable() {
     let source = r#"
         use /std/{Option, Io};
 
-        let probe(@A: Type, body: Io(A)) -> Io(Option(A)) =
+        let probe(@A: Type, body: Io(A)) -> Io(Option(A)) =>
             Io/select([Io/bind(body, (a) => Io/pure(Option/some(a)))]);
 
         /std/Io/pure(())
@@ -204,7 +204,7 @@ fn a_solved_metavariable_in_a_candidate_does_not_strand_the_wake_cascade() {
     let source = r#"
         use /std/{Option, Io, Nat};
         use /std/Io/{Future};
-        let probe() -> Io({}) =
+        let probe() -> Io({}) =>
             let f = Future/new()!;
             let () = Future/fill(f, Option/some(1))!;
             Io/pure(());
@@ -218,8 +218,8 @@ fn a_conversion_held_up_by_a_goal_and_an_implicit_still_reports_postponement() {
     // The diversion above applies only when written goals are *all* that holds a conversion up. Here the goal's congruence equation rides under a lambda binder — `f`'s implicit meets `(n: Nat) -> Eq()(?f(k), ?f(7))` whose metavariables were minted under that binder, so the containment exemption cannot commit the candidate and it postpones — and the survivor watches the goal and the implicit both, reporting as a postponement naming each by what it is: never by an id, which is elaboration state the reader cannot decode. The sides show every solved metavariable beside the open one — `?(k)`, not `?(?)` — because display materializes tolerantly.
     let source = r#"
         use /std/{Nat, Eq};
-        let f(@A : Type, a : A) -> {} = ();
-        let stuck(k : Nat, h : Eq()(k, 7)) -> {} = f((n : Nat) => Eq/cong(?, h));
+        let f(@A : Type, a : A) -> {} => ();
+        let stuck(k : Nat, h : Eq()(k, 7)) -> {} => f((n : Nat) => Eq/cong(?, h));
         /std/Io/pure(())
     "#;
 
@@ -253,9 +253,9 @@ fn lambda_argument_postpones_until_a_sibling_pins_its_domain() {
     let source = r#"
         use /std/{List};
         use /std/{Nat};
-        let with(@A : Type, @B : Type, f : (A) -> B, xs : List(A)) -> List(B) =
+        let with(@A : Type, @B : Type, f : (A) -> B, xs : List(A)) -> List(B) =>
             List/map(xs, f);
-        let first(xs : List({ Nat, Nat })) -> List(Nat) =
+        let first(xs : List({ Nat, Nat })) -> List(Nat) =>
             with((pair) => pair.0, xs);
         /std/Io/pure(())
     "#;
@@ -269,8 +269,8 @@ fn empty_array_postpones_until_a_sibling_pins_its_element_type() {
     let source = r#"
         use /std/{List};
         use /std/{Nat};
-        let cat(@T : Type, a : List(T), b : List(T)) -> List(T) = [..a, ..b];
-        let pick(@A : Type, fallback : A, combine : (A, A) -> A) -> A =
+        let cat(@T : Type, a : List(T), b : List(T)) -> List(T) => [..a, ..b];
+        let pick(@A : Type, fallback : A, combine : (A, A) -> A) -> A =>
             combine(fallback, fallback);
         let go : List(Nat) =
             pick([], cat);
@@ -282,7 +282,7 @@ fn empty_array_postpones_until_a_sibling_pins_its_element_type() {
     // With no sibling to ground the element type and no result type to pin it, the postponed `[]` re-checks against a bare metavar and is rejected — graceful degradation, no new acceptance.
     let unpinned = r#"
         use /std/{List};
-        let id(@A : Type, x : A) -> A = x;
+        let id(@A : Type, x : A) -> A => x;
         let bad = id([]);
         /std/Io/pure(())
     "#;
@@ -296,7 +296,7 @@ fn continuation_postpones_until_the_result_type_pins_its_codomain() {
     let source = r#"
         use /std/{Bytes, Parse};
         use /std/{Byte};
-        let pair() -> Parse(Bytes, { Byte, Byte }) =
+        let pair() -> Parse(Bytes, { Byte, Byte }) =>
             let x = Parse/bytes/byte()!;
             Parse/pure((x, x));
         /std/Io/pure(())
@@ -415,9 +415,9 @@ fn a_family_applied_to_its_binder_is_solved_by_abstraction() {
     let source = r#"
         use /std/{Bool, Nat, Option, Io};
 
-        let fam_of(@G: (Nat) -> Type, g: (n: Nat) -> G(n)) -> Nat = 0;
-        let fam(b: Bool) -> Type = Nat;
-        let app(@F: (Nat) -> Type, f: (F(0)) -> Type, g: (n: Nat) -> F(n)) -> Nat = 0;
+        let fam_of(@G: (Nat) -> Type, g: (n: Nat) -> G(n)) -> Nat => 0;
+        let fam(b: Bool) -> Type => Nat;
+        let app(@F: (Nat) -> Type, f: (F(0)) -> Type, g: (n: Nat) -> F(n)) -> Nat => 0;
 
         let a: Nat = fam_of((n) => Nat);
         let b: Nat = fam_of((n) => n);

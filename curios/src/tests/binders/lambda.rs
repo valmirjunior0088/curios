@@ -134,7 +134,7 @@ fn lambda_marked_binder_on_explicit_slot_is_rejected() {
 fn bare_reference_inserts_hidden_arguments_at_a_rigid_expectation() {
     let source = r#"
         use /std/{Nat, Str, Option};
-        let none_of(@A : Type) -> Option(A) =
+        let none_of(@A : Type) -> Option(A) =>
             Option/none();
         let x : Option(Nat) =
             match false
@@ -156,7 +156,7 @@ fn bare_reference_inserts_hidden_arguments_at_a_rigid_expectation() {
 fn bare_reference_keeps_its_type_at_a_hidden_expectation() {
     let source = r#"
         use /std/{Nat, Str};
-        let ident(@A : Type, a : A) -> A =
+        let ident(@A : Type, a : A) -> A =>
             a;
         let keep : (@A : Type, a : A) -> A =
             ident;
@@ -170,13 +170,13 @@ fn waiting_at(arrow: &str) -> String {
     fill!(
         r#"
         use /std/{Nat, Bool, Eq, print};
-        let F(b: Bool) -> Type = match b
+        let F(b: Bool) -> Type => match b
             | true => ${arrow}
             | false => Nat
             end;
-        let ident(@A: Type, a: A) -> A = a;
-        let take(@b: Bool, f: F(b), e: Eq()(b, true)) -> Nat = 1;
-        let early(@b: Bool, e: Eq()(b, true), f: F(b)) -> Nat = 1;
+        let ident(@A: Type, a: A) -> A => a;
+        let take(@b: Bool, f: F(b), e: Eq()(b, true)) -> Nat => 1;
+        let early(@b: Bool, e: Eq()(b, true), f: F(b)) -> Nat => 1;
         print(Nat/to_str(take(ident, Eq/refl()) + early(Eq/refl(), ident)))
         "#,
         arrow,
@@ -195,12 +195,12 @@ fn bare_reference_waits_at_an_expectation_stuck_on_a_metavariable() {
 fn bare_reference_at_an_expectation_never_decided_names_what_was_never_solved() {
     let source = r#"
         use /std/{Nat, Bool, print};
-        let F(b: Bool) -> Type = match b
+        let F(b: Bool) -> Type => match b
             | true => (x: Nat) -> Nat
             | false => Nat
             end;
-        let ident(@A: Type, a: A) -> A = a;
-        let take(@b: Bool, _: F(b)) -> Nat = 1;
+        let ident(@A: Type, a: A) -> A => a;
+        let take(@b: Bool, _: F(b)) -> Nat => 1;
         print(Nat/to_str(take(ident)))
         "#;
     let error = error(source);

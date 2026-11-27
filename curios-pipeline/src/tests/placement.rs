@@ -92,7 +92,7 @@ fn a_type_that_does_not_terminate_is_placed_at_its_name() {
     let source = r#"
         use /std/{Nat};
 
-        let loop(n: Nat) -> Type = loop(n);
+        let loop(n: Nat) -> Type => loop(n);
 
         /std/print("x")
     "#;
@@ -105,7 +105,7 @@ fn a_type_holding_a_loop_it_writes_is_placed_at_the_declarations_name() {
     let source = r#"
         use /std/{Nat, Vec};
 
-        let take(x: Nat, y: Vec(Nat, ((u: {}) => let spin(k: Nat) -> Nat = spin(k); spin(x))(()))) -> Nat = x;
+        let take(x: Nat, y: Vec(Nat, ((u: {}) => let spin(k: Nat) -> Nat => spin(k); spin(x))(()))) -> Nat => x;
 
         /std/print("x")
     "#;
@@ -117,7 +117,7 @@ fn a_proof_reaching_a_partial_definition_is_placed_at_the_name_it_reaches() {
     let source = r#"
         use /std/{Nat};
 
-        let loop(P: Prop, n: Nat) -> P = loop(P, n);
+        let loop(P: Prop, n: Nat) -> P => loop(P, n);
 
         /std/print("x")
     "#;
@@ -126,7 +126,7 @@ fn a_proof_reaching_a_partial_definition_is_placed_at_the_name_it_reaches() {
     assert_eq!(&span.source.text()[span.start..span.end], "loop");
     // The occurrence in the body, not the name the declaration is written under.
     assert!(
-        span.source.text()[..span.start].ends_with("-> P = "),
+        span.source.text()[..span.start].ends_with("-> P => "),
         "placed after {:?}",
         &span.source.text()[..span.start]
     );
@@ -151,9 +151,9 @@ fn a_cycle_is_placed_at_its_first_members_name() {
     let source = r#"
         use /std/{Nat};
 
-        let f(n : Nat) -> Nat = g(n);
+        let f(n : Nat) -> Nat => g(n);
 
-        let g(n : Nat) -> Nat = f(n);
+        let g(n : Nat) -> Nat => f(n);
 
         /std/print("x")
     "#;
@@ -171,10 +171,10 @@ fn a_cycle_through_a_witness_is_placed_at_its_first_member() {
             n: Nat,
         }
 
-        let mine() -> Mine = Mine { 1 };
+        let mine() -> Mine => Mine { 1 };
 
         satisfy Show(Mine) {
-            show(m) = shown,
+            show(m) => shown,
         }
 
         /std/print("x")
@@ -194,7 +194,7 @@ fn a_private_name_in_a_public_signature_is_placed_at_the_item_that_exposes_it() 
                 n: Nat,
             }
 
-            pub let leak(h: Hidden) -> Nat = h.n;
+            pub let leak(h: Hidden) -> Nat => h.n;
         end
 
         /std/print("x")
@@ -315,11 +315,11 @@ fn a_cycle_notes_every_member_but_the_one_it_stands_at() {
     let source = r#"
         use /std/{Nat};
 
-        let a(n: Nat) -> Nat = b(n);
+        let a(n: Nat) -> Nat => b(n);
 
-        let b(n: Nat) -> Nat = c(n);
+        let b(n: Nat) -> Nat => c(n);
 
-        let c(n: Nat) -> Nat = a(n);
+        let c(n: Nat) -> Nat => a(n);
 
         /std/print("x")
     "#;
@@ -344,10 +344,10 @@ fn a_cycle_through_a_witness_notes_where_the_witness_is_declared() {
             n: Nat,
         }
 
-        let mine() -> Mine = Mine { 1 };
+        let mine() -> Mine => Mine { 1 };
 
         satisfy Show(Mine) {
-            show(m) = shown,
+            show(m) => shown,
         }
 
         /std/print("x")
@@ -371,11 +371,11 @@ fn a_duplicate_witness_notes_the_one_that_stood_first() {
         }
 
         satisfy Tag(Nat) {
-            tag(n) = "a",
+            tag(n) => "a",
         }
 
         satisfy Tag(Nat) {
-            tag(n) = "b",
+            tag(n) => "b",
         }
 
         /std/print("x")
@@ -392,9 +392,9 @@ fn a_duplicate_witness_notes_the_one_that_stood_first() {
 fn a_sort_decided_twice_notes_the_term_that_decided_it_first() {
     let source = r#"
         use /std/{Nat};
-        let at_type(B: Type) -> Nat = 0;
-        let at_prop(P: Prop) -> Nat = 0;
-        pub let both(A: Sort) -> Nat = at_type(A) + at_prop(A);
+        let at_type(B: Type) -> Nat => 0;
+        let at_prop(P: Prop) -> Nat => 0;
+        pub let both(A: Sort) -> Nat => at_type(A) + at_prop(A);
         /std/print("")
     "#;
     assert_eq!(placed(source), at("A"));
@@ -406,8 +406,8 @@ fn a_sort_decided_twice_notes_the_term_that_decided_it_first() {
 fn a_conversion_held_up_by_a_goal_notes_the_goal() {
     let source = r#"
         use /std/{Nat, Eq};
-        let f(@A : Type, a : A) -> {} = ();
-        let stuck(k : Nat, h : Eq()(k, 7)) -> {} = f((n : Nat) => Eq/cong(?, h));
+        let f(@A : Type, a : A) -> {} => ();
+        let stuck(k : Nat, h : Eq()(k, 7)) -> {} => f((n : Nat) => Eq/cong(?, h));
         /std/Io/pure(())
     "#;
     assert_eq!(noted(source), [note("?", "this goal `?` was never solved")]);

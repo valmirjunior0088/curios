@@ -18,7 +18,7 @@ fn a_recursive_proposition_over_a_tree_is_read_by_its_unfolding() {
         | fork(l: Tree(V), r: Tree(V))
         end
 
-        let Balanced(@V: Type, t: Tree(V)) -> Prop =
+        let Balanced(@V: Type, t: Tree(V)) -> Prop =>
             match t | tip(_) => Bool/True | fork(l, r) => {Balanced(l), Balanced(r)} end;
 
         struct B(V: Type): pub Type { t: Tree(V), @ok: Balanced(t) }
@@ -50,9 +50,9 @@ fn a_mutual_pair_over_a_list_of_trees_is_read_by_its_unfolding() {
         | node(kids: List(Rose(V)))
         end
 
-        let Ok(@V: Type, t: Rose(V)) -> Prop =
+        let Ok(@V: Type, t: Rose(V)) -> Prop =>
             match t | leaf(_) => Bool/True | node(kids) => All(kids) end
-        and All(@V: Type, l: List(Rose(V))) -> Prop =
+        and All(@V: Type, l: List(Rose(V))) -> Prop =>
             match l | [] => Bool/True | [x, ..rest] => {Ok(x), All(rest)} end;
 
         struct Held(V: Type): pub Type { t: Rose(V), @ok: Ok(t) }
@@ -80,7 +80,7 @@ fn a_group_closed_over_the_declarations_parameter_is_read_by_its_unfolding() {
 
         struct S(X: Type): pub Type {
             n: Nat,
-            f: (() => let R(k: Nat) -> Type = match k | 0 => X | _ => {Nat, R(k - 1)} end; Option(R(n)))(),
+            f: (() => let R(k: Nat) -> Type => match k | 0 => X | _ => {Nat, R(k - 1)} end; Option(R(n)))(),
         }
 
         induct G: pub Type
@@ -105,7 +105,7 @@ fn a_definition_wrapping_its_own_call_left_of_an_arrow_reads_its_parameter_both_
         r#"
         use /std/{Nat};
 
-        let R(X: Type, n: Nat) -> Type =
+        let R(X: Type, n: Nat) -> Type =>
             match n | 0 => X | k + 1 => {Nat, R(X, k)} end;
 
         induct Bad: pub Type
@@ -134,7 +134,7 @@ fn a_predicate_over_a_list_of_the_family_itself_is_held_through_a_container() {
     let predicate = r#"
         use /std/{List, Bool};
 
-        let AllSmall(@X: Type, l: List(X)) -> Prop =
+        let AllSmall(@X: Type, l: List(X)) -> Prop =>
             match l | [] => Bool/True | [_, ..rest] => AllSmall(rest) end;
         "#;
 

@@ -3,7 +3,7 @@ use /std/{Str, List, Option, Result, Eq, Test};
 use /std/http/{Url};
 
 -- A URL reads into its parts; the fragment is dropped, the port is the scheme's when unwritten, and the path is `/` when empty.
-test a_url_reads_into_its_parts =
+test a_url_reads_into_its_parts =>
     match Url/of_str("https://example.com:8443/a/b?x=1&y=two+words#frag")
     | failure(why) => Test/fail(why.message)
     | success(u) =>
@@ -18,7 +18,7 @@ test a_url_reads_into_its_parts =
     end;
 
 -- The default port is the scheme's, and is not written back.
-test a_url_takes_and_omits_its_default_port =
+test a_url_takes_and_omits_its_default_port =>
     Test/all([
         Test/equal(Url/to_str(Url/lit("http://example.com/")), "http://example.com/"),
         Test/equal(Url/lit("http://example.com").port, 80),
@@ -31,7 +31,7 @@ test a_url_takes_and_omits_its_default_port =
         Test/equal(Url/lit("http://h:65535/").port, 65535)]);
 
 -- A literal that does not read is refused where it is written; a string that does not read says why. A space, a control octet and an octet past ASCII have no place in a URL, each being written percent-encoded.
-test a_url_that_does_not_read_says_why =
+test a_url_that_does_not_read_says_why =>
     Test/all([
         Test/assert(
             "a scheme other than http and https is refused",
@@ -60,7 +60,7 @@ test a_url_that_does_not_read_says_why =
             Result/is_failure(Url/of_str("http://h\u{1}/")))]);
 
 -- Percent-encoding leaves the unreserved characters and spells every other byte; decoding reads `+` as a space and refuses a broken escape.
-test components_encode_and_decode =
+test components_encode_and_decode =>
     Test/all([
         Test/equal(Url/encode("a b/c~d"), "a%20b%2Fc~d"),
         Test/equal(Url/decode("a%20b+c"), Option/some("a b c")),
@@ -86,9 +86,9 @@ let _refuses_a_short_escape_in_a_type: Eq()(Url/decode("a%2"), Option/none()) =
     Eq/refl();
 
 -- RFC 3986 §5.4's examples, normal and abnormal, resolved against its base as that section answers them; `g:h` and `http:g` name no scheme or no host a `Url` holds and are refused, and a URL with no path is written with `/`, as a `Url` holds one.
-test a_reference_resolves_as_rfc_3986_answers_its_examples =
+test a_reference_resolves_as_rfc_3986_answers_its_examples =>
     let base = Url/lit("http://a/b/c/d;p?q");
-    let resolved(r: Str) -> Str =
+    let resolved(r: Str) -> Str =>
         match Url/resolve(base, r)
         | success(u) => Url/to_str(u)
         | failure(_) => "refused"

@@ -55,7 +55,7 @@ fn a_unit_compiled_after_the_package_std_is_judged_again_over_the_archived_std()
         write(
             &root,
             "std/Nat.crs",
-            "pub use /sys/{let Nat};\n\npub let NonZero(n: Nat) -> Prop =\n    /sys/Bool/True;\n",
+            "pub use /sys/{let Nat};\n\npub let NonZero(n: Nat) -> Prop =>\n    /sys/Bool/True;\n",
         );
         write(&root, "std/Bool.crs", "pub use /sys/Bool/{True, False};\n");
         write(&root, "q/curios.toml", &beside("q", under));
@@ -139,7 +139,7 @@ fn a_verdict_filed_over_the_package_std_is_not_taken_over_the_archived_std() {
         write(
             &root,
             "std/Nat.crs",
-            "pub use /sys/{let Nat};\n\npub let NonZero(n: Nat) -> Prop =\n    /sys/Bool/True;\n",
+            "pub use /sys/{let Nat};\n\npub let NonZero(n: Nat) -> Prop =>\n    /sys/Bool/True;\n",
         );
         write(&root, "std/Bool.crs", "pub use /sys/Bool/{True, False};\n");
         write(&root, "q/curios.toml", &beside("q", under));

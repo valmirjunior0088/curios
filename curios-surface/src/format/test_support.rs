@@ -150,7 +150,7 @@ and /g: #NatType =
 let /p: #{level = u} Type =
     (#{node = Name} /f)(#{node = NumLit} 2);
 
-test /held =
+test /held =>
     1;
 
 let /m/witness~/std/ops/Add(Nat)#1: (use w: /C()) -> #BoolType =

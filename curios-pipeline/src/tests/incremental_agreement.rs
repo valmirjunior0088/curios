@@ -43,9 +43,9 @@ fn a_broken_item_withholds_its_dependents_and_reports_as_the_whole_compile_does(
 const CREDITED: &str = "use /std/{Nat, proved};
 use /std/Bool/{Holds};
 
-pub let below(i: Nat, n: Nat, p: Holds(i < n)) -> Holds(i <= n) = proved();
+pub let below(i: Nat, n: Nat, p: Holds(i < n)) -> Holds(i <= n) => proved();
 
-pub let idle(i: Nat, q: Holds(i < 3)) -> Nat = i;
+pub let idle(i: Nat, q: Holds(i < 3)) -> Nat => i;
 
 pub let unrelated: Nat = 7;
 ";
@@ -75,9 +75,9 @@ use /std/Bool/{Holds};
 
 pub let limit: Nat = 7;
 
-pub let below(i: Nat, n: Nat, p: Holds(i < n), spare: Nat) -> Holds(i <= n) = proved();
+pub let below(i: Nat, n: Nat, p: Holds(i < n), spare: Nat) -> Holds(i <= n) => proved();
 
-pub let above(i: Nat, q: Holds(limit < i), spare: Nat) -> Holds(limit <= i) = proved();
+pub let above(i: Nat, q: Holds(limit < i), spare: Nat) -> Holds(limit <= i) => proved();
 ";
 
 /// A unit's binder lints are held alike in its declarations' records whichever pass decided them, and a hypothesis a proof reads is in none.
@@ -155,7 +155,10 @@ fn a_definition_partial_only_through_an_untaken_arm_turns_total_with_it_as_the_w
     let baseline = unit_of(UNTAKEN);
 
     answers_as_the_whole_compile_does(
-        &UNTAKEN.replace("spin(n: Nat) -> Nat = spin(n);", "spin(n: Nat) -> Nat = n;"),
+        &UNTAKEN.replace(
+            "spin(n: Nat) -> Nat => spin(n);",
+            "spin(n: Nat) -> Nat => n;",
+        ),
         &baseline,
     );
 }
@@ -163,7 +166,10 @@ fn a_definition_partial_only_through_an_untaken_arm_turns_total_with_it_as_the_w
 /// The converse: `spin` made partial makes `f` partial in a whole compile, and the recompile records it so.
 #[test]
 fn a_definition_total_through_an_untaken_arm_turns_partial_with_it_as_the_whole_compile_does() {
-    let total = UNTAKEN.replace("spin(n: Nat) -> Nat = spin(n);", "spin(n: Nat) -> Nat = n;");
+    let total = UNTAKEN.replace(
+        "spin(n: Nat) -> Nat => spin(n);",
+        "spin(n: Nat) -> Nat => n;",
+    );
     let baseline = unit_of(&total);
 
     answers_as_the_whole_compile_does(UNTAKEN, &baseline);
@@ -233,15 +239,15 @@ pub let y: /std/Nat = /lib/b/x;
 fn an_edit_closing_a_cycle_refuses_its_members_as_the_whole_compile_does() {
     let base = "use /std/{Nat};
 
-pub let f(n: Nat) -> Nat = n;
+pub let f(n: Nat) -> Nat => n;
 
-pub let g(n: Nat) -> Nat = f(n);
+pub let g(n: Nat) -> Nat => f(n);
 
 pub let h: Nat = g(1);
 
 pub let unrelated: Nat = 7;
 ";
-    let edited = base.replace("f(n: Nat) -> Nat = n;", "f(n: Nat) -> Nat = g(n);");
+    let edited = base.replace("f(n: Nat) -> Nat => n;", "f(n: Nat) -> Nat => g(n);");
     let baseline = unit_of(base);
 
     assert!(

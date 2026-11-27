@@ -3,7 +3,7 @@ use /std/ops/{Eql};
 use /std/Bool/{Holds};
 
 --- Whether `b` may stand in a token (RFC 9110 §5.6.2): a letter, a digit, or one of ``!#$%&'*+-.^_`|~``.
-pub let is_tchar(b: Byte) -> Bool =
+pub let is_tchar(b: Byte) -> Bool =>
     let n = Byte/to_nat(b);
     Nat/in_range(n, 'a', 'z') || Nat/in_range(n, 'A', 'Z') || Nat/in_range(n, '0', '9') || n == '!'
         || n == '#'
@@ -22,11 +22,11 @@ pub let is_tchar(b: Byte) -> Bool =
         || n == '~';
 
 --- Whether `s` is a token: one character or more, each a token's.
-pub let is_token(s: Str) -> Bool =
+pub let is_token(s: Str) -> Bool =>
     Bool/not(Str/is_empty(s)) && Bytes/all(Str/to_bytes(s), is_tchar);
 
 --- Whether `s` is a name as a [`Name`] holds one: a token with no capital letter.
-pub let is_name(s: Str) -> Bool =
+pub let is_name(s: Str) -> Bool =>
     is_token(s)
         && Bytes/all(
             Str/to_bytes(s),
@@ -66,7 +66,7 @@ pub let transfer_encoding: Name =
     Name { text = "transfer-encoding" };
 
 --- The name `s` spells, lowercased, or `none` where it is no token.
-pub let of_str(s: Str) -> Option(Name) =
+pub let of_str(s: Str) -> Option(Name) =>
     -- The token is decided as written: a token is ASCII, so `Str/to_lower` lowers it as ASCII does, where lowering first would read the Kelvin sign as `k`.
     match is_token(s)
     | true =>
@@ -79,5 +79,5 @@ pub let of_str(s: Str) -> Option(Name) =
     end;
 
 --- Whether `n` is the name `text` spells, compared without case.
-pub let is(n: Name, text: Str) -> Bool =
+pub let is(n: Name, text: Str) -> Bool =>
     Str/eql_ignoring_ascii_case(n.text, text);

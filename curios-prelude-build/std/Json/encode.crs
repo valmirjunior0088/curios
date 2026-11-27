@@ -2,18 +2,18 @@ use /std/{Str, Bool, Char, Nat, Int, Option, List, Json, Fmt};
 
 -- `Int/to_str` signs every integer, which an exponent JSON writes does not need when it is positive.
 --- `e` as an exponent is written: its digits, a minus before a negative one.
-let exponent_text(e: Int) -> Str =
+let exponent_text(e: Int) -> Str =>
     Option/unwrap_or(Str/strip_prefix(Int/to_str(e), "+"), Int/to_str(e));
 
 -- With `point` the place of the decimal point counted from the first digit, `n · 10^(point - k)` for the mantissa's `k` digits, these are ECMA-262's four layouts of `Number::toString`.
 --- `n` as JavaScript's `Number.prototype.toString` lays out its digits, which `JSON.stringify` writes: positional from `1e-6` up to below `1e21`, `1.5`, `100`, `0.000001`, and past those one digit, the rest after a point and an exponent, `1e21`, `1.5e-7`.
-let encode_num(n: Json/Number) -> Str =
+let encode_num(n: Json/Number) -> Str =>
     let magnitude = Int/abs(n.mantissa);
     let digits = Nat/to_str(magnitude);
     let k = Str/length(digits);
     let point = n.exponent + Nat/to_int(k);
     -- The first `at` digits and the rest, the rest keeping its leading zeros.
-    let split(at: Nat) -> {Str, Str} =
+    let split(at: Nat) -> {Str, Str} =>
         let scale = Nat/pow(10, k - at);
         let rest =
             match k - at
@@ -41,7 +41,7 @@ let encode_num(n: Json/Number) -> Str =
     end;
 
 --- What a character is written as inside a string, when it is not written as itself: the quote, the backslash and the control characters, which JSON escapes.
-let escaped(c: Char) -> Option(Str) =
+let escaped(c: Char) -> Option(Str) =>
     let n = Char/to_nat(c);
     match n
     | '"' => Option/some("\\\"")
@@ -63,11 +63,11 @@ let escaped(c: Char) -> Option(Str) =
         end
     end;
 
-let encode_str(s: Str) -> Str =
+let encode_str(s: Str) -> Str =>
     Str/flatten(["\"", Str/escape(s, escaped), "\""]);
 
 --- `v` as a document on one line.
-pub let encode(v: Json) -> Str =
+pub let encode(v: Json) -> Str =>
     match v
     | null() => "null"
     | bool(b) => Bool/to_str(b)

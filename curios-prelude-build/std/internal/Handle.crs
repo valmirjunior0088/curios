@@ -15,7 +15,7 @@ use /std/Bool/{Holds};
 foreign file_open(Bytes, Nat) -> {status: Nat, handle: Handle};
 
 --- The host's code for `mode`.
-let mode_code(mode: Mode) -> Nat =
+let mode_code(mode: Mode) -> Nat =>
     match mode
     | read() => /sys/open_mode/read
     | write() => /sys/open_mode/write
@@ -26,7 +26,7 @@ let mode_code(mode: Mode) -> Nat =
     end;
 
 --- The handle the file at `path` opens to in `mode`: what a file and a terminal are each opened through.
-pub let open(path: Bytes, mode: Mode) -> Try(Io, Io/Error, Handle) =
+pub let open(path: Bytes, mode: Mode) -> Try(Io, Io/Error, Handle) =>
     let reply = file_open(path, mode_code(mode))!;
     let () = Status/succeeded(reply.status)!;
     Try/pure(reply.handle);
@@ -35,10 +35,10 @@ foreign handle_close(Handle) -> {};
 
 --- Close `h`. Closing a handle that names nothing does nothing.
 satisfy Io/Close(Handle) {
-    close(h) = handle_close(h),
+    close(h) => handle_close(h),
 }
 
-let flagged(report: Byte, flag: Byte) -> Bool =
+let flagged(report: Byte, flag: Byte) -> Bool =>
     Byte/to_nat(report && flag) > 0;
 
 --- A handle ready once the handle is ready to read where the first flag asks, to write where the second does, or has failed or hung up. Closing it leaves the handle it watches as it is.
@@ -48,19 +48,19 @@ foreign handle_watch(Handle, Bool, Bool) -> Handle;
 foreign handle_ready(List(Handle)) -> Bytes;
 
 --- Whether each report says ready, in their order.
-let each_ready(reports: Bytes) -> List(Bool) =
+let each_ready(reports: Bytes) -> List(Bool) =>
     match reports
     | 0x[] => []
     | 0x[r, ..rest] => [flagged(r, /sys/event/ready), ..each_ready(rest)]
     end;
 
 --- Whether each handle of `on` is ready now, in its order, without waiting: a watch as its handle is, a deadline once the monotonic clock has reached it, and any other handle at once.
-pub let ready_now(on: List(Handle)) -> Io(List(Bool)) =
+pub let ready_now(on: List(Handle)) -> Io(List(Bool)) =>
     let reports = handle_ready(on)!;
     Io/pure(each_ready(reports));
 
 --- A successful read's bytes as the chunk they are, or the end of the stream where there are none: a read of a positive count that answers nothing is the end, as a zero-byte `read(2)` is.
-let answered(b: Bytes) -> Io/Chunk =
+let answered(b: Bytes) -> Io/Chunk =>
     match b
     | 0x[] => Io/Chunk/ended()
     | 0x[_, .._] => Io/Chunk/bytes(b)
@@ -79,17 +79,21 @@ foreign handle_flush(Handle) -> Nat;
 foreign handle_finish(Handle) -> Nat;
 
 --- A wait on a watch of `h` for `interest`: the watch is closed whether the wait ends or is cancelled.
-let watching(h: Handle, interest: Interest) -> Io(Waiting) =
+let watching(h: Handle, interest: Interest) -> Io(Waiting) =>
     let watch = handle_watch(h, interest.readable, interest.writable)!;
     Io/pure(Waiting { on = [watch], tripped = [], release = Io/close(watch) });
 
 --- Until `h` is ready for `interest`, or has failed or hung up: a suspension on a watch of it, closed whether the wait ends or is cancelled. Readiness is advisory, so what waits retries the operation it waited for, and waits again where it would still block.
-pub let wait(h: Handle, interest: Interest) -> Io({}) =
+pub let wait(h: Handle, interest: Interest) -> Io({}) =>
     let w = watching(h, interest)!;
     suspend_on(w);
 
 --- What `attempt` replied with how it settled, or nothing where the host would block, `status` reading the reply's code.
-let settled_reply(@R: Type, attempt: Io(R), status: (R) -> Nat) -> Io(Option({R, Status/Settled})) =
+let settled_reply(
+    @R: Type,
+    attempt: Io(R),
+    status: (R) -> Nat,
+) -> Io(Option({R, Status/Settled})) =>
     let reply = attempt!;
     match Status/of_code(status(reply))
     | blocked() => Io/pure(Option/none())
@@ -105,12 +109,12 @@ pub let retried(
     attempt: Io(R),
     status: (R) -> Nat,
     settle: (R, Status/Settled) -> Io(A),
-) -> Io(A) =
+) -> Io(A) =>
     let (reply, settled) = until(settled_reply(attempt, status), watching(h, interest))!;
     settle(reply, settled);
 
 --- Up to `n` bytes, waiting while the host would block.
-let read_waiting(h: Handle, n: Nat, @_: Holds(0 < n)) -> Io(Result(Error, Io/Chunk)) =
+let read_waiting(h: Handle, n: Nat, @_: Holds(0 < n)) -> Io(Result(Error, Io/Chunk)) =>
     retried(
         h,
         Interest/readable,
@@ -124,14 +128,14 @@ let read_waiting(h: Handle, n: Nat, @_: Holds(0 < n)) -> Io(Result(Error, Io/Chu
             end);
 
 --- The whole of `b` written to `h`: taken whole into what the host holds of `h`'s writes before anything waits, then handed on, waiting while the host still holds any; the first failure is the answer. Cancelled where it waits, the write leaves its bytes whole in what the host holds, which the next write, flush or finish of `h` hands on first. The host's reply says whether it still holds any of `h`'s writes, and the wait follows only where it does: a write the handle takes whole is one host call.
-let write_waiting(h: Handle, b: Bytes) -> Io(Result(Error, {})) =
+let write_waiting(h: Handle, b: Bytes) -> Io(Result(Error, {})) =>
     match Status/of_code(handle_write(h, b)!)
     | blocked() => flush_waiting(h)
     | settled(settled) => Try/run(Status/answer(settled))
     end;
 
 --- What the host holds of `h`'s writes, handed on, waiting while it holds any.
-let flush_waiting(h: Handle) -> Io(Result(Error, {})) =
+let flush_waiting(h: Handle) -> Io(Result(Error, {})) =>
     retried(
         h,
         Interest/writable,
@@ -140,7 +144,7 @@ let flush_waiting(h: Handle) -> Io(Result(Error, {})) =
         (_, settled) => Try/run(Status/answer(settled)));
 
 --- `h`'s sending half ended, waiting while the host would block.
-let finish_waiting(h: Handle) -> Io(Result(Error, {})) =
+let finish_waiting(h: Handle) -> Io(Result(Error, {})) =>
     retried(
         h,
         Interest/writable,
@@ -149,15 +153,15 @@ let finish_waiting(h: Handle) -> Io(Result(Error, {})) =
         (_, settled) => Try/run(Status/answer(settled)));
 
 satisfy Io/Read(Handle) {
-    read(h, n, @positive) = Try/attempt(read_waiting(h, n, @positive)),
+    read(h, n, @positive) => Try/attempt(read_waiting(h, n, @positive)),
 }
 
 satisfy Io/Write(Handle) {
-    write(h, b) = Try/attempt(write_waiting(h, b)),
-    flush(h) = Try/attempt(flush_waiting(h)),
+    write(h, b) => Try/attempt(write_waiting(h, b)),
+    flush(h) => Try/attempt(flush_waiting(h)),
 }
 
 --- `h`'s sending half ended and its receiving half left as it is, waiting while the host would block: the peer reads the end of the stream, a TLS stream's closure alert ahead of it, and `h` still reads what the peer sends. Only a connected socket has a sending half of its own to end, and any other handle is `not_found`.
 satisfy Io/Finish(Handle) {
-    finish(h) = Try/attempt(finish_waiting(h)),
+    finish(h) => Try/attempt(finish_waiting(h)),
 }

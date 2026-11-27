@@ -317,7 +317,7 @@ pub const AN_EMPTY_PROPOSITION_STILL_ELIMINATES_INTO_DATA: &str = r#"
     use /std/{Nat};
     use /std/Bool/{False};
 
-    let ex_falso(f : False) -> Nat =
+    let ex_falso(f : False) -> Nat =>
         match f
         end;
 
@@ -333,7 +333,7 @@ pub const A_PROPOSITION_STILL_ELIMINATES_INTO_ANOTHER_PROPOSITION: &str = r#"
     | b()
     end
 
-    let into_prop(t : Two) -> True =
+    let into_prop(t : Two) -> True =>
         match t
         | a() => True/qed()
         | b() => True/qed()
@@ -346,7 +346,7 @@ pub const A_PROPOSITION_STILL_ELIMINATES_INTO_ANOTHER_PROPOSITION: &str = r#"
 pub const AN_UNCONSTRAINED_IMPLICIT: &str = r#"
     use /std/{Nat};
 
-    let drop(@A : Type, n : Nat) -> Nat = n;
+    let drop(@A : Type, n : Nat) -> Nat => n;
 "#;
 
 /// The same argument supplied in all four positions at once, so the refusals above cannot be passing for "a declaration may not mention an implicit".
@@ -359,7 +359,7 @@ pub const A_SOLVED_METAVARIABLE_IN_EVERY_POSITION: &str = r#"
         x : /std/Eq()(drop(@Nat, 0), 0)
     }
 
-    let f(x : /std/Eq()(drop(@Nat, 0), 0)) -> Nat = 0;
+    let f(x : /std/Eq()(drop(@Nat, 0), 0)) -> Nat => 0;
 
     /std/print(Nat/to_str(drop(@Nat, 0)))
     "#;
@@ -376,7 +376,7 @@ pub const A_NESTED_RELEVANT_CLASH_STILL_EXCUSES_AN_OMITTED_ARM: &str = r#"
     | right() : (Pair/mk(1))
     end
 
-    let f(w : Ind(Pair/mk(0))) -> Nat =
+    let f(w : Ind(Pair/mk(0))) -> Nat =>
         match w
         | left() => 0
         end;
@@ -397,22 +397,22 @@ pub const A_CLASH_BETWEEN_TWO_FORCINGS_OF_ONE_BINDER_EXCUSES_THE_ARM: &str = r#"
     | same(@z : A) : (z, z)
     end
 
-    let absurd_bool(h : Eq()(false, true)) -> False =
+    let absurd_bool(h : Eq()(false, true)) -> False =>
         match h end;
 
-    let absurd_color(h : Eq()(Color/green(), Color/red())) -> False =
+    let absurd_color(h : Eq()(Color/green(), Color/red())) -> False =>
         match h end;
 
-    let absurd_nat(h : Eq()(0, 1)) -> False =
+    let absurd_nat(h : Eq()(0, 1)) -> False =>
         match h end;
 
-    let absurd_successor(n : Nat, h : Eq()(0, n + 1)) -> False =
+    let absurd_successor(n : Nat, h : Eq()(0, n + 1)) -> False =>
         match h end;
 
-    let absurd_option(h : Eq()(Option/some(1), Option/none())) -> False =
+    let absurd_option(h : Eq()(Option/some(1), Option/none())) -> False =>
         match h end;
 
-    let absurd_same(h : Same()(Color/green(), Color/red())) -> False =
+    let absurd_same(h : Same()(Color/green(), Color/red())) -> False =>
         match h end;
 
     /std/print("ok")
@@ -429,13 +429,13 @@ pub const A_VARIABLE_OF_THE_INDICES_FORCED_TWO_WAYS_EXCUSES_THE_ARM: &str = r#"
     | mk() : ((0, false))
     end
 
-    let neither(n : Nat, x : Two(n, n)) -> Nat =
+    let neither(n : Nat, x : Two(n, n)) -> Nat =>
         match x end;
 
-    let refined(n : Nat, h : Eq()(n, 7), x : Two(n, n)) -> Eq()(n, 7) =
+    let refined(n : Nat, h : Eq()(n, 7), x : Two(n, n)) -> Eq()(n, 7) =>
         match x end;
 
-    let behind(n : Nat, x : Tagged((n, true))) -> Nat =
+    let behind(n : Nat, x : Tagged((n, true))) -> Nat =>
         match x end;
 
     /std/print("ok")
@@ -445,7 +445,7 @@ pub const A_POSITIVE_SEGMENT_STILL_CLASHES_WITH_THE_EMPTY_VALUE: &str = r#"
     use /std/{Eq, Bytes};
     use /std/Bool/{False};
 
-    let absurd(b : Bytes, h : Eq()(0x[..b, 0x01], 0x[])) -> False =
+    let absurd(b : Bytes, h : Eq()(0x[..b, 0x01], 0x[])) -> False =>
         match h end;
 
     /std/print("ok")
@@ -458,12 +458,12 @@ pub const A_MATCH_ON_A_PINNED_PROOF_IS_ITS_ARM_AT_THE_INDEX_UNDER_EVERY_CASE: &s
     induct Read: (Bool) -> Prop | mk(x: Bool): (x) end
 
     let direct(g: (Bool) -> Bool, b: Bool, p: Read(b),
-          guard: Holds(match p | mk(x) => g(x) end)) -> Holds(g(b)) =
+          guard: Holds(match p | mk(x) => g(x) end)) -> Holds(g(b)) =>
         guard;
 
     let split(g: (Bool) -> Bool, b: Bool, p: Read(b),
           guard: Holds(match p | mk(x) => g(x) end),
-          chosen: Holds(b)) -> Holds(g(b)) =
+          chosen: Holds(b)) -> Holds(g(b)) =>
         match (match p | mk(x) => g(x) end)
         | false => match guard end
         | true => match b | false => match chosen end | true => True/qed() end
@@ -483,7 +483,7 @@ pub const IRRELEVANCE_STILL_IDENTIFIES_A_PROPOSITIONS_INHABITANTS: &str = r#"
     | b()
     end
 
-    let all_equal(@X : Prop, x : X, y : X) -> Same()(x, y) =
+    let all_equal(@X : Prop, x : X, y : X) -> Same()(x, y) =>
         Same/same();
 
     let same : Same()(Two/a(), Two/b()) =
@@ -510,7 +510,7 @@ pub const A_CATCH_ALL_IS_CHECKED_AT_ITS_SCRUTINEE: &str = r#"
     | c()
     end
 
-    let same(t : Three) -> Eq()(t, t) =
+    let same(t : Three) -> Eq()(t, t) =>
         match t
         | a() => Eq/refl()
         | _ => Eq/refl()
@@ -542,9 +542,9 @@ pub const A_FUNCTION_INTO_A_PROPOSITION_IS_A_PROPOSITION: &str = r#"
 pub const ETA_CONVERTS_A_FUNCTION_AND_A_RECORD_WITH_THEIR_EXPANSIONS: &str = r#"
     use /std/{Eq, Nat, Bool};
 
-    let function(g : (Nat) -> Nat) -> Eq()((x : Nat) => g(x), g) = Eq/refl();
+    let function(g : (Nat) -> Nat) -> Eq()((x : Nat) => g(x), g) => Eq/refl();
 
-    let record(p : {Nat, Bool}) -> Eq()((p.0, p.1), p) = Eq/refl();
+    let record(p : {Nat, Bool}) -> Eq()((p.0, p.1), p) => Eq/refl();
 
     /std/print(Nat/to_str(1))
     "#;
@@ -552,23 +552,23 @@ pub const ETA_CONVERTS_A_FUNCTION_AND_A_RECORD_WITH_THEIR_EXPANSIONS: &str = r#"
 pub const A_LITERALS_ETA_HOLDS_WHERE_NO_TYPE_DIRECTS_IT: &str = r#"
     use /std/{Eq, Nat, Bool};
 
-    let hold(@A : Type, a : A, count : Nat) -> A =
+    let hold(@A : Type, a : A, count : Nat) -> A =>
         match count | 0 => a | pred + 1 => a end;
 
     let in_an_arm(b : Bool, p : {Nat, Nat})
         -> Eq()(match b | true => (p.0, p.1) | false => p end,
                 match b | true => p | false => p end)
-        = Eq/refl();
+        => Eq/refl();
 
     let in_a_successor_arm(n : Nat, p : {Nat, Nat})
         -> Eq()(match n | 0 => (p.0, p.1) | m + 1 => p end,
                 match n | 0 => p | m + 1 => p end)
-        = Eq/refl();
+        => Eq/refl();
 
     let under_a_projection(b : Bool, p : {Nat, Nat})
         -> Eq()((match b | true => (p.0, p.1) | false => p end).0,
                 (match b | true => p | false => p end).0)
-        = Eq/refl();
+        => Eq/refl();
 
     let under_a_lambda(b : Bool, p : {Nat, Nat})
         -> Eq()(match b
@@ -579,16 +579,16 @@ pub const A_LITERALS_ETA_HOLDS_WHERE_NO_TYPE_DIRECTS_IT: &str = r#"
                 | true => (x : Nat) => p
                 | false => (x : Nat) => p
                 end)
-        = Eq/refl();
+        => Eq/refl();
 
     let a_function(b : Bool, g : (Nat) -> Nat)
         -> Eq()(match b | true => (x : Nat) => g(x + 0) | false => g end,
                 match b | true => g | false => g end)
-        = Eq/refl();
+        => Eq/refl();
 
     let through_a_definition(p : {Nat, Nat}, count : Nat)
         -> Eq()(hold((p.0, p.1), count), hold(p, count))
-        = Eq/refl();
+        => Eq/refl();
 
     /std/print(Nat/to_str(1))
     "#;
@@ -598,41 +598,41 @@ pub const ANY_TWO_TERMS_CONVERT_AT_A_TYPE_WITH_NO_FIELD: &str = r#"
 
     struct U: pub Type {}
 
-    let at_the_unit(F : ({}) -> Type, r : {}, s : {}, x : F(r)) -> F(s) = x;
+    let at_the_unit(F : ({}) -> Type, r : {}, s : {}, x : F(r)) -> F(s) => x;
 
-    let at_a_struct(F : (U) -> Type, r : U, s : U, x : F(r)) -> F(s) = x;
+    let at_a_struct(F : (U) -> Type, r : U, s : U, x : F(r)) -> F(s) => x;
 
     let at_a_record_of_units(r : {a: {}, b: {}}, s : {a: {}, b: {}})
         -> Eq(@({a: {}, b: {}}))(r, s)
-        = Eq/refl();
+        => Eq/refl();
 
     let at_a_function_into_a_unit(f : (Nat) -> {}, g : (Nat) -> {})
         -> Eq(@((Nat) -> {}))(f, g)
-        = Eq/refl();
+        => Eq/refl();
 
     let two_applications(f : (Nat) -> {}, g : (Nat) -> {}, n : Nat)
         -> Eq(@({}))(f(n), g(n))
-        = Eq/refl();
+        => Eq/refl();
 
     let two_stuck_matches(b : Bool, r : {}, s : {})
         -> Eq(@({}))(match b | true => r | false => r end,
                      match b | true => s | false => s end)
-        = Eq/refl();
+        => Eq/refl();
 
     let two_stuck_matches_at_a_struct(b : Bool, r : U, s : U)
         -> Eq(@(U))(match b | true => r | false => r end,
                     match b | true => s | false => s end)
-        = Eq/refl();
+        => Eq/refl();
 
     let two_stuck_matches_at_a_record_of_units(b : Bool, r : {{}, {}}, s : {{}, {}})
         -> Eq(@({{}, {}}))(match b | true => r | false => r end,
                            match b | true => s | false => s end)
-        = Eq/refl();
+        => Eq/refl();
 
     let two_stuck_matches_at_a_function_into_a_unit(b : Bool, f : (Nat) -> {}, g : (Nat) -> {})
         -> Eq(@((Nat) -> {}))(match b | true => f | false => f end,
                               match b | true => g | false => g end)
-        = Eq/refl();
+        => Eq/refl();
 
     /std/print(Nat/to_str(1))
     "#;
@@ -650,30 +650,30 @@ pub const ANY_TWO_TERMS_CONVERT_AT_A_STRUCT_WITH_ONE_INHABITANT: &str = r#"
 
     struct Other(A: Type): pub Type { held: A }
 
-    let at_a_struct_of_a_unit(r : W, s : W) -> Eq(@(W))(r, s) = Eq/refl();
+    let at_a_struct_of_a_unit(r : W, s : W) -> Eq(@(W))(r, s) => Eq/refl();
 
-    let by_a_cast(F : (W) -> Type, r : W, s : W, x : F(r)) -> F(s) = x;
+    let by_a_cast(F : (W) -> Type, r : W, s : W, x : F(r)) -> F(s) => x;
 
-    let at_a_struct_of_a_proof(r : Proved, s : Proved) -> Eq(@(Proved))(r, s) = Eq/refl();
+    let at_a_struct_of_a_proof(r : Proved, s : Proved) -> Eq(@(Proved))(r, s) => Eq/refl();
 
-    let at_a_struct_of_such(r : N, s : N) -> Eq(@(N))(r, s) = Eq/refl();
+    let at_a_struct_of_such(r : N, s : N) -> Eq(@(N))(r, s) => Eq/refl();
 
     let two_applications(f : (Nat) -> W, g : (Nat) -> W, n : Nat)
         -> Eq(@(W))(f(n), g(n))
-        = Eq/refl();
+        => Eq/refl();
 
     let two_stuck_matches(b : Bool, r : W, s : W)
         -> Eq(@(W))(match b | true => r | false => r end,
                     match b | true => s | false => s end)
-        = Eq/refl();
+        => Eq/refl();
 
     let at_a_struct_nested_in_its_own_parameter(r : Pair(Pair({})), s : Pair(Pair({})))
         -> Eq(@(Pair(Pair({}))))(r, s)
-        = Eq/refl();
+        => Eq/refl();
 
     let at_a_struct_nested_under_another(r : Pair(Other(Pair({}))), s : Pair(Other(Pair({}))))
         -> Eq(@(Pair(Other(Pair({})))))(r, s)
-        = Eq/refl();
+        => Eq/refl();
 
     /std/print(Nat/to_str(1))
     "#;
@@ -688,22 +688,22 @@ pub const A_GOALS_TYPE_IS_READ_FORCED: &str = r#"
 
     struct Pair(A: Type): pub Type { a: A, b: A }
 
-    let Tower(n : Nat) -> Type = match n | 0 => {} | p + 1 => Pair(Tower(p)) end;
+    let Tower(n : Nat) -> Type => match n | 0 => {} | p + 1 => Pair(Tower(p)) end;
 
-    let at_a_member(r : Inner, s : Inner) -> Same()(r, s) = Same/same();
+    let at_a_member(r : Inner, s : Inner) -> Same()(r, s) => Same/same();
 
-    let at_a_member_that_holds_another(r : Outer, s : Outer) -> Same()(r, s) = Same/same();
+    let at_a_member_that_holds_another(r : Outer, s : Outer) -> Same()(r, s) => Same/same();
 
-    let by_a_cast(F : (Inner) -> Type, r : Inner, s : Inner, x : F(r)) -> F(s) = x;
+    let by_a_cast(F : (Inner) -> Type, r : Inner, s : Inner, x : F(r)) -> F(s) => x;
 
     let at_a_struct_a_definition_computes(r : Tower(2), s : Tower(2))
         -> Eq(@(Tower(2)))(r, s)
-        = Eq/refl();
+        => Eq/refl();
 
     let where_a_lookup_reads_the_type(b : Bool, r : Outer, s : Outer)
         -> Eq(@(Nat))((match b | true => (r, 1) | false => (r, 2) end).1,
                       (match b | true => (s, 1) | false => (s, 2) end).1)
-        = Eq/refl();
+        => Eq/refl();
 
     /std/print(Nat/to_str(1))
     "#;
@@ -716,22 +716,22 @@ pub const TWO_NEUTRALS_CONVERT_WHERE_A_LOOKUP_GIVES_THEM_A_TYPE_WITH_ONE_INHABIT
     let at_a_record_of_units(b : Bool, r : {{}, {}}, s : {{}, {}})
         -> Eq(@(Nat))((match b | true => (r, 1) | false => (r, 2) end).1,
                       (match b | true => (s, 1) | false => (s, 2) end).1)
-        = Eq/refl();
+        => Eq/refl();
 
     let at_a_function_into_a_unit(b : Bool, r : (Nat) -> {}, s : (Nat) -> {})
         -> Eq(@(Nat))((match b | true => (r, 1) | false => (r, 2) end).1,
                       (match b | true => (s, 1) | false => (s, 2) end).1)
-        = Eq/refl();
+        => Eq/refl();
 
     let at_a_struct_of_a_unit(b : Bool, r : W, s : W)
         -> Eq(@(Nat))((match b | true => (r, 1) | false => (r, 2) end).1,
                       (match b | true => (s, 1) | false => (s, 2) end).1)
-        = Eq/refl();
+        => Eq/refl();
 
     let at_a_proposition_whose_implicit_is_solved(b : Bool, p : Eq()(0, 0), q : Eq()(0, 0))
         -> Eq(@(Nat))((match b | true => (p, 1) | false => (p, 2) end).1,
                       (match b | true => (q, 1) | false => (p, 2) end).1)
-        = Eq/refl();
+        => Eq/refl();
 
     /std/print(Nat/to_str(1))
     "#;
@@ -744,7 +744,7 @@ pub const A_STUCK_ELIMINATION_IS_TYPED_BY_ITS_GOAL: &str = r#"
                        | true => (match b | true => p | false => q end, 1)
                        | false => (p, 2) end).1,
                       (match c | true => (p, 1) | false => (p, 2) end).1)
-        = Eq/refl();
+        => Eq/refl();
 
     let of_two_scrutinees(a : Bool, b : Bool, c : Bool, p : Eq()(0, 0), q : Eq()(0, 0))
         -> Eq(@(Nat))((match c
@@ -753,14 +753,14 @@ pub const A_STUCK_ELIMINATION_IS_TYPED_BY_ITS_GOAL: &str = r#"
                       (match c
                        | true => (match b | true => q | false => p end, 1)
                        | false => (p, 2) end).1)
-        = Eq/refl();
+        => Eq/refl();
 
     let at_a_record_of_units(b : Bool, c : Bool, r : {{}, {}}, s : {{}, {}})
         -> Eq(@(Nat))((match c
                        | true => (match b | true => r | false => s end, 1)
                        | false => (r, 2) end).1,
                       (match c | true => (r, 1) | false => (r, 2) end).1)
-        = Eq/refl();
+        => Eq/refl();
 
     /std/print(Nat/to_str(1))
     "#;
@@ -771,7 +771,7 @@ pub const A_CONSTRUCTORS_VALUE_IS_TYPED_BY_ITS_DECLARATION: &str = r#"
     let a_proof_built_against_one_named(b : Bool, p : Eq()(0, 0))
         -> Eq(@(Nat))((match b | true => (p, 1) | false => (p, 2) end).1,
                       (match b | true => (Eq/refl(@Nat, @0), 1) | false => (Eq/refl(@Nat, @0), 2) end).1)
-        = Eq/refl();
+        => Eq/refl();
 
     /std/print(Nat/to_str(1))
     "#;
@@ -786,7 +786,7 @@ pub const AN_ARMS_BINDERS_ARE_OPENED_AT_THE_TYPES_THEIR_CONSTRUCTOR_GIVES_THEM: 
     let either_proof(t : Two)
         -> Eq(@(Nat))((match t | two(p, q) => (p, 1) end).1,
                       (match t | two(p, q) => (q, 1) end).1)
-        = Eq/refl();
+        => Eq/refl();
 
     /std/print(Nat/to_str(1))
     "#;
@@ -796,7 +796,7 @@ pub const A_LITERALS_ETA_IS_TAKEN_AGAINST_A_STUCK_ELIMINATION: &str = r#"
 
     struct Record: pub Type { a: Nat, b: Nat }
 
-    let hold(@A: Type, a: A, count: Nat) -> A =
+    let hold(@A: Type, a: A, count: Nat) -> A =>
         match count | 0 => a | pred + 1 => a end;
 
     let a_tuple_in_an_arm(b : Bool, c : Bool, p : {Nat, Nat}, q : {Nat, Nat})
@@ -810,13 +810,13 @@ pub const A_LITERALS_ETA_IS_TAKEN_AGAINST_A_STUCK_ELIMINATION: &str = r#"
             | true => match c | true => p | false => q end
             | false => p
             end)
-        = Eq/refl();
+        => Eq/refl();
 
     let a_tuple_against_a_definition_that_unfolds_to_one(b : Bool, n : Nat, p : {Nat, Nat})
         -> Eq(@({Nat, Nat}))(
             match b | true => (hold(p, n).0, hold(p, n).1) | false => p end,
             match b | true => hold(p, n) | false => p end)
-        = Eq/refl();
+        => Eq/refl();
 
     let a_lambda_in_an_arm(b : Bool, c : Bool, g : (Nat) -> Nat, k : (Nat) -> Nat)
         -> Eq(@((Nat) -> Nat))(
@@ -828,14 +828,14 @@ pub const A_LITERALS_ETA_IS_TAKEN_AGAINST_A_STUCK_ELIMINATION: &str = r#"
             | true => match c | true => g | false => k end
             | false => g
             end)
-        = Eq/refl();
+        => Eq/refl();
 
     let a_struct_at_its_own_type(c : Bool, s : Record, r : Record)
         -> Eq(@(Record))(
             Record { a = (match c | true => s | false => r end).a,
                      b = (match c | true => s | false => r end).b },
             match c | true => s | false => r end)
-        = Eq/refl();
+        => Eq/refl();
 
     let a_struct_in_an_arm(b : Bool, c : Bool, s : Record, r : Record)
         -> Eq(@(Record))(
@@ -848,7 +848,7 @@ pub const A_LITERALS_ETA_IS_TAKEN_AGAINST_A_STUCK_ELIMINATION: &str = r#"
             | true => match c | true => s | false => r end
             | false => s
             end)
-        = Eq/refl();
+        => Eq/refl();
 
     /std/print(Nat/to_str(1))
     "#;
@@ -858,7 +858,7 @@ pub const A_FUNCTION_INTO_A_PROPOSITION_IS_DISCHARGED_BEFORE_ETA: &str = r#"
 
     induct Same(@P: Prop): (P, P) -> pub Prop | same(@p: P): (p, p) end
 
-    let same(g : (Nat) -> Eq()(0, 0), h : (Nat) -> Eq()(0, 0)) -> Same()(g, h) = Same/same();
+    let same(g : (Nat) -> Eq()(0, 0), h : (Nat) -> Eq()(0, 0)) -> Same()(g, h) => Same/same();
 
     /std/print(Nat/to_str(1))
     "#;
@@ -867,7 +867,7 @@ pub const ETA_HANDS_A_RECORDS_PROOF_COMPONENT_TO_IRRELEVANCE: &str = r#"
     use /std/{Eq, Nat};
 
     let same(g : (Nat) -> {Nat, Eq()(0, 0)}, p : Eq()(0, 0))
-        -> Eq()(g, (x : Nat) => (g(x).0, p)) = Eq/refl();
+        -> Eq()(g, (x : Nat) => (g(x).0, p)) => Eq/refl();
 
     /std/print(Nat/to_str(1))
     "#;
@@ -875,7 +875,7 @@ pub const ETA_HANDS_A_RECORDS_PROOF_COMPONENT_TO_IRRELEVANCE: &str = r#"
 pub const A_SPINE_ARGUMENT_COMPARES_AT_THE_HEADS_DOMAIN: &str = r#"
     use /std/{Eq, Nat};
 
-    let ground(f : (Eq()(0, 0)) -> Nat, p : Eq()(0, 0), q : Eq()(0, 0)) -> Eq()(f(p), f(q)) =
+    let ground(f : (Eq()(0, 0)) -> Nat, p : Eq()(0, 0), q : Eq()(0, 0)) -> Eq()(f(p), f(q)) =>
         Eq/refl();
 
     /std/print(Nat/to_str(1))
@@ -888,9 +888,9 @@ pub const A_DEFINITION_APPLIED_TO_TWO_PROOFS_CONVERTS_BEFORE_UNFOLDING: &str = r
     | mk(): (0)
     end
 
-    let h(n : Nat, e : Z(n)) -> Nat = match e | mk() => 1 end;
+    let h(n : Nat, e : Z(n)) -> Nat => match e | mk() => 1 end;
 
-    let same(n : Nat, p : Z(n), q : Z(n), x : Eq()(h(n, p), 0)) -> Eq()(h(n, q), 0) = x;
+    let same(n : Nat, p : Z(n), q : Z(n), x : Eq()(h(n, p), 0)) -> Eq()(h(n, q), 0) => x;
 
     /std/print(Nat/to_str(1))
     "#;
@@ -902,27 +902,27 @@ pub const TWO_CALLS_OF_ONE_DEFINITION_CONVERT_BY_THEIR_SPINES_AT_ANY_TYPE: &str 
     | mk(): (0)
     end
 
-    let into(n : Nat, e : Z(n)) -> (Nat) -> Nat =
+    let into(n : Nat, e : Z(n)) -> (Nat) -> Nat =>
         match e | mk() => (x : Nat) => x end;
 
-    let pair(n : Nat, e : Z(n)) -> {Nat, Nat} =
+    let pair(n : Nat, e : Z(n)) -> {Nat, Nat} =>
         match e | mk() => (1, 2) end;
 
-    let through(n : Nat, e : Z(n)) -> Nat = match e | mk() => 1 end;
+    let through(n : Nat, e : Z(n)) -> Nat => match e | mk() => 1 end;
 
     let at_a_function_type(n : Nat, k : (Nat) -> Nat, p : Z(n), q : Z(n),
                            x : Eq(@((Nat) -> Nat))(into(n, p), k))
-        -> Eq(@((Nat) -> Nat))(into(n, q), k) = x;
+        -> Eq(@((Nat) -> Nat))(into(n, q), k) => x;
 
     let at_a_record_type(n : Nat, k : {Nat, Nat}, p : Z(n), q : Z(n),
                          x : Eq(@({Nat, Nat}))(pair(n, p), k))
-        -> Eq(@({Nat, Nat}))(pair(n, q), k) = x;
+        -> Eq(@({Nat, Nat}))(pair(n, q), k) => x;
 
     let through_a_curried_call(n : Nat, p : Z(n), q : Z(n), x : Eq()(into(n, p)(3), 0))
-        -> Eq()(into(n, q)(3), 0) = x;
+        -> Eq()(into(n, q)(3), 0) => x;
 
     let whatever_spells_them(n : Nat, p : Z(n), q : Z(n))
-        -> Eq()(through(n, p), through(n, q)) = Eq/refl();
+        -> Eq()(through(n, p), through(n, q)) => Eq/refl();
 
     /std/print(Nat/to_str(1))
     "#;
@@ -934,45 +934,45 @@ pub const TWO_CALLS_OF_ONE_DEFINITION_CONVERT_WHEREVER_THEY_SIT: &str = r#"
     | zero(): (0)
     end
 
-    let through(n : Nat, e : Zero(n)) -> Nat = match e | zero() => 1 end;
+    let through(n : Nat, e : Zero(n)) -> Nat => match e | zero() => 1 end;
 
-    let into(n : Nat, e : Zero(n)) -> (Nat) -> Nat =
+    let into(n : Nat, e : Zero(n)) -> (Nat) -> Nat =>
         match e | zero() => (x : Nat) => x end;
 
-    let pair(n : Nat, e : Zero(n)) -> {Nat, Nat} =
+    let pair(n : Nat, e : Zero(n)) -> {Nat, Nat} =>
         match e | zero() => (1, 2) end;
 
     let a_curried_call(n : Nat, p : Zero(n), q : Zero(n))
-        -> Eq(@(Nat))(into(n, p)(3), into(n, q)(3)) = Eq/refl();
+        -> Eq(@(Nat))(into(n, p)(3), into(n, q)(3)) => Eq/refl();
 
     let under_a_lambda(n : Nat, p : Zero(n), q : Zero(n))
         -> Eq(@((Nat) -> Nat))((z : Nat) => through(n, p), (z : Nat) => through(n, q))
-        = Eq/refl();
+        => Eq/refl();
 
     let in_a_tuple(n : Nat, p : Zero(n), q : Zero(n))
-        -> Eq(@({Nat, Nat}))((through(n, p), 0), (through(n, q), 0)) = Eq/refl();
+        -> Eq(@({Nat, Nat}))((through(n, p), 0), (through(n, q), 0)) => Eq/refl();
 
     let in_a_let(n : Nat, p : Zero(n), q : Zero(n))
-        -> Eq(@(Nat))((() => let z = through(n, p); z)(), (() => let z = through(n, q); z)()) = Eq/refl();
+        -> Eq(@(Nat))((() => let z = through(n, p); z)(), (() => let z = through(n, q); z)()) => Eq/refl();
 
     let in_a_list(n : Nat, p : Zero(n), q : Zero(n))
-        -> Eq(@(List(Nat)))([through(n, p)], [through(n, q)]) = Eq/refl();
+        -> Eq(@(List(Nat)))([through(n, p)], [through(n, q)]) => Eq/refl();
 
     let as_a_scrutinee(n : Nat, p : Zero(n), q : Zero(n))
         -> Eq(@(Nat))(match through(n, p) | 0 => 0 | pred + 1 => 1 end,
                       match through(n, q) | 0 => 0 | pred + 1 => 1 end)
-        = Eq/refl();
+        => Eq/refl();
 
     let as_an_operand(n : Nat, p : Zero(n), q : Zero(n))
-        -> Eq(@(Nat))(through(n, p) + 1, through(n, q) + 1) = Eq/refl();
+        -> Eq(@(Nat))(through(n, p) + 1, through(n, q) + 1) => Eq/refl();
 
     let under_a_projection(n : Nat, p : Zero(n), q : Zero(n))
-        -> Eq(@(Nat))(pair(n, p).0, pair(n, q).0) = Eq/refl();
+        -> Eq(@(Nat))(pair(n, p).0, pair(n, q).0) => Eq/refl();
 
     let past_a_stuck_head(n : Nat, b : Bool, f : (Zero(n)) -> Nat, g : (Zero(n)) -> Nat,
                           p : Zero(n), q : Zero(n),
                           x : Eq()((match b | true => f | false => g end)(p), 0))
-        -> Eq()((match b | true => f | false => g end)(q), 0) = x;
+        -> Eq()((match b | true => f | false => g end)(q), 0) => x;
 
     /std/print(Nat/to_str(1))
     "#;
@@ -986,11 +986,11 @@ pub const A_SPINES_ARGUMENTS_ARE_TYPED_UNDER_A_CURRIED_AND_A_PROJECTED_HEAD: &st
 
     let past_a_curried_head(n : Nat, f : (Nat) -> (Z(n)) -> Nat, p : Z(n), q : Z(n),
                             x : Eq()(f(n)(p), 0))
-        -> Eq()(f(n)(q), 0) = x;
+        -> Eq()(f(n)(q), 0) => x;
 
     let past_a_projected_head(n : Nat, r : {(Z(n)) -> Nat, Nat}, p : Z(n), q : Z(n),
                               x : Eq()(r.0(p), 0))
-        -> Eq()(r.0(q), 0) = x;
+        -> Eq()(r.0(q), 0) => x;
 
     /std/print(Nat/to_str(1))
     "#;
@@ -999,9 +999,9 @@ pub const AN_INTRINSIC_APPLIED_TO_TWO_PROOFS_CONVERTS_AT_THEIR_PROPOSITION: &str
     use /std/{Eq, Nat};
     use /std/Bool/{Holds};
 
-    let halve(a : Nat, b : Nat, @p : Holds(0 < b)) -> Nat = Nat/div(a, b, @p);
+    let halve(a : Nat, b : Nat, @p : Holds(0 < b)) -> Nat => Nat/div(a, b, @p);
 
-    let same(a : Nat, b : Nat, p : Holds(0 < b), q : Holds(0 < b)) -> Eq()(halve(a, b, @p), Nat/div(a, b, @q)) = Eq/refl();
+    let same(a : Nat, b : Nat, p : Holds(0 < b), q : Holds(0 < b)) -> Eq()(halve(a, b, @p), Nat/div(a, b, @q)) => Eq/refl();
 
     /std/print(Nat/to_str(1))
     "#;
@@ -1009,9 +1009,9 @@ pub const AN_INTRINSIC_APPLIED_TO_TWO_PROOFS_CONVERTS_AT_THEIR_PROPOSITION: &str
 pub const A_POLYMORPHIC_DEFINITION_APPLIED_TO_TWO_PROOFS_CONVERTS: &str = r#"
     use /std/{Eq, Nat};
 
-    let h(n : Nat, e : Eq()(n, n)) -> Nat = match e | refl(@_) => 1 end;
+    let h(n : Nat, e : Eq()(n, n)) -> Nat => match e | refl(@_) => 1 end;
 
-    let same(n : Nat, p : Eq()(n, n), q : Eq()(n, n), x : Eq()(h(n, p), 0)) -> Eq()(h(n, q), 0) = x;
+    let same(n : Nat, p : Eq()(n, n), q : Eq()(n, n), x : Eq()(h(n, p), 0)) -> Eq()(h(n, q), 0) => x;
 
     /std/print(Nat/to_str(1))
     "#;
@@ -1023,9 +1023,9 @@ pub const A_RECURSIVE_FUNCTION_CARRYING_A_PROOF_CONVERTS_WITHOUT_UNFOLDING: &str
     | t()
     end
 
-    let g(n : Nat, p : T) -> Nat = match n | 0 => 0 | k + 1 => g(k, p) + 1 end;
+    let g(n : Nat, p : T) -> Nat => match n | 0 => 0 | k + 1 => g(k, p) + 1 end;
 
-    let same(n : Nat, p : T, q : T, x : Eq()(g(n, p), 0)) -> Eq()(g(n, q), 0) = x;
+    let same(n : Nat, p : T, q : T, x : Eq()(g(n, p), 0)) -> Eq()(g(n, q), 0) => x;
 
     /std/print(Nat/to_str(1))
     "#;
@@ -1037,9 +1037,9 @@ pub const A_RECURSIVE_FUNCTION_MATCHING_ITS_PROOF_CONVERTS: &str = r#"
     | t()
     end
 
-    let g(n : Nat, p : T) -> Nat = match n | 0 => (match p | t() => 0 end) | k + 1 => g(k, p) + 1 end;
+    let g(n : Nat, p : T) -> Nat => match n | 0 => (match p | t() => 0 end) | k + 1 => g(k, p) + 1 end;
 
-    let same(n : Nat, p : T, q : T, x : Eq()(g(n, p), 0)) -> Eq()(g(n, q), 0) = x;
+    let same(n : Nat, p : T, q : T, x : Eq()(g(n, p), 0)) -> Eq()(g(n, q), 0) => x;
 
     /std/print(Nat/to_str(1))
     "#;
@@ -1048,7 +1048,7 @@ pub const A_CAST_ALONG_A_HYPOTHESIS_THE_ALGEBRA_EQUATES_IS_ITS_ARGUMENT: &str = 
     use /std/{Eq, Nat};
 
     let along(P : (Nat) -> Type, a : Nat, b : Nat, p : Eq()(a + b, b + a), v : P(a + b))
-        -> Eq()(Eq/subst(P, p, v), v) = Eq/refl();
+        -> Eq()(Eq/subst(P, p, v), v) => Eq/refl();
 
     /std/print(Nat/to_str(1))
     "#;
@@ -1057,10 +1057,10 @@ pub const A_CAST_ALONG_A_PROOF_WRITTEN_AS_A_REDEX_IS_ITS_ARGUMENT: &str = r#"
     use /std/{Eq, Nat};
 
     let through_a_let(P : (Nat) -> Type, a : Nat, b : Nat, p : Eq()(a + b, b + a), v : P(a + b))
-        -> Eq()(Eq/subst(P, (() => let q = p; q)(), v), v) = Eq/refl();
+        -> Eq()(Eq/subst(P, (() => let q = p; q)(), v), v) => Eq/refl();
 
     let through_a_function(P : (Nat) -> Type, a : Nat, b : Nat, p : Eq()(a + b, b + a), v : P(a + b))
-        -> Eq()(Eq/subst(P, ((q : Eq()(a + b, b + a)) => q)(p), v), v) = Eq/refl();
+        -> Eq()(Eq/subst(P, ((q : Eq()(a + b, b + a)) => q)(p), v), v) => Eq/refl();
 
     /std/print(Nat/to_str(1))
     "#;
@@ -1068,7 +1068,7 @@ pub const A_CAST_ALONG_A_PROOF_WRITTEN_AS_A_REDEX_IS_ITS_ARGUMENT: &str = r#"
 pub const A_CAST_ALONG_A_LEMMA_RUNS_NONE_OF_THE_LEMMA: &str = r#"
     use /std/{Eq, Nat};
 
-    let slow(n : Nat) -> Eq()(n, n) =
+    let slow(n : Nat) -> Eq()(n, n) =>
         match n
         | 0 => Eq/refl()
         | k + 1 => Eq/cong((m : Nat) => m + 1, slow(k))
@@ -1076,10 +1076,10 @@ pub const A_CAST_ALONG_A_LEMMA_RUNS_NONE_OF_THE_LEMMA: &str = r#"
 
     let _closed : Eq()(Eq/subst((_) => Nat, slow(100000000000), 7), 7) = Eq/refl();
 
-    let _open(n : Nat, v : Nat) -> Eq()(Eq/subst((_) => Nat, slow(n), v), v) = Eq/refl();
+    let _open(n : Nat, v : Nat) -> Eq()(Eq/subst((_) => Nat, slow(n), v), v) => Eq/refl();
 
-    let inner(@x : Nat, @y : Nat, e : Eq()(x + 1, y + 1)) -> Nat = match e | refl(@z) => z end;
-    let widen(n : Nat) -> Eq()(n + 1, n + 1) = Eq/cong((m : Nat) => m + 1, slow(n));
+    let inner(@x : Nat, @y : Nat, e : Eq()(x + 1, y + 1)) -> Nat => match e | refl(@z) => z end;
+    let widen(n : Nat) -> Eq()(n + 1, n + 1) => Eq/cong((m : Nat) => m + 1, slow(n));
     let _named : Eq()(inner(widen(100000000000)), 100000000001) = Eq/refl();
 
     /std/print(Nat/to_str(Eq/subst((_) => Nat, slow(100000000000), 7)))
@@ -1088,20 +1088,20 @@ pub const A_CAST_ALONG_A_LEMMA_RUNS_NONE_OF_THE_LEMMA: &str = r#"
 pub const AN_ARM_THAT_NAMES_A_PINNED_PAYLOAD_READS_THE_INDEX: &str = r#"
     use /std/{Eq, Nat, Option};
 
-    let z_of(@a : Nat, @b : Nat, e : Eq()(a, b)) -> Nat = match e | refl(@z) => z + 1 end;
+    let z_of(@a : Nat, @b : Nat, e : Eq()(a, b)) -> Nat => match e | refl(@z) => z + 1 end;
 
-    let _open(a : Nat, e : Eq()(a, a)) -> Eq()(z_of(e), a + 1) = Eq/refl();
+    let _open(a : Nat, e : Eq()(a, a)) -> Eq()(z_of(e), a + 1) => Eq/refl();
     let _closed : Eq()(z_of(Eq/refl(@Nat, @41)), 42) = Eq/refl();
 
-    let inner(@x : Nat, @y : Nat, e : Eq()(x + 1, y + 1)) -> Nat = match e | refl(@z) => z end;
+    let inner(@x : Nat, @y : Nat, e : Eq()(x + 1, y + 1)) -> Nat => match e | refl(@z) => z end;
 
-    let _left_open(x : Nat, e : Eq()(x + 1, x + 1)) -> Eq()(inner(e), x + 1) = Eq/refl();
+    let _left_open(x : Nat, e : Eq()(x + 1, x + 1)) -> Eq()(inner(e), x + 1) => Eq/refl();
 
-    let boxed(@x : Nat, @y : Nat, e : Eq()(Option/some(x), Option/some(y))) -> Option(Nat) =
+    let boxed(@x : Nat, @y : Nat, e : Eq()(Option/some(x), Option/some(y))) -> Option(Nat) =>
         match e | refl(@z) => z end;
 
     let _one_instance(x : Nat, e : Eq()(Option/some(x), Option/some(x)))
-        -> Eq()(boxed(e), Option/some(x)) = Eq/refl();
+        -> Eq()(boxed(e), Option/some(x)) => Eq/refl();
 
     /std/print(Nat/to_str(z_of(Eq/refl(@Nat, @41))))
     "#;
@@ -1111,9 +1111,9 @@ pub const AN_INFERRED_VALUE_UNDER_A_REFINED_PROOF_KEEPS_ITS_UNIVERSE_INSTANCE: &
 
     induct Same(@P: Prop): (P, P) -> pub Prop | same(@p: P): (p, p) end
 
-    let k(@x: Eq()(0, 0), _: Same()(x, x)) -> Nat = 1;
+    let k(@x: Eq()(0, 0), _: Same()(x, x)) -> Nat => 1;
 
-    let f(h : (A : Prop) -> A, w : Same()(h(Eq()(0, 0)), h(Eq()(0, 0)))) -> Nat =
+    let f(h : (A : Prop) -> A, w : Same()(h(Eq()(0, 0)), h(Eq()(0, 0)))) -> Nat =>
         k(match h(Eq()(0, 0)) | refl(@_) => w end);
 
     /std/print(Nat/to_str(1))
@@ -1128,9 +1128,9 @@ pub const A_PROOF_IS_NOT_REDUCED_TO_COMPARE_IT_WITH_ANOTHER: &str = r#"
     | t()
     end
 
-    let spin(n : Nat) -> T = match n | 0 => T/t() | k + 1 => spin(k) end;
+    let spin(n : Nat) -> T => match n | 0 => T/t() | k + 1 => spin(k) end;
 
-    let within(y : T, w : Same(@T)(y, y)) -> Nat =
+    let within(y : T, w : Same(@T)(y, y)) -> Nat =>
         let _v : Same(@T)(spin(100000000000), y) = w;
         0;
 
@@ -1140,7 +1140,7 @@ pub const A_PROOF_IS_NOT_REDUCED_TO_COMPARE_IT_WITH_ANOTHER: &str = r#"
 pub const A_STRUCTS_FUNCTION_FIELD_MEETS_A_NEUTRAL_APPLICATION: &str = r#"
     use /std/{Eq, Nat, State};
 
-    let left(a: Nat, f: (Nat) -> State(Nat, Nat)) -> Eq()(State/bind(State/pure(a), f), f(a)) =
+    let left(a: Nat, f: (Nat) -> State(Nat, Nat)) -> Eq()(State/bind(State/pure(a), f), f(a)) =>
         Eq/refl();
 
     /std/print(Nat/to_str(1))
@@ -1149,7 +1149,7 @@ pub const A_STRUCTS_FUNCTION_FIELD_MEETS_A_NEUTRAL_APPLICATION: &str = r#"
 pub const A_STRUCTS_FUNCTION_FIELD_MEETS_A_NEUTRAL_VARIABLE: &str = r#"
     use /std/{Eq, Nat, State};
 
-    let right(m: State(Nat, Nat)) -> Eq()(State/bind(m, (v) => State/pure(v)), m) =
+    let right(m: State(Nat, Nat)) -> Eq()(State/bind(m, (v) => State/pure(v)), m) =>
         Eq/refl();
 
     /std/print(Nat/to_str(1))
@@ -1159,7 +1159,7 @@ pub const TWO_STRUCT_LITERALS_COMPARE_THEIR_FUNCTION_FIELDS: &str = r#"
     use /std/{Eq, Nat, State};
 
     let assoc(m: State(Nat, Nat), f: (Nat) -> State(Nat, Nat), g: (Nat) -> State(Nat, Nat))
-        -> Eq()(State/bind(State/bind(m, f), g), State/bind(m, (v) => State/bind(f(v), g))) =
+        -> Eq()(State/bind(State/bind(m, f), g), State/bind(m, (v) => State/bind(f(v), g))) =>
         Eq/refl();
 
     /std/print(Nat/to_str(1))
@@ -1168,9 +1168,9 @@ pub const TWO_STRUCT_LITERALS_COMPARE_THEIR_FUNCTION_FIELDS: &str = r#"
 pub const A_GROUP_MEMBER_IS_USED_A_LEVEL_UP_BY_ITS_SIBLING: &str = r#"
     use /std/{Nat};
 
-    let pick(@A: Type, n: Nat, x: A) -> Nat =
+    let pick(@A: Type, n: Nat, x: A) -> Nat =>
         match n | 0 => 1 | k + 1 => other(k) end
-    and other(n: Nat) -> Nat =
+    and other(n: Nat) -> Nat =>
         match n | 0 => 1 | k + 1 => pick(k, Nat) end;
 
     /std/print(Nat/to_str(other(1)))
@@ -1179,8 +1179,8 @@ pub const A_GROUP_MEMBER_IS_USED_A_LEVEL_UP_BY_ITS_SIBLING: &str = r#"
 pub const THE_SAME_PAIR_DECLARED_APART_CERTIFIES: &str = r#"
     use /std/{Nat};
 
-    let pick(@A: Type, x: A) -> Nat = 0;
-    let other(n: Nat) -> Nat = pick(Nat) + n;
+    let pick(@A: Type, x: A) -> Nat => 0;
+    let other(n: Nat) -> Nat => pick(Nat) + n;
 
     /std/print(Nat/to_str(other(1)))
     "#;
@@ -1192,11 +1192,11 @@ pub const A_PROOF_FIELD_DOES_NOT_DISTINGUISH_TWO_LITERALS: &str = r#"
     struct S : pub Type { n : Nat, p : P }
     induct W : pub Type | wrap(Nat, P) end
 
-    let field(n : Nat, p : P, q : P) -> Eq()(S { n = n, p = p }, S { n = n, p = q }) = Eq/refl();
-    let payload(n : Nat, p : P, q : P) -> Eq()(W/wrap(n, p), W/wrap(n, q)) = Eq/refl();
-    let some(p : P, q : P) -> Eq()(Option/some(p), Option/some(q)) = Eq/refl();
+    let field(n : Nat, p : P, q : P) -> Eq()(S { n = n, p = p }, S { n = n, p = q }) => Eq/refl();
+    let payload(n : Nat, p : P, q : P) -> Eq()(W/wrap(n, p), W/wrap(n, q)) => Eq/refl();
+    let some(p : P, q : P) -> Eq()(Option/some(p), Option/some(q)) => Eq/refl();
     let assoc(a : Str, b : Str, c : Str)
-        -> Eq()(Str/concat(Str/concat(a, b), c), Str/concat(a, Str/concat(b, c))) = Eq/refl();
+        -> Eq()(Str/concat(Str/concat(a, b), c), Str/concat(a, Str/concat(b, c))) => Eq/refl();
 
     /std/print(Nat/to_str(1))
     "#;
@@ -1210,7 +1210,7 @@ pub const A_NOMINAL_STRUCTS_ETA_IS_NOT_FORFEITED_THERE: &str = r#"
     }
 
     let same(f : (Sealed) -> Nat, b : Sealed, p : Eq()(0, 0), q : Eq()(1, 1))
-        -> Eq()(f(Sealed { one = p, two = q }), f(b)) = Eq/refl();
+        -> Eq()(f(Sealed { one = p, two = q }), f(b)) => Eq/refl();
 
     /std/print(Nat/to_str(1))
     "#;
@@ -1224,7 +1224,7 @@ pub const A_DESCRIPTION_OF_A_CONTRADICTION_STILL_COMPILES: &str = r#"
 
     induct Empty : pub Type end
 
-    pub let forged() -> Io(False) =
+    pub let forged() -> Io(False) =>
         Io/bind(Proc/exit(@Empty, 1), (e : Empty) => Io/pure(match e end));
 
     /std/print("ok")
@@ -1238,7 +1238,7 @@ pub const A_PROPOSITION_HOLDING_A_POLYMORPHIC_PROOF_IS_ADMITTED: &str = r#"
     | c(f: (A: Prop) -> (A) -> A)
     end
 
-    let through(b: Fine, p: True) -> True = match b | c(f) => f(True)(p) end;
+    let through(b: Fine, p: True) -> True => match b | c(f) => f(True)(p) end;
 
     /std/print(Nat/to_str(1))
     "#;

@@ -16,7 +16,7 @@ end
 pub use Constraint/*;
 
 -- What `c` claims before anything is shared out.
-let claimed(avail: Nat, c: Constraint) -> Nat =
+let claimed(avail: Nat, c: Constraint) -> Nat =>
     match c
     | length(n) | min(n) => n
     | percent(p) => avail * p / 100
@@ -24,16 +24,16 @@ let claimed(avail: Nat, c: Constraint) -> Nat =
     end;
 
 -- The weight `c` takes a share of what is left by.
-let weight(c: Constraint) -> Nat =
+let weight(c: Constraint) -> Nat =>
     match c | min(_) => 1 | fill(k) => k | _ => 0 end;
 
 --- `avail` shared among `cs` in one deterministic pass: lengths, floors and percentages claim first, the rest is shared among the floors and the fills by weight, and the rounding's shortfall goes to the last of those. Claims that overrun the axis are answered as written, and the view cuts them where it ends.
-pub let distribute(cs: List(Constraint), avail: Nat) -> List(Nat) =
-    let total(ns: List(Nat)) -> Nat = List/fold(ns, 0, (n, sum) => n + sum);
+pub let distribute(cs: List(Constraint), avail: Nat) -> List(Nat) =>
+    let total(ns: List(Nat)) -> Nat => List/fold(ns, 0, (n, sum) => n + sum);
     let fixed = total(List/map(cs, (c) => claimed(avail, c)));
     let weights = total(List/map(cs, weight));
     let spare = avail - fixed;
-    let share(c: Constraint) -> Nat =
+    let share(c: Constraint) -> Nat =>
         match Bool/holds(0 < weights)
         | none() => claimed(avail, c)
         | some(_) => claimed(avail, c) + spare * weight(c) / weights

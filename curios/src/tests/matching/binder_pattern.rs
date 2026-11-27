@@ -8,14 +8,14 @@ fn a_constructor_pattern_binds_its_payloads_and_refines_what_follows() {
     let source = r#"
         use /std/{Nat, Eq};
         induct Pair: Type | pair(Nat, Nat) end
-        let sum(p: Pair) -> Nat =
+        let sum(p: Pair) -> Nat =>
             let pair(a, b) = p;
             a + b;
-        let first(pair(a, _): Pair) -> Nat = a;
-        let flipped(@x: Nat, @y: Nat, e: Eq()(x, y)) -> Eq()(y, x) =
+        let first(pair(a, _): Pair) -> Nat => a;
+        let flipped(@x: Nat, @y: Nat, e: Eq()(x, y)) -> Eq()(y, x) =>
             let refl() = e;
             Eq/refl();
-        let applied(f: (Pair) -> Nat) -> Nat = f(Pair/pair(2, 3));
+        let applied(f: (Pair) -> Nat) -> Nat => f(Pair/pair(2, 3));
         /std/print(Nat/to_str(sum(Pair/pair(1, 2)) + first(Pair/pair(4, 0)) + applied((pair(a, b)) => a * b)))
         "#;
     assert_eq!(run(source), b"13");
@@ -26,7 +26,7 @@ fn a_constructor_pattern_binds_its_payloads_and_refines_what_follows() {
 fn a_constructor_pattern_whose_value_has_another_case_is_refused_naming_it() {
     let source = r#"
         use /std/{Nat, Option};
-        let got(o: Option(Nat)) -> Nat =
+        let got(o: Option(Nat)) -> Nat =>
             let some(x) = o;
             x;
         /std/print(Nat/to_str(got(Option/some(1))))
@@ -41,7 +41,7 @@ fn a_constructor_pattern_whose_other_case_the_facts_refute_binds() {
     let source = r#"
         use /std/{Nat, Option};
         use /std/Bool/{Holds};
-        let got(o: Option(Nat), @q: Holds(Option/is_some(o))) -> Nat =
+        let got(o: Option(Nat), @q: Holds(Option/is_some(o))) -> Nat =>
             let some(x) = o;
             x;
         /std/print(Nat/to_str(got(Option/some(1))))
@@ -54,8 +54,8 @@ fn a_constructor_pattern_whose_other_case_the_facts_refute_binds() {
 fn a_let_that_states_its_result_defines_a_function_and_one_that_omits_it_is_refused() {
     let defined = r#"
         use /std/{Nat};
-        let main() -> /std/Io({}) =
-            let one() -> Nat = 1;
+        let main() -> /std/Io({}) =>
+            let one() -> Nat => 1;
             /std/print(Nat/to_str(one()));
         main()
         "#;
@@ -63,7 +63,7 @@ fn a_let_that_states_its_result_defines_a_function_and_one_that_omits_it_is_refu
 
     let omitted = r#"
         use /std/{Nat};
-        let main() -> /std/Io({}) =
+        let main() -> /std/Io({}) =>
             let double(n: Nat) = n + n;
             /std/print(Nat/to_str(double(1)));
         main()

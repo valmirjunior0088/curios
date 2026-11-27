@@ -104,7 +104,7 @@ fn documented<'a, T: 'a>(doc: &Option<Doc>, parser: impl Parser<'a, T> + 'a) -> 
 
 // A top-level `let` item: one definition, or the group `let f … and g …;`. Each member takes its own `pub` — before `let` for the first, before `and` for each later one — and one `;` terminates the whole item.
 
-// A `test` declaration: `test name = body;`. `pub` is refused by name: a test's identifier is its report line, not an export.
+// A `test` declaration: `test name => body;`. `pub` is refused by name: a test's identifier is its report line, not an export.
 //
 // Like `satisfy`, `test` stays a contextual word everywhere else, and the label is exactly how far that reaches. The label's own refusal stays recoverable because the head is already eaten when this runs: its failure sits past the item loop's choice point, so uncaught it would abort the loop rather than end it, and `test(1)` could not be a program's tail. Past the label there is nothing to fall through to — `test name` is two names in a row and so no term at all — so the rest commits and reports its own fault.
 pub fn parse_top_test<'a>(vis_pub: bool, word: Span) -> impl Parser<'a, TopItem> {
@@ -134,7 +134,7 @@ pub fn parse_test_member<'a, D: Grammar>(fields: D::Fields) -> impl Parser<'a, T
         D::declaring(
             fields.clone(),
             commit(
-                parse_literal("=")
+                parse_literal("=>")
                     .and_keep(parse_body::<D>)
                     .and_drop(parse_terminator("a `test`"))
                     .and_drop(parse_whitespace),
@@ -1071,7 +1071,7 @@ pub fn parse_top_concept<'a>(
     }
 }
 
-// A witness field: `label = term`, or the definition sugar `label(params) = term` — the tuple-field grammar with the label mandatory, kept as written in the AST node (`func_params`); `into_core` undoes the sugar. A witness entry has no positional form for its prefix to fall back to, so once its label and `(` are read the rest is the sugar's, and a member its list refuses or a list it cannot close is refused where it fails rather than at the label, as what the body's list expects next.
+// A witness field: `label = term`, or the definition sugar `label(params) => term` — the tuple-field grammar with the label mandatory, kept as written in the AST node (`func_params`); `into_core` undoes the sugar. A witness entry has no positional form for its prefix to fall back to, so once its label and `(` are read the rest is the sugar's, and a member its list refuses or a list it cannot close is refused where it fails rather than at the label, as what the body's list expects next.
 pub fn parse_witness_field<'a>(state: ParserState<'a>) -> Parsed<'a, WitnessField> {
     parse_written_word
         .and(
@@ -1080,7 +1080,7 @@ pub fn parse_witness_field<'a>(state: ParserState<'a>) -> Parsed<'a, WitnessFiel
                     sep_by0_trailing(parse_func_pattern_param, || parse_literal(","))
                         .and_drop(parse_literal(")"))
                         .flat_map(members)
-                        .and_drop(parse_field_equals),
+                        .and_drop(parse_literal("=>")),
                 ))
                 .map(Some)
                 .or(parse_field_equals.map(|()| None)),
@@ -1126,7 +1126,7 @@ fn parse_witness_member<'a>(doc: Option<Doc>) -> impl Parser<'a, TopWitness> {
                 parse_literal(",")
             }))
             .and_drop(parse_literal(")"))
-            .and_drop(parse_literal("=>"))
+            .and_drop(parse_literal("->"))
             // Past the separator this is a witness's telescope, so a member it refuses is its own to report.
             .flat_map(members)
             .or(pure(vec![]))
@@ -1238,7 +1238,7 @@ fn not_a_top_level_item() -> Vec<String> {
 ///
 /// **The other four fall through, and the language decides which.** A failure inside one of these arms backtracks like any other, which is what lets the item loop end and a program's tail begin where an item does not. `concept`, `satisfy` and `test` are contextual words — `documentation/language.md` keeps them ordinary identifiers outside a declaration position, so one of them here may really be a program's tail calling a function of that name. `let` is reserved but shared with the term grammar: a top-level `let` requires an annotation, and `let x = 1; tail` has to fall through to a local `let`. It falls through only as far as the `=`: past `let name : T =` the local reading is the same text failing the same way, so the body commits and a broken body is the item's own diagnosis, which is what lets the item loop recover past it. An unrecognized head is recoverable for the same reason — it is how the item loop terminates before a program's tail begins.
 ///
-/// **How far the fall-through reaches is the arm's to say, and `test` says: as far as the label.** The rest of the grammar catches the prefix that discriminates an alternative and lets the tail commit — `parse_func` catches `(…) =>` and reports a broken body itself. `test` may be a program's tail, but `test name` is two names in a row and so no term at all, so [`parse_top_test`] lets its own refusal backtrack no further than the label and this arm hands it the item uncaught: past the label, a mistake inside a test is the diagnosis. `concept` and `satisfy` end theirs inside themselves for the same reason. Neither can end it at the keyword — `satisfy (…) => …` and a call `satisfy(…)` share their next token — so each commits at the first point its own grammar could be nothing else: `satisfy` at the concept's name, since `satisfy Name` is two names in a row and a `(` is no name, and `concept` at its label, since `concept Name` is two names in a row too.
+/// **How far the fall-through reaches is the arm's to say, and `test` says: as far as the label.** The rest of the grammar catches the prefix that discriminates an alternative and lets the tail commit — `parse_func` catches `(…) =>` and reports a broken body itself. `test` may be a program's tail, but `test name` is two names in a row and so no term at all, so [`parse_top_test`] lets its own refusal backtrack no further than the label and this arm hands it the item uncaught: past the label, a mistake inside a test is the diagnosis. `concept` and `satisfy` end theirs inside themselves for the same reason. Neither can end it at the keyword — `satisfy (…) -> …` and a call `satisfy(…)` share their next token — so each commits at the first point its own grammar could be nothing else: `satisfy` at the concept's name, since `satisfy Name` is two names in a row and a `(` is no name, and `concept` at its label, since `concept Name` is two names in a row too.
 ///
 /// **A `pub` in front makes every arm commit, because it removes the fall-through those refusals stay recoverable for.** `pub` is a keyword, so no term begins with one: after reading it there is no tail for a failed item to become, and an unrecognized head after it names no item rather than ending the item loop. Leaving those arms recoverable would throw the diagnosis away where it matters most. A module recovers it — `Module::parse_items_end` re-runs the item parser once input remains — but an entrypoint's grammar runs `parse_term` instead, which tries a local `let` at the `pub`, fails one token in, and wins [`Parser::or`]'s furthest-failure tie-break over the real error the arm has just let backtrack. Every mistake inside a `pub let` in a program would then report `Expected keyword 'let', obtained 'pub'` against the `let`, and the refusals `parse_top_witness` and `parse_top_test` write by hand for a `pub` they cannot accept would never reach a reader.
 ///

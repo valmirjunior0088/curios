@@ -3,12 +3,12 @@ use /std/{Bool, Nat, Int, List, Option, Eq, Map, Test};
 use /std/time/{Timestamp, Duration, Date, Time, DateTime, Month, Weekday, Offset, OffsetDateTime};
 
 -- The date a day count names, as its fields.
-let fields(n: Int) -> {Int, Nat, Nat} =
+let fields(n: Int) -> {Int, Nat, Nat} =>
     let d = Date/of_days(n);
     (d.year, Month/to_nat(d.month), d.day);
 
 -- The epoch is the first of January 1970, a Thursday, and a day count reaches either side of it.
-test the_epoch_is_a_thursday_and_the_count_reaches_either_side =
+test the_epoch_is_a_thursday_and_the_count_reaches_either_side =>
     Test/all([
         Test/equal(fields(+0), (+1970, 1, 1)),
         Test/equal(Date/weekday(Date/of_days(+0)), Weekday/thursday()),
@@ -19,7 +19,7 @@ test the_epoch_is_a_thursday_and_the_count_reaches_either_side =
         Test/equal(fields(+2932897), (+10000, 1, 1))]);
 
 -- A leap day: four divides its year, and a hundred does not unless four hundred does; a century it does not has none, so the day after its twenty-eighth of February is the first of March.
-test a_leap_day_falls_where_the_calendar_puts_it =
+test a_leap_day_falls_where_the_calendar_puts_it =>
     Test/all([
         Test/equal(
             Option/map(Date/try_of(+2024, Month/february(), 29), Date/to_days),
@@ -35,21 +35,21 @@ test a_leap_day_falls_where_the_calendar_puts_it =
         Test/equal(Date/days_in_year(-4), 366)]);
 
 -- Each month's length, in a common year and a leap one.
-test every_month_has_its_length =
+test every_month_has_its_length =>
     Test/equal(
         List/map(Month/all, (m: Month) =>
             Date/days_in_month(+2023, m) + Date/days_in_month(+2024, m)),
         [62, 57, 62, 60, 62, 60, 62, 62, 60, 62, 60, 62]);
 
 -- Days added and counted between: across a month, a year and the epoch, below zero where the second date is the earlier.
-test days_are_added_and_counted_between_dates =
+test days_are_added_and_counted_between_dates =>
     Test/all([
         Test/equal(Date/to_days(Date/add_days(Date/of_days(+19781), +1)), +19782),
         Test/equal(Date/days_between(Date/of_days(+0), Date/of_days(-365)), -365),
         Test/equal(Date/days_between(Date/of_days(-1), Date/of_days(+59)), +60)]);
 
 -- A moment crosses to its date and time at an offset and back, a leap second counted as the next minute's first, and two offsets of one moment compare by the moment first.
-test a_moment_crosses_to_its_calendar_at_an_offset_and_back =
+test a_moment_crosses_to_its_calendar_at_an_offset_and_back =>
     let t = Timestamp/of_unix_nanos(+784111777000000500);
     let india = OffsetDateTime/of_timestamp(t, Offset/known(+19800));
     let utc = OffsetDateTime/of_timestamp(t, Offset/utc);
@@ -80,7 +80,7 @@ test a_moment_crosses_to_its_calendar_at_an_offset_and_back =
             (+1969, 12, 31))]);
 
 -- Every form reads back as it was written: a year past four digits with its sign, the leap second, a fraction trimmed, an offset with seconds past ISO 8601, `-00:00` read as the `Z` RFC 9557 writes it, a moment at any offset as its UTC instant, and durations of both signs.
-test every_time_reads_back_as_it_was_written =
+test every_time_reads_back_as_it_was_written =>
     Test/all([
         Test/equal(Option/map(Date/of_str("2024-02-29"), Date/to_str), Option/some("2024-02-29")),
         Test/equal(
@@ -112,7 +112,7 @@ test every_time_reads_back_as_it_was_written =
         Test/equal(Duration/of_str("PT"), Option/none())]);
 
 -- Every day of one 400-year era: each date is the next one's predecessor in the calendar, and the day count reads back from each.
-let follows(prev: Date, next: Date) -> Bool =
+let follows(prev: Date, next: Date) -> Bool =>
     match
     | prev.day < Date/days_in_month(prev.year, prev.month) =>
         next.year == prev.year && next.month == prev.month && next.day == prev.day + 1
@@ -122,7 +122,7 @@ let follows(prev: Date, next: Date) -> Bool =
     | _ => next.year == prev.year + +1 && next.month == Month/january() && next.day == 1
     end;
 
-test every_day_of_an_era_follows_the_one_before_and_reads_back_its_count =
+test every_day_of_an_era_follows_the_one_before_and_reads_back_its_count =>
     Test/assert(
         "every day of an era follows the one before and reads back its count",
         Nat/all_below(146097, (i) =>
@@ -131,7 +131,7 @@ test every_day_of_an_era_follows_the_one_before_and_reads_back_its_count =
             Date/to_days(d) == n && follows(Date/of_days(n - +1), d)));
 
 -- A date's key is derived beside its order and encoding, so a map of dates walks them in date order, by year, then month, then day, whatever order they went in.
-test dates_key_a_map_in_date_order =
+test dates_key_a_map_in_date_order =>
     let m =
         Map/of_list([(Date/of_days(+400), "c"), (Date/of_days(-3), "a"), (Date/of_days(+31), "b")]);
     Test/equal(Map/values(m), ["a", "b", "c"]);
@@ -140,17 +140,17 @@ test dates_key_a_map_in_date_order =
 let _a_difference_undoes_an_addition(
     t: Timestamp,
     d: Duration,
-) -> Eq()(Timestamp/diff(Timestamp/add(t, d), t), d) =
+) -> Eq()(Timestamp/diff(Timestamp/add(t, d), t), d) =>
     Eq/refl();
 
 let _two_additions_are_one_of_their_sum(
     t: Timestamp,
     a: Duration,
     b: Duration,
-) -> Eq()(Timestamp/add(Timestamp/add(t, a), b), Timestamp/add(t, a + b)) =
+) -> Eq()(Timestamp/add(Timestamp/add(t, a), b), Timestamp/add(t, a + b)) =>
     Eq/refl();
 
-let _a_length_added_and_taken_away_is_itself(a: Duration, b: Duration) -> Eq()(a + b - b, a) =
+let _a_length_added_and_taken_away_is_itself(a: Duration, b: Duration) -> Eq()(a + b - b, a) =>
     Eq/refl();
 
 let _the_leap_day_of_2000_is_a_tuesday: Eq()(

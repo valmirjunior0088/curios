@@ -173,7 +173,7 @@ pub fn tower(shape: Shape, lines: usize) -> String {
         ),
         Shape::Handed => {
             source.push_str("use /std/{Nat};\n\n");
-            source.push_str("let tower(@A: Type, _: A, n: Nat) -> Nat =\n");
+            source.push_str("let tower(@A: Type, _: A, n: Nat) -> Nat =>\n");
             source.push_str("    match n\n    | 0 => 0\n    | p + 1 =>\n");
             chain(&mut source, "        ", "x", lines, "(p, p)", |x| {
                 format!("({x}, {x})")
@@ -185,14 +185,14 @@ pub fn tower(shape: Shape, lines: usize) -> String {
             chain(&mut source, "", "T", lines, "Nat", |t| {
                 fill!("{${t}, ${t}}", t)
             });
-            let _ = writeln!(source, "\nlet keep(x: T{lines}) -> T{lines} = x;");
+            let _ = writeln!(source, "\nlet keep(x: T{lines}) -> T{lines} => x;");
         }
         Shape::Arrows => {
             source.push_str("use /std/{Nat};\n\n");
             chain(&mut source, "", "T", lines, "Nat", |t| {
                 format!("({t}) -> {t}")
             });
-            let _ = writeln!(source, "\nlet keep(x: T{lines}) -> T{lines} = x;");
+            let _ = writeln!(source, "\nlet keep(x: T{lines}) -> T{lines} => x;");
         }
         Shape::Fields => {
             source.push_str("use /std/{Nat};\n\nstruct S: Type {\n    f: (() =>\n");
@@ -201,7 +201,7 @@ pub fn tower(shape: Shape, lines: usize) -> String {
             });
             let _ = writeln!(
                 source,
-                "        t{lines}\n    )()\n}}\n\nlet keep(s: S) -> S = s;"
+                "        t{lines}\n    )()\n}}\n\nlet keep(s: S) -> S => s;"
             );
         }
         Shape::TwoTowers => {
@@ -219,7 +219,7 @@ pub fn tower(shape: Shape, lines: usize) -> String {
         }
         Shape::Apart => {
             source.push_str("use /std/{Nat, Eq};\n\n");
-            source.push_str("let tower(g: (Nat, Nat) -> Nat, n: Nat) -> Nat =\n");
+            source.push_str("let tower(g: (Nat, Nat) -> Nat, n: Nat) -> Nat =>\n");
             chain(&mut source, "    ", "x", lines, "g(n, n)", |x| {
                 format!("g({x}, {x})")
             });
@@ -233,7 +233,7 @@ pub fn tower(shape: Shape, lines: usize) -> String {
         }
         Shape::Bounded => {
             source.push_str("use /std/{Nat, proved};\nuse /std/Bool/{Holds};\n\n");
-            source.push_str("let tower(n: Nat) -> Nat =\n    let x0 = n;\n");
+            source.push_str("let tower(n: Nat) -> Nat =>\n    let x0 = n;\n");
             for index in 1..=lines {
                 let before = format!("x{}", index - 1);
                 let _ = writeln!(
@@ -272,7 +272,7 @@ pub fn chain(
 fn function(source: &mut String, stands: Stands, lines: usize, body: &Body) {
     let last = format!("x{lines}");
     source.push_str(&fill!("use /std/{${imports}};\n\n", imports = body.imports));
-    let _ = writeln!(source, "let tower({}) -> Nat =", body.parameters);
+    let _ = writeln!(source, "let tower({}) -> Nat =>", body.parameters);
 
     match stands {
         Stands::Function => {

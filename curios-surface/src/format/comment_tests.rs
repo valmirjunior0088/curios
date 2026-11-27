@@ -4,7 +4,8 @@ use super::test_support::*;
 
 #[test]
 fn a_leading_comment_stays_before_its_item() {
-    let source = "-- doubles the input\nlet double(n : /std/Nat) -> /std/Nat = n + n;\ndouble(2)\n";
+    let source =
+        "-- doubles the input\nlet double(n : /std/Nat) -> /std/Nat => n + n;\ndouble(2)\n";
     let output = formatted(source);
     assert!(
         output.starts_with("-- doubles the input\nlet double"),
@@ -26,8 +27,8 @@ fn a_trailing_comment_rides_its_line() {
 #[test]
 fn a_comment_riding_a_definitions_equals_stays_on_its_line() {
     for source in [
-        "pub let f(n: /std/Nat) -> /std/Nat = -- trailing\n    n;\n",
-        "test holds = -- trailing\n    /std/Test/assert(true);\n",
+        "pub let f(n: /std/Nat) -> /std/Nat => -- trailing\n    n;\n",
+        "test holds => -- trailing\n    /std/Test/assert(true);\n",
     ] {
         assert_eq!(formatted(source), source);
     }
@@ -35,20 +36,20 @@ fn a_comment_riding_a_definitions_equals_stays_on_its_line() {
 
 #[test]
 fn a_comment_above_a_later_let_binding_stays_above_it() {
-    let source = "let compute(n: /std/Nat) -> /std/Nat =\n    let a = n + n;\n    -- the second binding\n    let b = a + a;\n    b;\n\ncompute(1)\n";
+    let source = "let compute(n: /std/Nat) -> /std/Nat =>\n    let a = n + n;\n    -- the second binding\n    let b = a + a;\n    b;\n\ncompute(1)\n";
     assert_eq!(formatted(source), source);
 }
 
 /// A comment leading a clause joined by `and` stays above the `and`, where it could print between a parameter and its type. Each fixture below is already canonical, so equality pins the placement and the fixed point at once.
 #[test]
 fn a_comment_above_a_let_group_clause_stays_above_and() {
-    let source = "let even(n: /std/Nat) -> /std/Bool =\n    odd(n)\n-- what the second clause is for\nand odd(n: /std/Nat) -> /std/Bool =\n    even(n);\n";
+    let source = "let even(n: /std/Nat) -> /std/Bool =>\n    odd(n)\n-- what the second clause is for\nand odd(n: /std/Nat) -> /std/Bool =>\n    even(n);\n";
     assert_eq!(formatted(source), source);
 }
 
 #[test]
 fn a_comment_above_a_local_let_group_clause_stays_above_and() {
-    let source = "let main(n: /std/Nat) -> /std/Bool =\n    let a(x: /std/Nat) -> /std/Bool = b(x)\n    -- the local second clause\n    and b(x: /std/Nat) -> /std/Bool = a(x);\n    a(n);\n";
+    let source = "let main(n: /std/Nat) -> /std/Bool =>\n    let a(x: /std/Nat) -> /std/Bool => b(x)\n    -- the local second clause\n    and b(x: /std/Nat) -> /std/Bool => a(x);\n    a(n);\n";
     assert_eq!(formatted(source), source);
 }
 
@@ -58,10 +59,10 @@ fn a_comment_above_an_induct_clause_stays_above_and() {
     assert_eq!(formatted(source), source);
 }
 
-/// A comment leading a member of a delimited list — a `match` arm, a struct-literal, concept or witness field, an `induct` case — stays above the member, where it could print *inside* it: `injective(a, b, same) =` on one line and the comment that was written above the field on the next. Each fixture below is already canonical, so asserting the placement and the fixed point pins both halves.
+/// A comment leading a member of a delimited list — a `match` arm, a struct-literal, concept or witness field, an `induct` case — stays above the member, where it could print *inside* it: `injective(a, b, same) =>` on one line and the comment that was written above the field on the next. Each fixture below is already canonical, so asserting the placement and the fixed point pins both halves.
 #[test]
 fn a_comment_above_a_match_arm_stays_above_the_bar() {
-    let source = "let f(n: /std/Nat) -> /std/Nat =\n    match n\n    | 0 => 1\n    -- the successor case\n    | p + 1 => p\n    end;\n\nf(1)\n";
+    let source = "let f(n: /std/Nat) -> /std/Nat =>\n    match n\n    | 0 => 1\n    -- the successor case\n    | p + 1 => p\n    end;\n\nf(1)\n";
     let output = formatted(source);
     assert!(
         output.contains("\n    -- the successor case\n    | p + 1"),
@@ -72,7 +73,7 @@ fn a_comment_above_a_match_arm_stays_above_the_bar() {
 
 #[test]
 fn a_comment_above_an_arm_of_a_match_with_no_head_stays_above_the_bar() {
-    let source = "let f(n: /std/Nat) -> /std/Nat =\n    match\n    | n == 0 => 1\n    -- the fallback\n    | _ => n\n    end;\n\nf(1)\n";
+    let source = "let f(n: /std/Nat) -> /std/Nat =>\n    match\n    | n == 0 => 1\n    -- the fallback\n    | _ => n\n    end;\n\nf(1)\n";
     let output = formatted(source);
     assert!(
         output.contains("\n    -- the fallback\n    | _"),
@@ -83,10 +84,10 @@ fn a_comment_above_an_arm_of_a_match_with_no_head_stays_above_the_bar() {
 
 #[test]
 fn a_comment_above_a_witness_field_stays_above_it() {
-    let source = "concept Key(K: Type): Type {\n    to_bin(K) -> /std/Bytes,\n}\n\nsatisfy Key(/std/Bytes) {\n    -- the identity encoding\n    to_bin(b) = b,\n}\n\n1\n";
+    let source = "concept Key(K: Type): Type {\n    to_bin(K) -> /std/Bytes,\n}\n\nsatisfy Key(/std/Bytes) {\n    -- the identity encoding\n    to_bin(b) => b,\n}\n\n1\n";
     let output = formatted(source);
     assert!(
-        output.contains("\n    -- the identity encoding\n    to_bin(b) = b,"),
+        output.contains("\n    -- the identity encoding\n    to_bin(b) => b,"),
         "unexpected output: {output}"
     );
     assert_eq!(formatted(&output), output);
@@ -108,7 +109,7 @@ fn a_comment_above_a_concept_field_stays_above_it() {
 /// **A comment does not surface one construct down per run**: `-- after a` documenting `b`, `-- one` closing the list, and the tail's comment written inside the call that follows.
 #[test]
 fn a_trailing_comment_after_a_separator_rides_the_line_it_was_written_on() {
-    let source = "let f(n: /std/Nat) -> /std/Nat =\n    let a = 1; -- after a\n    let b = [\n        1, -- one\n        2, -- two\n    ];\n    g(\n        a, -- first\n        n); -- the call\n\nf(1)\n";
+    let source = "let f(n: /std/Nat) -> /std/Nat =>\n    let a = 1; -- after a\n    let b = [\n        1, -- one\n        2, -- two\n    ];\n    g(\n        a, -- first\n        n); -- the call\n\nf(1)\n";
     let output = formatted(source);
 
     for (comment, rides) in [
@@ -135,7 +136,7 @@ fn a_trailing_comment_after_a_separator_rides_the_line_it_was_written_on() {
 /// **A trailing comment does not drift to the next break**, each surfacing one arm down and the last, having no break left inside the construct, past `end;`: `-- affirmative` would document the negative arm and `-- negative` the declaration.
 #[test]
 fn a_trailing_comment_stays_on_the_arm_it_was_written_on() {
-    let source = "let d(b: /std/Bool) -> /std/Str =\n    match\n    | b == true => \"yes\" -- affirmative\n    | _ => \"no\" -- negative\n    end;\n\nd(true)\n";
+    let source = "let d(b: /std/Bool) -> /std/Str =>\n    match\n    | b == true => \"yes\" -- affirmative\n    | _ => \"no\" -- negative\n    end;\n\nd(true)\n";
     let output = formatted(source);
 
     let affirmative = output
@@ -169,7 +170,7 @@ fn a_trailing_comment_stays_on_the_arm_it_was_written_on() {
 /// **The regression for the formatter refusing its own output.** Two comments driven onto one output line are *one* comment when it reparses — a line comment runs to the end of its line — so the verifier saw one fewer than it captured and refused to write. The shape below is exactly what that drift would produce, and a single `curios format` would then leave a file that every later `curios format --check` rejects.
 #[test]
 fn an_interior_trailing_comment_does_not_escape_its_construct() {
-    let source = "let d(b: /std/Bool) -> /std/Str =\n    match\n    | b == true => \"yes\"\n    | _ => \"no\" -- inner\n    end; -- tail\n\nd(true)\n";
+    let source = "let d(b: /std/Bool) -> /std/Str =>\n    match\n    | b == true => \"yes\"\n    | _ => \"no\" -- inner\n    end; -- tail\n\nd(true)\n";
     let output = formatted(source);
 
     assert!(
@@ -224,7 +225,7 @@ fn documentation_comments_are_printed_where_they_were_written() {
         "---\n",
         "--- Twice.\n",
         "-- between\n",
-        "pub let double(n: Nat) -> Nat =\n",
+        "pub let double(n: Nat) -> Nat =>\n",
         "    n + n;\n",
         "\n",
         "pub induct Shape: pub Type\n",
