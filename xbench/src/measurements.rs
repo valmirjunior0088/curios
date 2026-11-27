@@ -96,7 +96,7 @@ pub struct Measurement {
 /// Whether a measurement's figures move from run to run, as its table entry states and every sitting of it holds.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Spread {
-    /// Some figure is a time or an instruction count, which moves between runs on one machine.
+    /// Some figure is a time, which moves between runs on one machine.
     Moves,
     /// Every figure is a count the compiler or a pinned build decides, which repeats from run to run.
     Repeats,

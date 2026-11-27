@@ -11,7 +11,7 @@ default-run = "xbench"
 [lints]
 workspace = true
 
-# The bench drives other languages' compilers, a timer and an instruction count, and the workspace's compiler in its own process, through its public entries and the test support its crates keep for another's tests, as `xboard` drives the checkers.
+# The bench drives other languages' compilers, a timer, and the workspace's compiler in its own process, through its public entries and the test support its crates keep for another's tests, as `xboard` drives the checkers.
 [dependencies]
 # The compiler its measurements drive, its test support with it: the launcher image a bundled executable is built from, and a program compiled and run in this process as the compiler's suites compile and run one.
 curios = { workspace = true, features = ["test-support"] }
@@ -66,4 +66,4 @@ serde_json = { workspace = true }
 # The engine `rust-wasm` runs under, the one `Cargo.lock` resolves for the compiler's own, so the two WebAssembly contestants run under one engine by construction: the twin runner compiles the twin's component and runs it.
 wasmtime = { workspace = true, features = ["cranelift", "component-model", "runtime", "std"] }
 # What a twin built for `wasm32-wasip2` is handed by its runner: its arguments and its standard streams, through the second preview alone, the one a `wasip2` component imports.
-wasmtime-wasi = { version = "50.0.0", default-features = false, features = ["p2"] }
+wasmtime-wasi = { workspace = true, features = ["p2"] }

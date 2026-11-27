@@ -8,6 +8,7 @@ use {
         TrackDescriptor, TrackEventDefaults, clock_snapshot,
     },
     curios_common::test_support::*,
+    curios_tracing::tracing,
     std::fs,
 };
 

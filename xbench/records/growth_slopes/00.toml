@@ -53,12 +53,6 @@ size = 25
 readings = [[50517], [50517], [50517], [50517], [50517]]
 
 [[figures]]
-name = "LetPlus/x1"
-measure = "instructions"
-size = 25
-readings = [[603564381], [603801279], [604172349], [604317159], [604654067]]
-
-[[figures]]
 name = "LetPlus/parse/x1"
 measure = "microseconds"
 size = 25
@@ -387,12 +381,6 @@ name = "LetPlus/x2/looks"
 measure = "count"
 size = 50
 readings = [[79592], [79592], [79592], [79592], [79592]]
-
-[[figures]]
-name = "LetPlus/x2"
-measure = "instructions"
-size = 50
-readings = [[656476927], [657143915], [657185407], [657105831], [657352193]]
 
 [[figures]]
 name = "LetPlus/parse/x2"
@@ -725,12 +713,6 @@ size = 100
 readings = [[137742], [137742], [137742], [137742], [137742]]
 
 [[figures]]
-name = "LetPlus/x4"
-measure = "instructions"
-size = 100
-readings = [[763075314], [762730570], [763399447], [763582070], [762954785]]
-
-[[figures]]
 name = "LetPlus/parse/x4"
 measure = "microseconds"
 size = 100
@@ -1059,12 +1041,6 @@ name = "LetCall/x1/looks"
 measure = "count"
 size = 25
 readings = [[34323], [34323], [34323], [34323], [34323]]
-
-[[figures]]
-name = "LetCall/x1"
-measure = "instructions"
-size = 25
-readings = [[592691915], [591662401], [592836176], [592018679], [592029906]]
 
 [[figures]]
 name = "LetCall/parse/x1"
@@ -1397,12 +1373,6 @@ size = 50
 readings = [[47023], [47023], [47023], [47023], [47023]]
 
 [[figures]]
-name = "LetCall/x2"
-measure = "instructions"
-size = 50
-readings = [[632390053], [632680635], [632351478], [632356801], [632334119]]
-
-[[figures]]
 name = "LetCall/parse/x2"
 measure = "microseconds"
 size = 50
@@ -1731,12 +1701,6 @@ name = "LetCall/x4/looks"
 measure = "count"
 size = 100
 readings = [[72423], [72423], [72423], [72423], [72423]]
-
-[[figures]]
-name = "LetCall/x4"
-measure = "instructions"
-size = 100
-readings = [[714105360], [713484913], [714103741], [714136861], [713501347]]
 
 [[figures]]
 name = "LetCall/parse/x4"
@@ -2069,12 +2033,6 @@ size = 100
 readings = [[654045], [654045], [654045], [654045], [654045]]
 
 [[figures]]
-name = "Statements/x1"
-measure = "instructions"
-size = 100
-readings = [[30612289320], [30615010528], [30613488188], [30618530023], [30611950966]]
-
-[[figures]]
 name = "Statements/parse/x1"
 measure = "microseconds"
 size = 100
@@ -2403,12 +2361,6 @@ name = "Statements/x2/looks"
 measure = "count"
 size = 200
 readings = [[1292345], [1292345], [1292345], [1292345], [1292345]]
-
-[[figures]]
-name = "Statements/x2"
-measure = "instructions"
-size = 200
-readings = [[8071850064], [8076692040], [8076281793], [8072794850], [8076286755]]
 
 [[figures]]
 name = "Statements/parse/x2"
@@ -2741,12 +2693,6 @@ size = 400
 readings = [[2568945], [2568945], [2568945], [2568945], [2568945]]
 
 [[figures]]
-name = "Statements/x4"
-measure = "instructions"
-size = 400
-readings = [[16192251018], [16191173057], [16192014282], [16191902178], [16197783324]]
-
-[[figures]]
 name = "Statements/parse/x4"
 measure = "microseconds"
 size = 400
@@ -3075,12 +3021,6 @@ name = "Definitions/x1/looks"
 measure = "count"
 size = 250
 readings = [[396151], [396151], [396151], [396151], [396151]]
-
-[[figures]]
-name = "Definitions/x1"
-measure = "instructions"
-size = 250
-readings = [[1227762041], [1226117814], [1225342193], [1226191325], [1227499072]]
 
 [[figures]]
 name = "Definitions/parse/x1"
@@ -3413,12 +3353,6 @@ size = 500
 readings = [[772651], [772651], [772651], [772651], [772651]]
 
 [[figures]]
-name = "Definitions/x2"
-measure = "instructions"
-size = 500
-readings = [[1913649932], [1912740893], [1911919164], [1913339332], [1913321603]]
-
-[[figures]]
 name = "Definitions/parse/x2"
 measure = "microseconds"
 size = 500
@@ -3747,12 +3681,6 @@ name = "Definitions/x4/looks"
 measure = "count"
 size = 1000
 readings = [[1525651], [1525651], [1525651], [1525651], [1525651]]
-
-[[figures]]
-name = "Definitions/x4"
-measure = "instructions"
-size = 1000
-readings = [[3279280051], [3278904136], [3276625244], [3279011107], [3278622351]]
 
 [[figures]]
 name = "Definitions/parse/x4"
@@ -4085,12 +4013,6 @@ size = 250
 readings = [[596649], [596649], [596649], [596649], [596649]]
 
 [[figures]]
-name = "Functions/x1"
-measure = "instructions"
-size = 250
-readings = [[1746296435], [1745699073], [1745679239], [1745640930], [1745260475]]
-
-[[figures]]
 name = "Functions/parse/x1"
 measure = "microseconds"
 size = 250
@@ -4419,12 +4341,6 @@ name = "Functions/x2/looks"
 measure = "count"
 size = 500
 readings = [[1174649], [1174649], [1174649], [1174649], [1174649]]
-
-[[figures]]
-name = "Functions/x2"
-measure = "instructions"
-size = 500
-readings = [[2960401039], [2960506176], [2962149746], [2961661763], [2962451971]]
 
 [[figures]]
 name = "Functions/parse/x2"
@@ -4757,12 +4673,6 @@ size = 1000
 readings = [[2330649], [2330649], [2330649], [2330649], [2330649]]
 
 [[figures]]
-name = "Functions/x4"
-measure = "instructions"
-size = 1000
-readings = [[5393158700], [5392757505], [5392280458], [5391785215], [5392233800]]
-
-[[figures]]
 name = "Functions/parse/x4"
 measure = "microseconds"
 size = 1000
@@ -5091,12 +5001,6 @@ name = "Strings/x1/looks"
 measure = "count"
 size = 250
 readings = [[3839409], [3839409], [3839409], [3839409], [3839409]]
-
-[[figures]]
-name = "Strings/x1"
-measure = "instructions"
-size = 250
-readings = [[5006013519], [5012941840], [5004257145], [4994979933], [5002971050]]
 
 [[figures]]
 name = "Strings/parse/x1"
@@ -5429,12 +5333,6 @@ size = 500
 readings = [[7986245], [7986245], [7986245], [7986245], [7986245]]
 
 [[figures]]
-name = "Strings/x2"
-measure = "instructions"
-size = 500
-readings = [[9742073694], [9769018535], [9744361204], [9740011776], [9766800861]]
-
-[[figures]]
 name = "Strings/parse/x2"
 measure = "microseconds"
 size = 500
@@ -5763,12 +5661,6 @@ name = "Strings/x4/looks"
 measure = "count"
 size = 1000
 readings = [[16256535], [16256535], [16256535], [16256535], [16256535]]
-
-[[figures]]
-name = "Strings/x4"
-measure = "instructions"
-size = 1000
-readings = [[19330308491], [19343969546], [19349273113], [19273400642], [19338523268]]
 
 [[figures]]
 name = "Strings/parse/x4"
@@ -6101,12 +5993,6 @@ size = 1000
 readings = [[250837], [250837], [250837], [250837], [250837]]
 
 [[figures]]
-name = "List/x1"
-measure = "instructions"
-size = 1000
-readings = [[766525183], [765131273], [765117968], [766456991], [767323576]]
-
-[[figures]]
 name = "List/parse/x1"
 measure = "microseconds"
 size = 1000
@@ -6435,12 +6321,6 @@ name = "List/x2/looks"
 measure = "count"
 size = 2000
 readings = [[478837], [478837], [478837], [478837], [478837]]
-
-[[figures]]
-name = "List/x2"
-measure = "instructions"
-size = 2000
-readings = [[987256116], [986968421], [986247650], [986645290], [986460344]]
 
 [[figures]]
 name = "List/parse/x2"
@@ -6773,12 +6653,6 @@ size = 4000
 readings = [[934837], [934837], [934837], [934837], [934837]]
 
 [[figures]]
-name = "List/x4"
-measure = "instructions"
-size = 4000
-readings = [[1423607031], [1424752791], [1425817079], [1425061884], [1426872310]]
-
-[[figures]]
 name = "List/parse/x4"
 measure = "microseconds"
 size = 4000
@@ -7107,12 +6981,6 @@ name = "ListOpen/x1/looks"
 measure = "count"
 size = 400
 readings = [[250248], [250248], [250248], [250248], [250248]]
-
-[[figures]]
-name = "ListOpen/x1"
-measure = "instructions"
-size = 400
-readings = [[992729791], [996608547], [994801801], [996293990], [995930050]]
 
 [[figures]]
 name = "ListOpen/parse/x1"
@@ -7445,12 +7313,6 @@ size = 800
 readings = [[477648], [477648], [477648], [477648], [477648]]
 
 [[figures]]
-name = "ListOpen/x2"
-measure = "instructions"
-size = 800
-readings = [[1465692896], [1464968568], [1463733847], [1465411185], [1465450887]]
-
-[[figures]]
 name = "ListOpen/parse/x2"
 measure = "microseconds"
 size = 800
@@ -7779,12 +7641,6 @@ name = "ListOpen/x4/looks"
 measure = "count"
 size = 1600
 readings = [[932448], [932448], [932448], [932448], [932448]]
-
-[[figures]]
-name = "ListOpen/x4"
-measure = "instructions"
-size = 1600
-readings = [[2424339320], [2430442630], [2430398983], [2427676294], [2429091604]]
 
 [[figures]]
 name = "ListOpen/parse/x4"
@@ -8117,12 +7973,6 @@ size = 250
 readings = [[113036], [113036], [113036], [113036], [113036]]
 
 [[figures]]
-name = "Arms/x1"
-measure = "instructions"
-size = 250
-readings = [[710147336], [710665040], [709765482], [710354838], [711303569]]
-
-[[figures]]
 name = "Arms/parse/x1"
 measure = "microseconds"
 size = 250
@@ -8451,12 +8301,6 @@ name = "Arms/x2/looks"
 measure = "count"
 size = 500
 readings = [[204786], [204786], [204786], [204786], [204786]]
-
-[[figures]]
-name = "Arms/x2"
-measure = "instructions"
-size = 500
-readings = [[891859560], [892427478], [892641224], [892698601], [892860837]]
 
 [[figures]]
 name = "Arms/parse/x2"
@@ -8789,12 +8633,6 @@ size = 1000
 readings = [[388286], [388286], [388286], [388286], [388286]]
 
 [[figures]]
-name = "Arms/x4"
-measure = "instructions"
-size = 1000
-readings = [[1265736050], [1267664985], [1265775779], [1265769471], [1266254358]]
-
-[[figures]]
 name = "Arms/parse/x4"
 measure = "microseconds"
 size = 1000
@@ -9123,12 +8961,6 @@ name = "Parameters/x1/looks"
 measure = "count"
 size = 400
 readings = [[122824], [122824], [122824], [122824], [122824]]
-
-[[figures]]
-name = "Parameters/x1"
-measure = "instructions"
-size = 400
-readings = [[843377974], [843359990], [843648502], [841629527], [841388886]]
 
 [[figures]]
 name = "Parameters/parse/x1"
@@ -9461,12 +9293,6 @@ size = 800
 readings = [[224024], [224024], [224024], [224024], [224024]]
 
 [[figures]]
-name = "Parameters/x2"
-measure = "instructions"
-size = 800
-readings = [[1246549574], [1244646418], [1247605389], [1249863455], [1247901967]]
-
-[[figures]]
 name = "Parameters/parse/x2"
 measure = "microseconds"
 size = 800
@@ -9795,12 +9621,6 @@ name = "Parameters/x4/looks"
 measure = "count"
 size = 1600
 readings = [[426424], [426424], [426424], [426424], [426424]]
-
-[[figures]]
-name = "Parameters/x4"
-measure = "instructions"
-size = 1600
-readings = [[2396842829], [2400595166], [2400723233], [2398870923], [2399380820]]
 
 [[figures]]
 name = "Parameters/parse/x4"
@@ -10133,12 +9953,6 @@ size = 100
 readings = [[120816], [120816], [120816], [120816], [120816]]
 
 [[figures]]
-name = "ParametersSummed/x1"
-measure = "instructions"
-size = 100
-readings = [[775812061], [778544723], [776518660], [775569989], [776462304]]
-
-[[figures]]
 name = "ParametersSummed/parse/x1"
 measure = "microseconds"
 size = 100
@@ -10467,12 +10281,6 @@ name = "ParametersSummed/x2/looks"
 measure = "count"
 size = 200
 readings = [[221516], [221516], [221516], [221516], [221516]]
-
-[[figures]]
-name = "ParametersSummed/x2"
-measure = "instructions"
-size = 200
-readings = [[1033982908], [1032752946], [1029882180], [1029289028], [1032924849]]
 
 [[figures]]
 name = "ParametersSummed/parse/x2"
@@ -10805,12 +10613,6 @@ size = 400
 readings = [[422916], [422916], [422916], [422916], [422916]]
 
 [[figures]]
-name = "ParametersSummed/x4"
-measure = "instructions"
-size = 400
-readings = [[1550589967], [1550959132], [1549303675], [1549704131], [1548362384]]
-
-[[figures]]
 name = "ParametersSummed/parse/x4"
 measure = "microseconds"
 size = 400
@@ -11139,12 +10941,6 @@ name = "CodomainSummed/x1/looks"
 measure = "count"
 size = 100
 readings = [[366491], [366491], [366491], [366491], [366491]]
-
-[[figures]]
-name = "CodomainSummed/x1"
-measure = "instructions"
-size = 100
-readings = [[884035731], [892778884], [887457891], [885096369], [889438185]]
 
 [[figures]]
 name = "CodomainSummed/parse/x1"
@@ -11477,12 +11273,6 @@ size = 200
 readings = [[841641], [841641], [841641], [841641], [841641]]
 
 [[figures]]
-name = "CodomainSummed/x2"
-measure = "instructions"
-size = 200
-readings = [[1304809533], [1306421128], [1304362325], [1304592514], [1303582978]]
-
-[[figures]]
 name = "CodomainSummed/parse/x2"
 measure = "microseconds"
 size = 200
@@ -11811,12 +11601,6 @@ name = "CodomainSummed/x4/looks"
 measure = "count"
 size = 400
 readings = [[2181941], [2181941], [2181941], [2181941], [2181941]]
-
-[[figures]]
-name = "CodomainSummed/x4"
-measure = "instructions"
-size = 400
-readings = [[2301494181], [2304595246], [2302853699], [2303068696], [2302353107]]
 
 [[figures]]
 name = "CodomainSummed/parse/x4"
@@ -12149,12 +11933,6 @@ size = 250
 readings = [[540151], [540151], [540151], [540151], [540151]]
 
 [[figures]]
-name = "LetsSummed/x1"
-measure = "instructions"
-size = 250
-readings = [[1598626874], [1599556446], [1601938880], [1600278221], [1598584802]]
-
-[[figures]]
 name = "LetsSummed/parse/x1"
 measure = "microseconds"
 size = 250
@@ -12483,12 +12261,6 @@ name = "LetsSummed/x2/looks"
 measure = "count"
 size = 500
 readings = [[1058151], [1058151], [1058151], [1058151], [1058151]]
-
-[[figures]]
-name = "LetsSummed/x2"
-measure = "instructions"
-size = 500
-readings = [[2730819577], [2738367570], [2736927682], [2730559482], [2736510917]]
 
 [[figures]]
 name = "LetsSummed/parse/x2"
@@ -12821,12 +12593,6 @@ size = 1000
 readings = [[2094151], [2094151], [2094151], [2094151], [2094151]]
 
 [[figures]]
-name = "LetsSummed/x4"
-measure = "instructions"
-size = 1000
-readings = [[5263961732], [5262944479], [5249049616], [5247793220], [5262589332]]
-
-[[figures]]
 name = "LetsSummed/parse/x4"
 measure = "microseconds"
 size = 1000
@@ -13155,12 +12921,6 @@ name = "ProductCommuted/x1/looks"
 measure = "count"
 size = 128
 readings = [[2610685], [2610685], [2610685], [2610685], [2610685]]
-
-[[figures]]
-name = "ProductCommuted/x1"
-measure = "instructions"
-size = 128
-readings = [[2617514297], [2617437471], [2613033118], [2619971406], [2620980928]]
 
 [[figures]]
 name = "ProductCommuted/parse/x1"
@@ -13493,12 +13253,6 @@ size = 256
 readings = [[7812989], [7812989], [7812989], [7812989], [7812989]]
 
 [[figures]]
-name = "ProductCommuted/x2"
-measure = "instructions"
-size = 256
-readings = [[6325330699], [6325739290], [6322178937], [6330385730], [6326818961]]
-
-[[figures]]
 name = "ProductCommuted/parse/x2"
 measure = "microseconds"
 size = 256
@@ -13827,12 +13581,6 @@ name = "ProductCommuted/x4/looks"
 measure = "count"
 size = 512
 readings = [[26081917], [26081917], [26081917], [26081917], [26081917]]
-
-[[figures]]
-name = "ProductCommuted/x4"
-measure = "instructions"
-size = 512
-readings = [[18679013404], [18640212485], [18652106774], [18630527632], [18664619178]]
 
 [[figures]]
 name = "ProductCommuted/parse/x4"
@@ -14165,12 +13913,6 @@ size = 250
 readings = [[53096], [53096], [53096], [53096], [53096]]
 
 [[figures]]
-name = "Tuple/x1"
-measure = "instructions"
-size = 250
-readings = [[593382207], [595286149], [594364961], [593709667], [593415771]]
-
-[[figures]]
 name = "Tuple/parse/x1"
 measure = "microseconds"
 size = 250
@@ -14499,12 +14241,6 @@ name = "Tuple/x2/looks"
 measure = "count"
 size = 500
 readings = [[84846], [84846], [84846], [84846], [84846]]
-
-[[figures]]
-name = "Tuple/x2"
-measure = "instructions"
-size = 500
-readings = [[654267949], [659344401], [654822294], [655569414], [653757963]]
 
 [[figures]]
 name = "Tuple/parse/x2"
@@ -14837,12 +14573,6 @@ size = 1000
 readings = [[148346], [148346], [148346], [148346], [148346]]
 
 [[figures]]
-name = "Tuple/x4"
-measure = "instructions"
-size = 1000
-readings = [[767917910], [766106465], [766107480], [767372845], [767336247]]
-
-[[figures]]
 name = "Tuple/parse/x4"
 measure = "microseconds"
 size = 1000
@@ -15171,12 +14901,6 @@ name = "Fields/x1/looks"
 measure = "count"
 size = 250
 readings = [[77912], [77912], [77912], [77912], [77912]]
-
-[[figures]]
-name = "Fields/x1"
-measure = "instructions"
-size = 250
-readings = [[663108775], [662570393], [662192174], [663556449], [662577580]]
 
 [[figures]]
 name = "Fields/parse/x1"
@@ -15509,12 +15233,6 @@ size = 500
 readings = [[133912], [133912], [133912], [133912], [133912]]
 
 [[figures]]
-name = "Fields/x2"
-measure = "instructions"
-size = 500
-readings = [[781625048], [782937391], [782084225], [781356024], [784163357]]
-
-[[figures]]
 name = "Fields/parse/x2"
 measure = "microseconds"
 size = 500
@@ -15843,12 +15561,6 @@ name = "Fields/x4/looks"
 measure = "count"
 size = 1000
 readings = [[245912], [245912], [245912], [245912], [245912]]
-
-[[figures]]
-name = "Fields/x4"
-measure = "instructions"
-size = 1000
-readings = [[1037284034], [1039176172], [1035735170], [1037752190], [1038000279]]
 
 [[figures]]
 name = "Fields/parse/x4"
@@ -16181,12 +15893,6 @@ size = 250
 readings = [[349057], [349057], [349057], [349057], [349057]]
 
 [[figures]]
-name = "StructReaders/x1"
-measure = "instructions"
-size = 250
-readings = [[1153233835], [1154290420], [1154843297], [1155220542], [1154166953]]
-
-[[figures]]
 name = "StructReaders/parse/x1"
 measure = "microseconds"
 size = 250
@@ -16515,12 +16221,6 @@ name = "StructReaders/x2/looks"
 measure = "count"
 size = 500
 readings = [[678057], [678057], [678057], [678057], [678057]]
-
-[[figures]]
-name = "StructReaders/x2"
-measure = "instructions"
-size = 500
-readings = [[1782100948], [1781118087], [1781145177], [1783909711], [1783235210]]
 
 [[figures]]
 name = "StructReaders/parse/x2"
@@ -16853,12 +16553,6 @@ size = 1000
 readings = [[1336057], [1336057], [1336057], [1336057], [1336057]]
 
 [[figures]]
-name = "StructReaders/x4"
-measure = "instructions"
-size = 1000
-readings = [[3053594554], [3052239231], [3056419388], [3056637240], [3051473014]]
-
-[[figures]]
 name = "StructReaders/parse/x4"
 measure = "microseconds"
 size = 1000
@@ -17187,12 +16881,6 @@ name = "Constructors/x1/looks"
 measure = "count"
 size = 250
 readings = [[119495], [119495], [119495], [119495], [119495]]
-
-[[figures]]
-name = "Constructors/x1"
-measure = "instructions"
-size = 250
-readings = [[853773040], [855615196], [855221702], [856015296], [855816261]]
 
 [[figures]]
 name = "Constructors/parse/x1"
@@ -17525,12 +17213,6 @@ size = 500
 readings = [[216745], [216745], [216745], [216745], [216745]]
 
 [[figures]]
-name = "Constructors/x2"
-measure = "instructions"
-size = 500
-readings = [[1328434924], [1325429827], [1327497578], [1325271079], [1324180832]]
-
-[[figures]]
 name = "Constructors/parse/x2"
 measure = "microseconds"
 size = 500
@@ -17859,12 +17541,6 @@ name = "Constructors/x4/looks"
 measure = "count"
 size = 1000
 readings = [[411245], [411245], [411245], [411245], [411245]]
-
-[[figures]]
-name = "Constructors/x4"
-measure = "instructions"
-size = 1000
-readings = [[2834894837], [2830774405], [2833215833], [2829062594], [2831655865]]
 
 [[figures]]
 name = "Constructors/parse/x4"
@@ -18197,12 +17873,6 @@ size = 250
 readings = [[913380], [913380], [913380], [913380], [913380]]
 
 [[figures]]
-name = "Values/x1"
-measure = "instructions"
-size = 250
-readings = [[3674082159], [3665240122], [3670164056], [3669776651], [3662790030]]
-
-[[figures]]
 name = "Values/parse/x1"
 measure = "microseconds"
 size = 250
@@ -18531,12 +18201,6 @@ name = "Values/x2/looks"
 measure = "count"
 size = 500
 readings = [[3306380], [3306380], [3306380], [3306380], [3306380]]
-
-[[figures]]
-name = "Values/x2"
-measure = "instructions"
-size = 500
-readings = [[12543974552], [12557140669], [12548828901], [12536897375], [12561082031]]
 
 [[figures]]
 name = "Values/parse/x2"
@@ -18869,12 +18533,6 @@ size = 1000
 readings = [[12592380], [12592380], [12592380], [12592380], [12592380]]
 
 [[figures]]
-name = "Values/x4"
-measure = "instructions"
-size = 1000
-readings = [[48890928925], [48879750376], [48882571691], [48891481916], [48886323681]]
-
-[[figures]]
 name = "Values/parse/x4"
 measure = "microseconds"
 size = 1000
@@ -19203,12 +18861,6 @@ name = "DefaultedMatches/x1/looks"
 measure = "count"
 size = 250
 readings = [[443247], [443247], [443247], [443247], [443247]]
-
-[[figures]]
-name = "DefaultedMatches/x1"
-measure = "instructions"
-size = 250
-readings = [[1339065764], [1338549878], [1339355210], [1339777664], [1340044740]]
 
 [[figures]]
 name = "DefaultedMatches/parse/x1"
@@ -19541,12 +19193,6 @@ size = 500
 readings = [[866747], [866747], [866747], [866747], [866747]]
 
 [[figures]]
-name = "DefaultedMatches/x2"
-measure = "instructions"
-size = 500
-readings = [[2146890245], [2146817525], [2146672121], [2148380362], [2148723933]]
-
-[[figures]]
 name = "DefaultedMatches/parse/x2"
 measure = "microseconds"
 size = 500
@@ -19875,12 +19521,6 @@ name = "DefaultedMatches/x4/looks"
 measure = "count"
 size = 1000
 readings = [[1713747], [1713747], [1713747], [1713747], [1713747]]
-
-[[figures]]
-name = "DefaultedMatches/x4"
-measure = "instructions"
-size = 1000
-readings = [[3768791879], [3771955108], [3767903295], [3770473630], [3769611095]]
 
 [[figures]]
 name = "DefaultedMatches/parse/x4"
@@ -20213,12 +19853,6 @@ size = 250
 readings = [[2764765], [2764765], [2764765], [2764765], [2764765]]
 
 [[figures]]
-name = "ComparedConstructions/x1"
-measure = "instructions"
-size = 250
-readings = [[3921190032], [3923887305], [3920540027], [3919999082], [3920024735]]
-
-[[figures]]
 name = "ComparedConstructions/parse/x1"
 measure = "microseconds"
 size = 250
@@ -20547,12 +20181,6 @@ name = "ComparedConstructions/x2/looks"
 measure = "count"
 size = 500
 readings = [[5510015], [5510015], [5510015], [5510015], [5510015]]
-
-[[figures]]
-name = "ComparedConstructions/x2"
-measure = "instructions"
-size = 500
-readings = [[7311005316], [7316394608], [7311979459], [7318259962], [7315502110]]
 
 [[figures]]
 name = "ComparedConstructions/parse/x2"
@@ -20885,12 +20513,6 @@ size = 1000
 readings = [[11000515], [11000515], [11000515], [11000515], [11000515]]
 
 [[figures]]
-name = "ComparedConstructions/x4"
-measure = "instructions"
-size = 1000
-readings = [[14104334931], [14115143000], [14101784657], [14103811054], [14112088542]]
-
-[[figures]]
 name = "ComparedConstructions/parse/x4"
 measure = "microseconds"
 size = 1000
@@ -21219,12 +20841,6 @@ name = "AliasReaders/x1/looks"
 measure = "count"
 size = 250
 readings = [[344255], [344255], [344255], [344255], [344255]]
-
-[[figures]]
-name = "AliasReaders/x1"
-measure = "instructions"
-size = 250
-readings = [[1163300159], [1161981377], [1162352431], [1162682840], [1162242222]]
 
 [[figures]]
 name = "AliasReaders/parse/x1"
@@ -21557,12 +21173,6 @@ size = 500
 readings = [[668255], [668255], [668255], [668255], [668255]]
 
 [[figures]]
-name = "AliasReaders/x2"
-measure = "instructions"
-size = 500
-readings = [[1790249637], [1790552225], [1789550346], [1790993902], [1789374154]]
-
-[[figures]]
 name = "AliasReaders/parse/x2"
 measure = "microseconds"
 size = 500
@@ -21891,12 +21501,6 @@ name = "AliasReaders/x4/looks"
 measure = "count"
 size = 1000
 readings = [[1316255], [1316255], [1316255], [1316255], [1316255]]
-
-[[figures]]
-name = "AliasReaders/x4"
-measure = "instructions"
-size = 1000
-readings = [[3022078019], [3022398153], [3020882724], [3023605827], [3021842356]]
 
 [[figures]]
 name = "AliasReaders/parse/x4"
@@ -22229,12 +21833,6 @@ size = 250
 readings = [[324941], [324941], [324941], [324941], [324941]]
 
 [[figures]]
-name = "ArrowAliasReaders/x1"
-measure = "instructions"
-size = 250
-readings = [[1267268321], [1267073267], [1267258998], [1267555258], [1267033710]]
-
-[[figures]]
 name = "ArrowAliasReaders/parse/x1"
 measure = "microseconds"
 size = 250
@@ -22563,12 +22161,6 @@ name = "ArrowAliasReaders/x2/looks"
 measure = "count"
 size = 500
 readings = [[629691], [629691], [629691], [629691], [629691]]
-
-[[figures]]
-name = "ArrowAliasReaders/x2"
-measure = "instructions"
-size = 500
-readings = [[2223409580], [2223171110], [2222306616], [2222510267], [2223054626]]
 
 [[figures]]
 name = "ArrowAliasReaders/parse/x2"
@@ -22901,12 +22493,6 @@ size = 1000
 readings = [[1239191], [1239191], [1239191], [1239191], [1239191]]
 
 [[figures]]
-name = "ArrowAliasReaders/x4"
-measure = "instructions"
-size = 1000
-readings = [[4842781109], [4841396301], [4841120221], [4840720827], [4839064249]]
-
-[[figures]]
 name = "ArrowAliasReaders/parse/x4"
 measure = "microseconds"
 size = 1000
@@ -23235,12 +22821,6 @@ name = "Methods/x1/looks"
 measure = "count"
 size = 250
 readings = [[496378], [496378], [496378], [496378], [496378]]
-
-[[figures]]
-name = "Methods/x1"
-measure = "instructions"
-size = 250
-readings = [[1124528682], [1124865708], [1126298634], [1125405042], [1125770383]]
 
 [[figures]]
 name = "Methods/parse/x1"
@@ -23573,12 +23153,6 @@ size = 500
 readings = [[969378], [969378], [969378], [969378], [969378]]
 
 [[figures]]
-name = "Methods/x2"
-measure = "instructions"
-size = 500
-readings = [[1739881989], [1739660546], [1739933099], [1739533060], [1739694347]]
-
-[[figures]]
 name = "Methods/parse/x2"
 measure = "microseconds"
 size = 500
@@ -23907,12 +23481,6 @@ name = "Methods/x4/looks"
 measure = "count"
 size = 1000
 readings = [[1915378], [1915378], [1915378], [1915378], [1915378]]
-
-[[figures]]
-name = "Methods/x4"
-measure = "instructions"
-size = 1000
-readings = [[3080592349], [3081274631], [3083061776], [3082263054], [3082390005]]
 
 [[figures]]
 name = "Methods/parse/x4"
@@ -24245,12 +23813,6 @@ size = 250
 readings = [[65548], [65548], [65548], [65548], [65548]]
 
 [[figures]]
-name = "Calls/x1"
-measure = "instructions"
-size = 250
-readings = [[703544620], [703146604], [703224327], [702692764], [701255465]]
-
-[[figures]]
 name = "Calls/parse/x1"
 measure = "microseconds"
 size = 250
@@ -24579,12 +24141,6 @@ name = "Calls/x2/looks"
 measure = "count"
 size = 500
 readings = [[110298], [110298], [110298], [110298], [110298]]
-
-[[figures]]
-name = "Calls/x2"
-measure = "instructions"
-size = 500
-readings = [[870196552], [869518408], [869199753], [868993257], [868722633]]
 
 [[figures]]
 name = "Calls/parse/x2"
@@ -24917,12 +24473,6 @@ size = 1000
 readings = [[199798], [199798], [199798], [199798], [199798]]
 
 [[figures]]
-name = "Calls/x4"
-measure = "instructions"
-size = 1000
-readings = [[1202676866], [1201184268], [1201924800], [1202748633], [1201179771]]
-
-[[figures]]
 name = "Calls/parse/x4"
 measure = "microseconds"
 size = 1000
@@ -25251,12 +24801,6 @@ name = "Parentheses/x1/looks"
 measure = "count"
 size = 1000
 readings = [[19702], [19702], [19702], [19702], [19702]]
-
-[[figures]]
-name = "Parentheses/x1"
-measure = "instructions"
-size = 1000
-readings = [[1516122911], [1516407109], [1516666049], [1515443427], [1515033782]]
 
 [[figures]]
 name = "Parentheses/parse/x1"
@@ -25589,12 +25133,6 @@ size = 2000
 readings = [[19702], [19702], [19702], [19702], [19702]]
 
 [[figures]]
-name = "Parentheses/x2"
-measure = "instructions"
-size = 2000
-readings = [[4274833536], [4273231303], [4275310052], [4272436968], [4270291818]]
-
-[[figures]]
 name = "Parentheses/parse/x2"
 measure = "microseconds"
 size = 2000
@@ -25923,12 +25461,6 @@ name = "Parentheses/x4/looks"
 measure = "count"
 size = 4000
 readings = [[19702], [19702], [19702], [19702], [19702]]
-
-[[figures]]
-name = "Parentheses/x4"
-measure = "instructions"
-size = 4000
-readings = [[15078862781], [15078853257], [15077262240], [15078460085], [15077088019]]
 
 [[figures]]
 name = "Parentheses/parse/x4"
@@ -26261,12 +25793,6 @@ size = 250
 readings = [[225873], [225873], [225873], [225873], [225873]]
 
 [[figures]]
-name = "RightPlus/x1"
-measure = "instructions"
-size = 250
-readings = [[1021864381], [1021617450], [1021218079], [1022236494], [1020815876]]
-
-[[figures]]
 name = "RightPlus/parse/x1"
 measure = "microseconds"
 size = 250
@@ -26595,12 +26121,6 @@ name = "RightPlus/x2/looks"
 measure = "count"
 size = 500
 readings = [[431873], [431873], [431873], [431873], [431873]]
-
-[[figures]]
-name = "RightPlus/x2"
-measure = "instructions"
-size = 500
-readings = [[1517324872], [1520970611], [1519161021], [1519487824], [1517635971]]
 
 [[figures]]
 name = "RightPlus/parse/x2"
@@ -26933,12 +26453,6 @@ size = 1000
 readings = [[843873], [843873], [843873], [843873], [843873]]
 
 [[figures]]
-name = "RightPlus/x4"
-measure = "instructions"
-size = 1000
-readings = [[2514572960], [2513519481], [2513810134], [2516700655], [2515443376]]
-
-[[figures]]
 name = "RightPlus/parse/x4"
 measure = "microseconds"
 size = 1000
@@ -27267,12 +26781,6 @@ name = "LeftPlus/x1/looks"
 measure = "count"
 size = 250
 readings = [[225873], [225873], [225873], [225873], [225873]]
-
-[[figures]]
-name = "LeftPlus/x1"
-measure = "instructions"
-size = 250
-readings = [[1011597978], [1010368228], [1011853061], [1010526968], [1008126495]]
 
 [[figures]]
 name = "LeftPlus/parse/x1"
@@ -27605,12 +27113,6 @@ size = 500
 readings = [[431873], [431873], [431873], [431873], [431873]]
 
 [[figures]]
-name = "LeftPlus/x2"
-measure = "instructions"
-size = 500
-readings = [[1490129282], [1494729812], [1488907223], [1492623861], [1486201580]]
-
-[[figures]]
 name = "LeftPlus/parse/x2"
 measure = "microseconds"
 size = 500
@@ -27939,12 +27441,6 @@ name = "LeftPlus/x4/looks"
 measure = "count"
 size = 1000
 readings = [[843873], [843873], [843873], [843873], [843873]]
-
-[[figures]]
-name = "LeftPlus/x4"
-measure = "instructions"
-size = 1000
-readings = [[2462484446], [2463063440], [2467321505], [2462720363], [2458760573]]
 
 [[figures]]
 name = "LeftPlus/parse/x4"
@@ -28277,12 +27773,6 @@ size = 200
 readings = [[177338], [177338], [177338], [177338], [177338]]
 
 [[figures]]
-name = "Matches/x1"
-measure = "instructions"
-size = 200
-readings = [[1017705624], [1016642818], [1017617113], [1017970622], [1016618081]]
-
-[[figures]]
 name = "Matches/parse/x1"
 measure = "microseconds"
 size = 200
@@ -28611,12 +28101,6 @@ name = "Matches/x2/looks"
 measure = "count"
 size = 400
 readings = [[333738], [333738], [333738], [333738], [333738]]
-
-[[figures]]
-name = "Matches/x2"
-measure = "instructions"
-size = 400
-readings = [[1623550492], [1623554784], [1625345585], [1625316412], [1623310204]]
 
 [[figures]]
 name = "Matches/parse/x2"
@@ -28949,12 +28433,6 @@ size = 800
 readings = [[646538], [646538], [646538], [646538], [646538]]
 
 [[figures]]
-name = "Matches/x4"
-measure = "instructions"
-size = 800
-readings = [[3203529812], [3204108963], [3203730556], [3206039775], [3203964866]]
-
-[[figures]]
 name = "Matches/parse/x4"
 measure = "microseconds"
 size = 800
@@ -29283,12 +28761,6 @@ name = "ChainedMatches/x1/looks"
 measure = "count"
 size = 100
 readings = [[1351050], [1351050], [1351050], [1351050], [1351050]]
-
-[[figures]]
-name = "ChainedMatches/x1"
-measure = "instructions"
-size = 100
-readings = [[2192526817], [2193021582], [2192044105], [2192333469], [2194497591]]
 
 [[figures]]
 name = "ChainedMatches/parse/x1"
@@ -29621,12 +29093,6 @@ size = 200
 readings = [[4184350], [4184350], [4184350], [4184350], [4184350]]
 
 [[figures]]
-name = "ChainedMatches/x2"
-measure = "instructions"
-size = 200
-readings = [[5221209455], [5218161540], [5223089430], [5219679047], [5220504641]]
-
-[[figures]]
 name = "ChainedMatches/parse/x2"
 measure = "microseconds"
 size = 200
@@ -29955,12 +29421,6 @@ name = "ChainedMatches/x4/looks"
 measure = "count"
 size = 400
 readings = [[14350950], [14350950], [14350950], [14350950], [14350950]]
-
-[[figures]]
-name = "ChainedMatches/x4"
-measure = "instructions"
-size = 400
-readings = [[15433884890], [15420559501], [15423294182], [15423728681], [15427350782]]
 
 [[figures]]
 name = "ChainedMatches/parse/x4"
@@ -30293,12 +29753,6 @@ size = 128
 readings = [[1092877], [1092877], [1092877], [1092877], [1092877]]
 
 [[figures]]
-name = "Loops/x1"
-measure = "instructions"
-size = 128
-readings = [[2906414946], [2906616437], [2905840348], [2902991526], [2905737603]]
-
-[[figures]]
 name = "Loops/parse/x1"
 measure = "microseconds"
 size = 128
@@ -30627,12 +30081,6 @@ name = "Loops/x2/looks"
 measure = "count"
 size = 256
 readings = [[2166669], [2166669], [2166669], [2166669], [2166669]]
-
-[[figures]]
-name = "Loops/x2"
-measure = "instructions"
-size = 256
-readings = [[5352283859], [5347144253], [5348086201], [5351477694], [5350722450]]
 
 [[figures]]
 name = "Loops/parse/x2"
@@ -30965,12 +30413,6 @@ size = 512
 readings = [[4314253], [4314253], [4314253], [4314253], [4314253]]
 
 [[figures]]
-name = "Loops/x4"
-measure = "instructions"
-size = 512
-readings = [[10068524872], [10070816464], [10064220564], [10074165227], [10068860204]]
-
-[[figures]]
 name = "Loops/parse/x4"
 measure = "microseconds"
 size = 512
@@ -31299,12 +30741,6 @@ name = "Lambdas/x1/looks"
 measure = "count"
 size = 100
 readings = [[120622], [120622], [120622], [120622], [120622]]
-
-[[figures]]
-name = "Lambdas/x1"
-measure = "instructions"
-size = 100
-readings = [[752661810], [752148411], [753669252], [752343734], [753018488]]
 
 [[figures]]
 name = "Lambdas/parse/x1"
@@ -31637,12 +31073,6 @@ size = 200
 readings = [[260922], [260922], [260922], [260922], [260922]]
 
 [[figures]]
-name = "Lambdas/x2"
-measure = "instructions"
-size = 200
-readings = [[1025002912], [1025923512], [1025009528], [1023559119], [1024878444]]
-
-[[figures]]
 name = "Lambdas/parse/x2"
 measure = "microseconds"
 size = 200
@@ -31971,12 +31401,6 @@ name = "Lambdas/x4/looks"
 measure = "count"
 size = 400
 readings = [[661522], [661522], [661522], [661522], [661522]]
-
-[[figures]]
-name = "Lambdas/x4"
-measure = "instructions"
-size = 400
-readings = [[1725653480], [1724600538], [1723655531], [1723310832], [1720501182]]
 
 [[figures]]
 name = "Lambdas/parse/x4"
@@ -32309,12 +31733,6 @@ size = 400
 readings = [[413047], [413047], [413047], [413047], [413047]]
 
 [[figures]]
-name = "Lists/x1"
-measure = "instructions"
-size = 400
-readings = [[1361888809], [1361014710], [1360433817], [1360642105], [1361613431]]
-
-[[figures]]
 name = "Lists/parse/x1"
 measure = "microseconds"
 size = 400
@@ -32643,12 +32061,6 @@ name = "Lists/x2/looks"
 measure = "count"
 size = 800
 readings = [[804247], [804247], [804247], [804247], [804247]]
-
-[[figures]]
-name = "Lists/x2"
-measure = "instructions"
-size = 800
-readings = [[2390516151], [2390202846], [2389551641], [2390450114], [2392584864]]
 
 [[figures]]
 name = "Lists/parse/x2"
@@ -32981,12 +32393,6 @@ size = 1600
 readings = [[1586647], [1586647], [1586647], [1586647], [1586647]]
 
 [[figures]]
-name = "Lists/x4"
-measure = "instructions"
-size = 1600
-readings = [[5133734814], [5127446313], [5132028551], [5128990962], [5127158905]]
-
-[[figures]]
 name = "Lists/parse/x4"
 measure = "microseconds"
 size = 1600
@@ -33315,12 +32721,6 @@ name = "Lets/x1/looks"
 measure = "count"
 size = 100
 readings = [[248766], [248766], [248766], [248766], [248766]]
-
-[[figures]]
-name = "Lets/x1"
-measure = "instructions"
-size = 100
-readings = [[1168053430], [1167667887], [1167694670], [1167605793], [1167705344]]
 
 [[figures]]
 name = "Lets/parse/x1"
@@ -33653,12 +33053,6 @@ size = 200
 readings = [[826516], [826516], [826516], [826516], [826516]]
 
 [[figures]]
-name = "Lets/x2"
-measure = "instructions"
-size = 200
-readings = [[4042775682], [4040524074], [4041547224], [4041498036], [4041173961]]
-
-[[figures]]
 name = "Lets/parse/x2"
 measure = "microseconds"
 size = 200
@@ -33987,12 +33381,6 @@ name = "Lets/x4/looks"
 measure = "count"
 size = 400
 readings = [[3032016], [3032016], [3032016], [3032016], [3032016]]
-
-[[figures]]
-name = "Lets/x4"
-measure = "instructions"
-size = 400
-readings = [[24192076238], [24189521190], [24189499558], [24189394865], [24184966742]]
 
 [[figures]]
 name = "Lets/parse/x4"
@@ -34325,12 +33713,6 @@ size = 1000
 readings = [[180187], [180187], [180187], [180187], [180187]]
 
 [[figures]]
-name = "Arrow/x1"
-measure = "instructions"
-size = 1000
-readings = [[847387842], [846588758], [847539754], [849942499], [847003460]]
-
-[[figures]]
 name = "Arrow/parse/x1"
 measure = "microseconds"
 size = 1000
@@ -34659,12 +34041,6 @@ name = "Arrow/x2/looks"
 measure = "count"
 size = 2000
 readings = [[340187], [340187], [340187], [340187], [340187]]
-
-[[figures]]
-name = "Arrow/x2"
-measure = "instructions"
-size = 2000
-readings = [[1168347695], [1169432360], [1167413005], [1167652407], [1168411721]]
 
 [[figures]]
 name = "Arrow/parse/x2"
@@ -34997,12 +34373,6 @@ size = 4000
 readings = [[660187], [660187], [660187], [660187], [660187]]
 
 [[figures]]
-name = "Arrow/x4"
-measure = "instructions"
-size = 4000
-readings = [[1834507776], [1831094866], [1830594812], [1835631563], [1831372192]]
-
-[[figures]]
 name = "Arrow/parse/x4"
 measure = "microseconds"
 size = 4000
@@ -35331,12 +34701,6 @@ name = "StringLiteral/x1/looks"
 measure = "count"
 size = 2000
 readings = [[1322349], [1322349], [1322349], [1322349], [1322349]]
-
-[[figures]]
-name = "StringLiteral/x1"
-measure = "instructions"
-size = 2000
-readings = [[1833984459], [1836857498], [1837579280], [1832430381], [1835886327]]
 
 [[figures]]
 name = "StringLiteral/parse/x1"
@@ -35669,12 +35033,6 @@ size = 4000
 readings = [[2614349], [2614349], [2614349], [2614349], [2614349]]
 
 [[figures]]
-name = "StringLiteral/x2"
-measure = "instructions"
-size = 4000
-readings = [[2973248845], [2974115542], [2972221292], [2973193432], [2973763555]]
-
-[[figures]]
 name = "StringLiteral/parse/x2"
 measure = "microseconds"
 size = 4000
@@ -36003,12 +35361,6 @@ name = "StringLiteral/x4/looks"
 measure = "count"
 size = 8000
 readings = [[5198349], [5198349], [5198349], [5198349], [5198349]]
-
-[[figures]]
-name = "StringLiteral/x4"
-measure = "instructions"
-size = 8000
-readings = [[5262663403], [5260076630], [5259253660], [5262953954], [5261862517]]
 
 [[figures]]
 name = "StringLiteral/parse/x4"

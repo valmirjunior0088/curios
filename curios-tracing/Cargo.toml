@@ -3,11 +3,11 @@ name = "curios-tracing"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "The macros a site instruments with, profile!, sample! and note!, over tracing alone, so the runtime and the slim launcher take them as the compiler does"
+description = "The macros a site instruments with, profile!, sample! and note!, over tracing alone, so the runtime and the slim launcher take them as the compiler does, and the one crate that names tracing"
 
 [lints]
 workspace = true
 
 [dependencies]
-# What `profile!`, `sample!` and `note!` expand to; `curios-profile` names it too, for the subscriber it implements.
-tracing = { workspace = true }
+# What `profile!`, `sample!` and `note!` expand to and the subscriber interface `curios-profile` implements, named here alone. No `attributes` feature: a site instruments through the macros, never the procedural macro, which would write code inside the checkers.
+tracing = { version = "0.1.44", default-features = false, features = ["std"] }

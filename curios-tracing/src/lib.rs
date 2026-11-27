@@ -6,7 +6,7 @@
 //!
 //! Nothing here records: `curios-profile` is the recorder a program installs, and its README states why every build carries these sites and what each instrument answers. Why a span is a macro of this crate rather than `tracing::instrument` is `README.md`'s decision.
 
-// The path the macros expand through, so a site that instruments names no `tracing` of its own.
+// The path the macros expand through, so a site that instruments names no `tracing` of its own, and the one the recorder implements the subscriber through.
 pub use tracing;
 
 /// Time a span: as a function's first statement it times the whole function, and with `=>` it times one expression and gives back its value.

@@ -24,6 +24,13 @@ use {
         },
         thread_allocated_bytes, thread_allocation_count,
     },
+    // `tracing` through its one door, which the macros this records expand through too.
+    curios_tracing::tracing::{
+        self, Event, Metadata, Subscriber,
+        field::{Field, Visit},
+        span,
+        subscriber::Interest,
+    },
     prost::Message,
     std::{
         cell::Cell,
@@ -40,12 +47,6 @@ use {
         },
         thread::{self, ThreadId},
         time::Instant,
-    },
-    tracing::{
-        Event, Metadata, Subscriber,
-        field::{Field, Visit},
-        span,
-        subscriber::Interest,
     },
 };
 

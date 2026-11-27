@@ -51,8 +51,6 @@ pub struct Figure {
 pub enum Measure {
     /// Wall clock in whole microseconds: compared between two records of one machine, in one state, under one pin.
     Microseconds,
-    /// User-space instructions a process and the threads and processes it starts retire: compared between two records of one machine, in any state, under one pin, since the machine's arrangement moves no count and its processor's features, and the pins' builds, choose the code that retires them.
-    Instructions,
     /// Bytes a pinned build decides — what a thread took from the allocator, what Binaryen made of a module, what an engine's heap grew by: compared between two records under one pin, on any machine, since the standard library, the optimizer and the engine a pin builds each decide theirs.
     Bytes,
     /// Trips a thread made through the allocator: compared as [`Measure::Bytes`] are.
@@ -73,9 +71,8 @@ pub struct Gated {
 
 impl Measure {
     /// Every measure, in the order its name is matched.
-    const ALL: [Self; 6] = [
+    const ALL: [Self; 5] = [
         Self::Microseconds,
-        Self::Instructions,
         Self::Bytes,
         Self::Allocations,
         Self::Collections,
@@ -86,7 +83,6 @@ impl Measure {
     pub fn name(self) -> &'static str {
         match self {
             Self::Microseconds => "microseconds",
-            Self::Instructions => "instructions",
             Self::Bytes => "bytes",
             Self::Allocations => "allocations",
             Self::Collections => "collections",
@@ -94,9 +90,9 @@ impl Measure {
         }
     }
 
-    /// Whether a figure in this measure moves from run to run on one machine: a time, and the instructions a run retires, which the code a process is handed and what it waits on move, where a count the compiler or a pinned build decides repeats.
+    /// Whether a figure in this measure moves from run to run on one machine: a time, which what a process waits on moves, where a count the compiler or a pinned build decides repeats.
     pub fn moves(self) -> bool {
-        matches!(self, Self::Microseconds | Self::Instructions)
+        matches!(self, Self::Microseconds)
     }
 
     /// The measure named `name`, where one is.
@@ -110,11 +106,6 @@ impl Measure {
             Self::Microseconds => Gated {
                 machine: true,
                 state: true,
-                pins: true,
-            },
-            Self::Instructions => Gated {
-                machine: true,
-                state: false,
                 pins: true,
             },
             Self::Bytes | Self::Allocations | Self::Collections => Gated {
@@ -142,16 +133,14 @@ impl Measure {
     fn scale(self) -> f64 {
         match self {
             Self::Microseconds => 1e3,
-            Self::Instructions => 1e6,
             Self::Bytes | Self::Allocations | Self::Collections | Self::Count => 1.0,
         }
     }
 
-    /// The unit a figure counted in this measure is stated in: milliseconds for a time, millions for instructions, and every other count as it is.
+    /// The unit a figure counted in this measure is stated in: milliseconds for a time, and every other count as it is.
     pub fn stated(self) -> &'static str {
         match self {
             Self::Microseconds => "ms",
-            Self::Instructions => "M",
             Self::Bytes => "bytes",
             Self::Allocations => "allocations",
             Self::Collections => "collections",
@@ -196,7 +185,7 @@ impl Record {
         toml::from_str(text).map_err(|error| error.to_string())
     }
 
-    /// The figure named `name` counted in `measure`, where this record holds it: one name may be counted in several measures, a contestant's time and its instructions.
+    /// The figure named `name` counted in `measure`, where this record holds it: a record holds a figure by its name and its measure together.
     pub fn figure(&self, name: &str, measure: Measure) -> Option<&Figure> {
         self.figures
             .iter()

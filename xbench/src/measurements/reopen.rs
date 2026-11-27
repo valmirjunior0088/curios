@@ -79,7 +79,7 @@ impl Editor {
         String::from_utf8(body).expect("a message is text")
     }
 
-    /// Send `notification` as a phase, read on to the diagnostics published for `uri` behind it, and read the phase's time as the figure `name`: from the notification's write to the publish. Its instructions are this process's waiting, not the server's work, so only the phase's span is read.
+    /// Send `notification` as a phase, read on to the diagnostics published for `uri` behind it, and read the phase's time as the figure `name`: from the notification's write to the publish.
     fn answered(&mut self, notification: &str, uri: &str, name: &str) {
         let published = format!(r#""uri":"{uri}""#);
         let step = phase(&[], || {

@@ -64,7 +64,7 @@ fn emitted(source: &str) -> (Module, ForeignStore) {
 
 /// What the corpus costs as Curios emits it: what a copy adds to a module is read here, as [A copy is planned within its allowance](../../../curios-cps/README.md#a-copy-is-planned-within-its-allowance) reads it, Binaryen skipped, since what Binaryen makes of a module is no measurement of the pipeline.
 ///
-/// `cargo xbench measure corpus_measurements` takes it: `<program>/emitted bytes`, the bytes of each program's module as the product writes one before Binaryen, its default names in it; and `<program> at <size>`, a run as a phase — its time, what it allocated, its looks and the instructions it retired, the engine's thread among them — its module handed to Cranelift as Curios emits it, three runs at its size: the contest's workloads at the sizes it takes them at, each held to its anchor, and the programs [`RUN`] lists, each run held to the first run's answer. `/std`'s test program is left out (decided by the user on 2026-11-25).
+/// `cargo xbench measure corpus_measurements` takes it: `<program>/emitted bytes`, the bytes of each program's module as the product writes one before Binaryen, its default names in it; and `<program> at <size>`, a run as a phase — its time, what it allocated and its looks — its module handed to Cranelift as Curios emits it, three runs at its size: the contest's workloads at the sizes it takes them at, each held to its anchor, and the programs [`RUN`] lists, each run held to the first run's answer. `/std`'s test program is left out (decided by the user on 2026-11-25).
 pub fn corpus_measurements() {
     for (name, source) in corpus() {
         let (module, _) = emitted(&source);

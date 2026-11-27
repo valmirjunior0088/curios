@@ -13,7 +13,7 @@
 //!
 //! - [`Record`] is one sitting of one measurement, every figure's readings by group and everything the sitting was taken under, with [`Platform`] the host's account of where.
 //! - [`Line`] is one reading as a measurement prints it, under [`PREFIX`].
-//! - [`read`], [`turn`] and [`phase`] are the harness: a reading named, variants interleaved, and a phase run under the recorder inside a span of its own, read as that span's figures and the instructions it retired.
+//! - [`read`], [`turn`] and [`phase`] are the harness: a reading named, variants interleaved, and a phase run under the recorder inside a span of its own, read as that span's figures.
 
 #[cfg(test)]
 mod tests;

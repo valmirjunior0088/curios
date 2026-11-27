@@ -86,8 +86,8 @@ fn counted_in(measure: Measure) -> Figure {
 #[test]
 fn a_time_read_by_a_measurement_stated_to_repeat_refuses_the_sitting() {
     assert_eq!(
-        spread_held(&stated(Spread::Repeats), &[counted_in(Measure::Count), counted_in(Measure::Instructions)]),
-        Err("probe is stated to repeat, and reads a figure in instructions, which moves from run to run".to_string())
+        spread_held(&stated(Spread::Repeats), &[counted_in(Measure::Count), counted_in(Measure::Microseconds)]),
+        Err("probe is stated to repeat, and reads a figure in microseconds, which moves from run to run".to_string())
     );
 }
 

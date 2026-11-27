@@ -11,14 +11,10 @@ workspace = true
 [dependencies]
 # The report a profile's answer is drawn as, the block every answer of the command line is.
 curios-common = { workspace = true }
-# The subscriber's side of `tracing`, which `curios-tracing`'s macros write to.
-tracing = { workspace = true }
+# `tracing`'s subscriber interface, through its one door, which the recorder implements for what the macros write.
+curios-tracing = { workspace = true }
 # The codec of the messages the build script generates from Perfetto's schema; this crate alone takes it, so its pin is here.
 prost = { version = "0.14.6" }
-
-# The one place in the workspace `libc` is named, for the one system call the instruction count makes, `perf_event_open`, which only Linux has.
-[target.'cfg(target_os = "linux")'.dependencies]
-libc = { version = "0.2.186", default-features = false }
 
 # Perfetto's schema fetched and checked as every pinned file is, parsed without a `protoc`, and the messages the recorder uses generated from it.
 [build-dependencies]
@@ -29,5 +25,3 @@ protox = { version = "0.9.1" }
 [dev-dependencies]
 # The directory of its own every suite here works in, canonical and removed however the test ends.
 curios-common = { workspace = true, features = ["test-support"] }
-# The macros whose reading the recorder holds.
-curios-tracing = { workspace = true }

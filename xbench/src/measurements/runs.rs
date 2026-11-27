@@ -6,7 +6,7 @@ use {
     curios_native::{Compiled, test_support::*},
 };
 
-/// Read a run of `compiled` at `n` as a phase, the figures `<label> at <n>`: its time — its host built, the program instantiated, and the whole call — what it allocated, and the instructions it retired.
+/// Read a run of `compiled` at `n` as a phase, the figures `<label> at <n>`: its time — its host built, the program instantiated, and the whole call — and what it allocated.
 pub fn read_run(label: &str, compiled: &Compiled, n: u64) {
     phase(TALLIES, || run_at(compiled, n)).read(&format!("{label} at {n}"), Some(n));
 }

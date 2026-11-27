@@ -973,12 +973,10 @@ version = "0.16.25"
 dependencies = [
  "curios-common",
  "curios-tracing",
- "libc",
  "prost",
  "prost-build",
  "prost-types",
  "protox",
- "tracing",
 ]
 
 [[package]]

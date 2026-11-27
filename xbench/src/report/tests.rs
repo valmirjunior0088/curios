@@ -47,37 +47,6 @@ fn took(workload: &'static str, contestant: &str, groups: &[&[f64]]) -> (&'stati
     (workload, figure)
 }
 
-/// A contestant's instructions on `workload`, given in millions as a report states them, with the workload its record sizes it by.
-fn retired(workload: &'static str, contestant: &str, groups: &[&[u64]]) -> (&'static str, Figure) {
-    let figure = Figure {
-        name: named(workload, contestant),
-        measure: Measure::Instructions,
-        size: None,
-        readings: groups
-            .iter()
-            .map(|group| group.iter().map(|&millions| millions * 1_000_000).collect())
-            .collect(),
-    };
-
-    (workload, figure)
-}
-
-/// [`was`] with each contestant's instructions beside its time.
-fn was_counted() -> Vec<(&'static str, Figure)> {
-    let mut counted = was();
-    counted.push(retired("lcg", "curios", &[&[900, 900], &[900, 900]]));
-    counted.push(retired("lcg", "rust", &[&[500, 500], &[500, 500]]));
-    counted
-}
-
-/// [`under`] with each contestant's instructions beside its time, Curios's fewer.
-fn under_counted() -> Vec<(&'static str, Figure)> {
-    let mut counted = under();
-    counted.push(retired("lcg", "curios", &[&[800, 800], &[800, 800]]));
-    counted.push(retired("lcg", "rust", &[&[500, 500], &[500, 500]]));
-    counted
-}
-
 fn was() -> Vec<(&'static str, Figure)> {
     vec![
         took("lcg", "curios", &[&[438.0, 438.4], &[439.0, 439.2]]),
@@ -322,44 +291,18 @@ fn a_software_difference_is_compared_anyway() {
     assert!(rendered.contains("moved,"), "{rendered}");
 }
 
-/// A machine's arrangement moves a time and no count: two records of one machine in two states refuse their times and compare their instructions.
+/// Another machine moves a time: two records of two machines refuse their times, naming the machine.
 #[test]
-fn a_different_arrangement_refuses_the_times_and_compares_the_instructions() {
-    let elsewhere = platform("governor schedutil, boost on, smt on", SOFTWARE);
-    let rendered = compare(
-        1,
-        &record(1, here(), was_counted()),
-        &record(7, elsewhere, under_counted()),
-    );
-    let (times, counts) = rendered
-        .split_once("### Instructions")
-        .unwrap_or_else(|| panic!("both records counted instructions: {rendered}"));
-
-    assert!(times.contains("Not comparable"), "{rendered}");
-    assert!(times.contains("schedutil"), "{rendered}");
-    assert!(!counts.contains("Not comparable"), "{rendered}");
-    assert!(counts.contains("moved, -11.1"), "{rendered}");
-}
-
-/// Another machine moves both: a time is the machine's, and the instructions a build retires are its processor's choice.
-#[test]
-fn another_machine_refuses_the_times_and_the_instructions() {
+fn another_machine_refuses_the_times() {
     let other = Platform {
         machine: "Another Processor, x86_64, 8 cpus, 15.6 GiB".to_string(),
         ..here()
     };
-    let rendered = compare(
-        1,
-        &record(1, here(), was_counted()),
-        &record(8, other, under_counted()),
-    );
-    let (times, counts) = rendered
-        .split_once("### Instructions")
-        .unwrap_or_else(|| panic!("both records counted instructions: {rendered}"));
+    let rendered = compare(1, &before(), &record(8, other, under()));
 
-    assert!(times.contains("Not comparable"), "{rendered}");
-    assert!(counts.contains("Not comparable"), "{rendered}");
-    assert!(counts.contains("Another Processor"), "{rendered}");
+    assert!(rendered.contains("Not comparable"), "{rendered}");
+    assert!(rendered.contains("Another Processor"), "{rendered}");
+    assert!(!rendered.contains("moved,"), "{rendered}");
 }
 
 /// A figure of one measure, readings given as they are held.

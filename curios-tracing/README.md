@@ -1,6 +1,6 @@
 # curios-tracing
 
-The macros a site instruments with, `profile!`, `sample!` and `note!`, over `tracing`'s callsites and nothing else. What a recorder makes of them is [`curios-profile`](../curios-profile/README.md)'s.
+The macros a site instruments with, `profile!`, `sample!` and `note!`, over `tracing`'s callsites and nothing else, and the one crate that names `tracing`: the recorder, [`curios-profile`](../curios-profile/README.md), implements its subscriber interface through this crate, and what it makes of the macros is its own.
 
 ## Design
 

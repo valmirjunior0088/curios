@@ -1,4 +1,4 @@
-//! `curios test` as the command line shows it: the subjects a selection declares tests in, each compiled as a test program and narrated as `run` narrates a compile, and one printer of what their tests come to, on each subject's own tree after its build — a node for each test, opened by its path before it runs and closed by how it ended, the subject's tally as the node that closes its tree, and the run's as the last line where more than one subject ran, each with what its tests took — fed by a source of verdicts. The native source runs each test here, in an instantiation of its own, `[argv0, index]` as the program's arguments, what is compiled, filed and run being the library's (`curios::test_subjects`). A test reports what it found, each check that failed one record through `/test/report`, read off the records a run that returned hands back and never off an exit code ([`Outcome`]), and writes nothing of it; what only the runner knows or draws — the test's path, how it ended, what a failing test found, a trap's text, the tests the selection skipped — is written here, beneath the test's outcome where it is the test's, from the records and the modules the compile hands back.
+//! `curios test` as the command line shows it: the subjects a selection declares tests in, each compiled as a test program and narrated as `run` narrates a compile, and one printer of what their tests come to, on each subject's own tree after its build — a node for each test, opened by its path before it runs and closed by how it ended, the subject's tally as the node that closes its tree, and the run's as the last line of every run, each with what its tests took — fed by a source of verdicts. The native source runs each test here, in an instantiation of its own, `[argv0, index]` as the program's arguments, what is compiled, filed and run being the library's (`curios::test_subjects`). A test reports what it found, each check that failed one record through `/test/report`, read off the records a run that returned hands back and never off an exit code ([`Outcome`]), and writes nothing of it; what only the runner knows or draws — the test's path, how it ended, what a failing test found, a trap's text, the tests the selection skipped — is written here, beneath the test's outcome where it is the test's, from the records and the modules the compile hands back.
 //!
 //! **A test's own output is never held.** Natively it goes where the test wrote it, as it is written, and the test's host ([`TestHost`]) tells the runner that it wrote; a page's is relayed when its outcome arrives. Either way the first byte ends the line the test's node opened on, and the node closes beneath what was written.
 //!
@@ -281,8 +281,6 @@ pub struct Printer<'a> {
     under: Vec<Qualifier>,
     /// The run's tally: that of every subject closed so far.
     totals: Totals,
-    /// How many subjects have closed: a run of one ends on that subject's tally, which is the run's.
-    closed: usize,
     /// What the tests of every subject closed so far took together, where any ran.
     spent: Option<Duration>,
     /// The subject in hand, from its being taken on to its last scheduled test's end.
@@ -306,7 +304,6 @@ impl<'a> Printer<'a> {
             filters,
             under,
             totals: Totals::default(),
-            closed: 0,
             spent: None,
             hand: None,
             matched: vec![false; filters.len()],
@@ -350,7 +347,6 @@ impl<'a> Printer<'a> {
         if let Some(hand) = self.hand.take_if(|hand| hand.scheduled.is_empty()) {
             hand.tree.summed(hand.tally.line(), hand.spent);
             self.totals.add(&hand.tally);
-            self.closed += 1;
             self.spent = match (self.spent, hand.spent) {
                 (Some(run), Some(subject)) => Some(run + subject),
                 (run, subject) => run.or(subject),
@@ -439,16 +435,14 @@ impl<'a> Printer<'a> {
         }
     }
 
-    /// The run's end: where a test did not pass, where each such test is found, a line each in the order they ran, a blank line above and below; then the run's tally as its last line, with what every test took together where any ran. Where one subject ran and every test passed, its tree closed on its tally already.
+    /// The run's end: where a test did not pass, where each such test is found, a line each in the order they ran, a blank line above and below; then the run's tally as its last line, whatever the run held, with what every test took together where any ran.
     pub fn finished(&self) {
         if !self.unpassed.is_empty() {
             apart();
             said(self.unpassed.join("\n"));
             apart();
         }
-        if self.closed != 1 || !self.unpassed.is_empty() {
-            total(self.totals.line(), self.spent);
-        }
+        total(self.totals.line(), self.spent);
     }
 
     /// Whether every test that ran passed.

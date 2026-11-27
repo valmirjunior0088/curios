@@ -48,11 +48,6 @@ measure = "count"
 readings = [[99089], [99089], [99089], [99089], [99089]]
 
 [[figures]]
-name = "compile_with_prelude"
-measure = "instructions"
-readings = [[41905949418], [41906154864], [41910564040], [41905242862], [41909622302]]
-
-[[figures]]
 name = "compile_entrypoint"
 measure = "microseconds"
 readings = [[4215815], [4219379], [4226852], [4213643], [4221491]]

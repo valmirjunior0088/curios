@@ -131,21 +131,18 @@ fn variants_turn_round_robin_after_an_untimed_round() {
     );
 }
 
-/// A phase hands back what its work answered with the fold of what it recorded, and counts what it retired where the kernel counts at all.
+/// A phase hands back what its work answered with the fold of what it recorded.
 #[test]
-fn a_phase_answers_with_its_fold_and_its_instructions() {
+fn a_phase_answers_with_its_fold() {
     let ran = phase(&[], || {
         (0..10_000_u64).map(std::hint::black_box).sum::<u64>()
     });
 
     assert_eq!(ran.answer, 49_995_000);
     assert!(ran.profile.open.is_empty());
-    if let Some(instructions) = ran.instructions {
-        assert!(instructions > 10_000, "{instructions}");
-    }
 }
 
-/// A phase reads as the span it opened around its work, under the name its caller gives it, and as the instructions the work retired where the kernel counts: entered once, and what its work added to each tally the phase was handed.
+/// A phase reads as the span it opened around its work, under the name its caller gives it: entered once, and what its work added to each tally the phase was handed.
 #[test]
 fn a_phase_reads_as_its_own_span_under_its_callers_name() {
     static COUNTED: Tally = Tally {
@@ -181,8 +178,4 @@ fn a_phase_reads_as_its_own_span_under_its_callers_name() {
     };
     assert_eq!(value("work/calls", Measure::Count), Some(1));
     assert_eq!(value("work/steps", Measure::Count), Some(7));
-    assert_eq!(
-        value("work", Measure::Instructions).is_some(),
-        ran.instructions.is_some()
-    );
 }

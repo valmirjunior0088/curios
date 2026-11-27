@@ -410,9 +410,9 @@ end
             "Tested `/app` · tests: 3 passed, 0 failed, 2 skipped in ",
         ],
     );
-    // A run of one subject ends on that subject's tally, which is the run's.
+    // A run of one subject ends on the run's tally too, beneath that subject's, counting what the filter skipped as the subject's does.
     assert!(
-        !stderr(&output).contains("\n3 passed"),
+        stderr(&output).contains("\n3 passed, 0 failed, 2 skipped; "),
         "{}",
         stderr(&output)
     );
@@ -525,7 +525,7 @@ fn a_module_on_standard_input_runs_its_own_tests_and_is_no_program_to_run() {
     );
 }
 
-/// A run where a test did not pass closes on where each such test is found, a line each in the order they ran, a blank line above and below, then on its tally, though one subject's tree closed on it already: the tests to go back to are the last thing a long run writes. A run where every test passed ends on its subject's tally alone.
+/// A run where a test did not pass closes on where each such test is found, a line each in the order they ran, a blank line above and below, then on its tally, though one subject's tree closed on it already: the tests to go back to are the last thing a long run writes. A run where every test passed ends on its tally too, its one subject's beneath it, so every run's last line is its total. Mutation-checked: with the run's tally drawn only past one subject, the passing run ends on its subject's.
 #[test]
 fn a_run_closes_on_where_each_test_that_did_not_pass_is_found() {
     let root = temporary("unpassed");
@@ -547,9 +547,16 @@ fn a_run_closes_on_where_each_test_that_did_not_pass_is_found() {
         &["--progress", "plain", "test", "-"],
         "use /std/{Test};\n\ntest holds =>\n    Test/assert(\"it holds\", true);\n",
     ));
+    let mut ending = passing.trim_end().lines().rev();
     assert!(
-        passing.trim_end().lines().last().is_some_and(
-            |last| last.starts_with("Tested `<stdin>` · tests: 1 passed, 0 failed in ")
+        ending
+            .next()
+            .is_some_and(|last| last.starts_with("1 passed, 0 failed; ")),
+        "{passing}"
+    );
+    assert!(
+        ending.next().is_some_and(
+            |above| above.starts_with("Tested `<stdin>` · tests: 1 passed, 0 failed in ")
         ),
         "{passing}"
     );

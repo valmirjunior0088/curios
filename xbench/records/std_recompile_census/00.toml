@@ -43,11 +43,6 @@ measure = "allocations"
 readings = [[430311], [430439], [430086], [430251], [430496]]
 
 [[figures]]
-name = "leaf/lower"
-measure = "instructions"
-readings = [[825062280], [823817851], [824166084], [824182967], [825040548]]
-
-[[figures]]
 name = "leaf/elaborate"
 measure = "microseconds"
 readings = [[100152], [98003], [98275], [99735], [99984]]
@@ -68,11 +63,6 @@ measure = "allocations"
 readings = [[362430], [362445], [362430], [362442], [362430]]
 
 [[figures]]
-name = "leaf/elaborate"
-measure = "instructions"
-readings = [[685758298], [685541607], [685696656], [685657939], [685800999]]
-
-[[figures]]
 name = "leaf/recompile"
 measure = "microseconds"
 readings = [[156400], [153445], [153112], [155790], [155316]]
@@ -91,11 +81,6 @@ readings = [[126350153], [126363572], [126348507], [126358474], [126365871]]
 name = "leaf/recompile/allocations"
 measure = "allocations"
 readings = [[631948], [632083], [631720], [631919], [632137]]
-
-[[figures]]
-name = "leaf/recompile"
-measure = "instructions"
-readings = [[862751246], [862924703], [863474378], [863567348], [863368402]]
 
 [[figures]]
 name = "leaf/names"
@@ -133,11 +118,6 @@ measure = "allocations"
 readings = [[88372], [88274], [88158], [88421], [88494]]
 
 [[figures]]
-name = "hub/lower"
-measure = "instructions"
-readings = [[93949159], [93946628], [94172677], [93994143], [93710874]]
-
-[[figures]]
 name = "hub/elaborate"
 measure = "microseconds"
 readings = [[27625673], [27405426], [27443749], [27558901], [27474445]]
@@ -158,11 +138,6 @@ measure = "allocations"
 readings = [[186882785], [186881269], [186884322], [186878005], [186881232]]
 
 [[figures]]
-name = "hub/elaborate"
-measure = "instructions"
-readings = [[228387670083], [228384325214], [228350958262], [228377505856], [228427537295]]
-
-[[figures]]
 name = "hub/recompile"
 measure = "microseconds"
 readings = [[33701772], [33406901], [33443379], [33374165], [33372550]]
@@ -181,11 +156,6 @@ readings = [[34795394892], [34795512588], [34795162772], [34795178732], [3479501
 name = "hub/recompile/allocations"
 measure = "allocations"
 readings = [[223315870], [223317223], [223314854], [223314737], [223314137]]
-
-[[figures]]
-name = "hub/recompile"
-measure = "instructions"
-readings = [[273733199118], [273709905989], [273625779446], [273654200446], [273737156461]]
 
 [[figures]]
 name = "hub/names"

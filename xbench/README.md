@@ -28,7 +28,7 @@ cargo xbench report launcher_guard_positive_control    # its records, figure by 
 
 `measure` files the record itself, once the sitting has ended, under the next number of its measurement and never over a file that stands, so a sitting that fails files nothing; the build log, the agreement check and the live tables go to standard error.
 
-A measurement is a function of the bench's, named once in [`src/measurements.rs`](src/measurements.rs), that names each figure through this crate's harness — [`read`](src/harness.rs), [`turn`](src/harness.rs) and [`phase`](src/harness.rs) — which prints each reading as a line under `xbench:`. A phase is a span the harness opens around a measurement's work, under the recorder: its time, its allocations and its looks are read off that span, as the spans inside it are, and its instructions at its two ends, so each quantity is read one way. A set a measurement reports is read a member a figure of one, and a map a key a figure of its count, so a record holds the whole of a survey and two records compare it member by member. The runner builds the bench in release, and the shipped `curios` beside it for a measurement of the language server, sits the measurement in it as many times as its table entry's spread asks — five where a figure moves from run to run, a time or an instruction count, and two where every figure is a count that repeats — a group a process of its own (`xbench sit <MEASUREMENT>`, a subcommand no one runs by hand), and files the figures those printed, each figure's readings by group.
+A measurement is a function of the bench's, named once in [`src/measurements.rs`](src/measurements.rs), that names each figure through this crate's harness — [`read`](src/harness.rs), [`turn`](src/harness.rs) and [`phase`](src/harness.rs) — which prints each reading as a line under `xbench:`. A phase is a span the harness opens around a measurement's work, under the recorder: its time, its allocations and its looks are read off that span, as the spans inside it are, so each quantity is read one way. A set a measurement reports is read a member a figure of one, and a map a key a figure of its count, so a record holds the whole of a survey and two records compare it member by member. The runner builds the bench in release, and the shipped `curios` beside it for a measurement of the language server, sits the measurement in it as many times as its table entry's spread asks — five where a figure moves from run to run, a time, and two where every figure is a count that repeats — a group a process of its own (`xbench sit <MEASUREMENT>`, a subcommand no one runs by hand), and files the figures those printed, each figure's readings by group.
 
 Taking a sitting needs a checkout and `cargo`, and a tree that holds no change a commit does not: a record names the commit that holds what it measured, so `measure` refuses a tree with a change in it, staged, unstaged or untracked, before it builds anything. `rust-wasm` runs under `twin`, the bench's own runner, which links the `wasmtime` `Cargo.lock` resolves for the compiler's own, so the WebAssembly comparison is between two compilers on one engine by construction, and a record names that engine for each. `measure` builds the runner beside the compiler, and the runner precompiles each twin once, so an execution spends a load and a run as `curios`'s self-contained executable does. Everything else is already here: `rustc` and the `wasm32-wasip2` target come from the workspace's own `rust-toolchain.toml`. There is no image and nothing to install.
 
@@ -52,11 +52,11 @@ What belongs here is the guarantee: before anything is timed, all three contesta
 
 ## How a figure is read
 
-A contestant is measured in **five groups of five executions**, one untimed round opening each group, with the contestants **interleaved round-robin inside a group** rather than run one at a time. Each execution is timed and its **instructions counted**: the count is opened before the process starts, so the process and everything it starts inherit it, and read once it has been waited for. Where the kernel opens no count, a sitting records its times alone.
+A contestant is measured in **five groups of five executions**, one untimed round opening each group, with the contestants **interleaved round-robin inside a group** rather than run one at a time. Each execution is timed, from before its process starts to after it has been waited for.
 
 - Within a group is iteration noise. Between the group medians is the **span**.
 - A contestant's figure is the median of its group medians; its span is the least and greatest of them.
-- Across two records, what is compared of times is **Curios over Rust (Native), group by group**: each group's Curios median over its native Rust median, read as a figure is. What is compared of instructions is Curios's own count, which no disturbance of the machine moves and so needs no control.
+- Across two records, what is compared of times is **Curios over Rust (Native), group by group**: each group's Curios median over its native Rust median, read as a figure is.
 - A difference is **proven only where two spans are disjoint**. Overlapping spans could have produced each other, so the report says `no difference proven`.
 - Every figure is stated to the place of the first significant digit of its half-span, so no number claims a precision its span does not support.
 
@@ -64,15 +64,15 @@ Interleaving is what makes the ratio survive a disturbance: a compile elsewhere 
 
 ## When a comparison is refused
 
-| Differs between two records | Times | Instructions |
-| --- | --- | --- |
-| `machine` | refused, naming it | refused, naming it |
-| `state` — governor, boost, SMT | refused, naming it | compared |
-| `pinned` — rustc's, Wasmtime's and Binaryen's versions | refused, naming it | refused, naming it |
-| a workload's size | that workload compared no further, naming both sizes on its row | the same |
-| `software` — kernel, microcode | compared | compared |
+| Differs between two records | Times |
+| --- | --- |
+| `machine` | refused, naming it |
+| `state` — governor, boost, SMT | refused, naming it |
+| `pinned` — rustc's, Wasmtime's and Binaryen's versions | refused, naming it |
+| a workload's size | that workload compared no further, naming both sizes on its row |
+| `software` — kernel, microcode | compared |
 
-A measurement beside its code has figures in other measures, each refused the same way, as its measure is gated (`Measure::gated`): bytes, allocations and an engine's collections across a pin alone, the standard library, the optimizer and the engine a pin builds each deciding theirs, and a count the compiler keeps of its own work — calls, looks, budget units, the bytes it alone emits, a sampled magnitude — across nothing. A refusal reaches only the unit it crosses, as [A measured figure is counted where it can be, and gated only where it repeats](../documentation/design/a-measured-figure-is-counted-where-it-can-be-and-gated-only-where-it-repeats.md) carries each: a machine's arrangement moves a time and no count, and another machine runs other code for one build, Cranelift compiling for the host's processor. Software is not gated because a patch that moves a figure moves Rust with Curios, and the ratio a comparison reads cancels it; gating on it would strand the record at every update for nothing.
+A measurement beside its code has figures in other measures, each refused the same way, as its measure is gated (`Measure::gated`): bytes, allocations and an engine's collections across a pin alone, the standard library, the optimizer and the engine a pin builds each deciding theirs, and a count the compiler keeps of its own work — calls, looks, budget units, the bytes it alone emits, a sampled magnitude — across nothing. A refusal reaches only the unit it crosses, as [A measured figure is counted where it can be, and gated only where it repeats](../documentation/design/a-measured-figure-is-counted-where-it-can-be-and-gated-only-where-it-repeats.md) carries each: a machine and its arrangement move a time, and no count the compiler or a pinned build decides. Software is not gated because a patch that moves a figure moves Rust with Curios, and the ratio a comparison reads cancels it; gating on it would strand the record at every update for nothing.
 
 ## Design
 
@@ -86,7 +86,7 @@ A measurement beside its code has figures in other measures, each refused the sa
 
 ### The harness is the bench's own
 
-**Decision.** The record, the lines a measurement prints for one and the harness that prints them are modules of this crate's binary, beside the measurements that call them and the runner and the report that read them back. The harness reads the instruments — the recorder, its fold, `Instructions` — through `curios-profile`: a phase is a span the harness opens over a measurement's work, its time, allocations and looks read off the recorder's trace as every span's are, and its instructions at its two ends (decided by the user on 2026-11-25).
+**Decision.** The record, the lines a measurement prints for one and the harness that prints them are modules of this crate's binary, beside the measurements that call them and the runner and the report that read them back. The harness reads the instruments — the recorder and its fold — through `curios-profile`: a phase is a span the harness opens over a measurement's work, its time, allocations and looks read off the recorder's trace as every span's are (decided by the user on 2026-11-25).
 
 **Rationale.** The method — groups, an untimed round opening each, variants turned round-robin — is the contest's already, and a figure is what a record holds, so the writer and the reader of the lines are one crate; with every measurement the bench's, nothing outside it calls the harness, so it needs no library. Reading the instruments stays `curios-profile`'s, a crate the compiler ships, which holds nothing only a measurement calls; a time, an allocation and a look are read off its trace and nowhere else, so each quantity is read one way.
 
@@ -107,14 +107,6 @@ A measurement beside its code has figures in other measures, each refused the sa
 **Rationale.** A record is data, and a record kept as code is read by Rust alone: a field added rewrote every record, and each was listed by hand. A microsecond is an integer, so the record is exact where a decimal millisecond is a float a reader parses again, and TOML refuses a day its month does not have, which a date type of the bench's own held before. Embedding keeps a binary built at one commit reporting that commit's records. The measurement is its directory's name alone, so no path is spelled twice.
 
 **Rejected.** A record as a Rust module, for the reasons above. Reading the directory where the bench runs, under which a binary built at one commit reports another's records. A sitting printed for a redirect to file, which leaves a file cut short where the sitting fails. The TOML printer's pretty form, which lays a nested array out unevenly where the plain form puts a group's samples on one line.
-
-### Each execution is timed and counted
-
-**Decision.** Each execution of a contestant is timed and its user-space instructions counted, the count opened before the process starts and inherited into it, and a record files both, a figure each.
-
-**Rationale.** A count is read off the work, so it compares across a machine's arrangement a time is refused across; another machine runs other code for one build, so instructions are refused across a machine as a time is. A count opened before the process starts reaches every thread and process it starts, the engine's compiling threads among them.
-
-**Rejected.** The contest kept timed alone, which leaves every sitting in another state without a comparison.
 
 ### A difference is proven only where two spans are disjoint
 

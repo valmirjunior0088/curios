@@ -1,4 +1,4 @@
-//! The harness a measurement names its figures through: each reading printed as a line of its record ([`read`]), the variants it compares turned round-robin after an untimed round ([`turn`]), and a phase of it run under the recorder inside a span of the harness's own, its instructions counted at the span's two ends ([`phase`]): the phase is read as its span's figures ([`Phase::read`]), and the spans and samples inside it by [`read_span`] and [`read_sample`]. A time, an allocation and a tally are read off the recorder's trace, and nowhere else.
+//! The harness a measurement names its figures through: each reading printed as a line of its record ([`read`]), the variants it compares turned round-robin after an untimed round ([`turn`]), and a phase of it run under the recorder inside a span of the harness's own ([`phase`]): the phase is read as its span's figures ([`Phase::read`]), and the spans and samples inside it by [`read_span`] and [`read_sample`]. A time, an allocation and a tally are read off the recorder's trace, and nowhere else.
 //!
 //! A measurement is a function of the bench's; what it prints is its record's readings, which the runner files, a process a group.
 
@@ -7,9 +7,7 @@ mod tests;
 
 use {
     crate::{Line, Measure},
-    curios_profile::{
-        Destination, Instructions, Profile, SampleSummary, Summary, Tally, fold, trace,
-    },
+    curios_profile::{Destination, Profile, SampleSummary, Summary, Tally, fold, trace},
     std::{
         cell::Cell,
         io::{self, Write},
@@ -61,41 +59,33 @@ pub fn turn(rounds: usize, variants: &mut [&mut dyn FnMut()]) {
     }
 }
 
-/// What one phase of a measurement gave: what its work answered, the fold of the trace it recorded, and the instructions it retired.
+/// What one phase of a measurement gave: what its work answered and the fold of the trace it recorded.
 pub struct Phase<T> {
     pub answer: T,
     pub profile: Profile,
-    /// The user-space instructions the phase's thread and every thread it started retired, the recorder's own work among them; `None` where the kernel opens no count, which is absent evidence, never nought.
-    pub instructions: Option<u64>,
 }
 
-/// Run `work` as one phase of a measurement: inside a span of the harness's own, under the recorder, handed `tallies`, its stream kept in memory and folded once it ends, and an instruction count opened before it and read after.
+/// Run `work` as one phase of a measurement: inside a span of the harness's own, under the recorder, handed `tallies`, its stream kept in memory and folded once it ends.
 pub fn phase<T>(tallies: &'static [Tally], work: impl FnOnce() -> T) -> Phase<T> {
     let stream = Stream::default();
-    let counted = Instructions::open();
     let answer = trace(
         Destination::Stream(Box::new(stream.clone())),
         tallies,
         || curios_tracing::profile!("phase" => work()),
     )
     .expect("a stream kept in memory opens");
-    let instructions = counted.as_ref().map(Instructions::read);
     let profile = fold(stream.bytes().as_slice()).expect("the recorder's own stream folds");
 
-    Phase {
-        answer,
-        profile,
-        instructions,
-    }
+    Phase { answer, profile }
 }
 
 impl<T> Phase<T> {
-    /// Print the phase's figures, each named after `name`: what [`read_span`] reads of the span the phase opened, and the instructions it retired, `<name>` counted in instructions, where the kernel counted them.
+    /// Print the phase's figures, each named after `name`: what [`read_span`] reads of the span the phase opened.
     pub fn read(&self, name: &str, size: Option<u64>) {
         self.lines(name, size).into_iter().for_each(print);
     }
 
-    /// The span the phase opened around its work: what [`Phase::read`] reads beside the instructions, and all of a phase whose work another process does.
+    /// The span the phase opened around its work, which [`Phase::read`] reads.
     pub fn span(&self) -> &Summary {
         self.profile
             .summaries
@@ -107,17 +97,7 @@ impl<T> Phase<T> {
 
     /// The lines [`Phase::read`] prints.
     fn lines(&self, name: &str, size: Option<u64>) -> Vec<Line> {
-        let mut lines = span_lines(name, self.span(), size);
-        if let Some(instructions) = self.instructions {
-            lines.push(Line {
-                name: name.to_string(),
-                measure: Measure::Instructions,
-                size,
-                value: instructions,
-            });
-        }
-
-        lines
+        span_lines(name, self.span(), size)
     }
 }
 

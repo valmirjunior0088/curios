@@ -126,14 +126,6 @@ fn sized(record: &Record, workload: &str) -> Option<u64> {
     })
 }
 
-/// Whether `record` counted any contestant's instructions.
-fn counted(record: &Record) -> bool {
-    record
-        .figures
-        .iter()
-        .any(|figure| figure.measure == Measure::Instructions)
-}
-
 /// A Markdown table with every cell left-aligned and its columns padded for a terminal. Each row has one cell per header.
 fn tabulated(headers: &[&str], rows: &[Vec<String>]) -> String {
     let widths = headers
@@ -258,24 +250,29 @@ pub fn one(number: usize, record: &Record) -> String {
         let Some(size) = sized(record, workload.name) else {
             continue;
         };
-        for measure in [Measure::Microseconds, Measure::Instructions] {
-            let rows = CONTESTANTS
-                .iter()
-                .filter_map(|contestant| {
-                    let figure = record.figure(&named(workload.name, contestant.name), measure)?;
-                    Some((contestant.title, figure.stated()))
-                })
-                .collect::<Vec<_>>();
-            if rows.is_empty() {
-                continue;
-            }
+        // `sized` found a contestant's time, so the table has a row.
+        let rows = CONTESTANTS
+            .iter()
+            .filter_map(|contestant| {
+                let figure = record.figure(
+                    &named(workload.name, contestant.name),
+                    Measure::Microseconds,
+                )?;
+                Some((contestant.title, figure.stated()))
+            })
+            .collect::<Vec<_>>();
 
-            let _ = write!(
-                out,
-                "\n{}",
-                table(workload.title, workload.letter, size, measure, &rows)
-            );
-        }
+        let _ = write!(
+            out,
+            "\n{}",
+            table(
+                workload.title,
+                workload.letter,
+                size,
+                Measure::Microseconds,
+                &rows
+            )
+        );
     }
 
     out
@@ -412,50 +409,13 @@ fn times_compared(before: &Record, after: &Record) -> String {
     )
 }
 
-/// The two records' counts of Curios's instructions, where they compare at all: a count needs no control to cancel what moved the machine.
-fn counts_compared(before: &Record, after: &Record) -> String {
-    if let Some(why) = incomparable(before, after, Measure::Instructions) {
-        return format!("Not comparable.\n\n```\n{why}\n```\n");
-    }
-
-    let mut rows = Vec::new();
-    for workload in WORKLOADS {
-        let read = |record: &Record| {
-            figure(
-                &record
-                    .figure(&named(workload.name, SUBJECT), Measure::Instructions)?
-                    .stated(),
-            )
-        };
-        let (Some(was), Some(is)) = (read(before), read(after)) else {
-            continue;
-        };
-
-        let half = was.half().max(is.half());
-        rows.push(vec![
-            format!("`{}`", workload.name),
-            format!("{} M", stated(was.middle, half)),
-            format!("{} M", stated(is.middle, half)),
-            verdict(workload.name, before, after, &was, &is),
-        ]);
-    }
-
-    tabulated(&["Workload", "Was, Curios", "Is, Curios", ""], &rows)
-}
-
-/// What changed between two records, where anything can be said of it at all: their times, and their instructions where both counted them.
+/// What changed between two records, where anything can be said of it at all: their times.
 pub fn compare(number: usize, before: &Record, after: &Record) -> String {
-    let mut out = format!("## Record {:02} → {number:02}\n\n", number - 1);
-    out.push_str(&times_compared(before, after));
-    if counted(before) && counted(after) {
-        let _ = write!(
-            out,
-            "\n### Instructions\n\n{}",
-            counts_compared(before, after)
-        );
-    }
-
-    out
+    format!(
+        "## Record {:02} → {number:02}\n\n{}",
+        number - 1,
+        times_compared(before, after)
+    )
 }
 
 /// Every record so far: each in full, with what changed between consecutive ones.

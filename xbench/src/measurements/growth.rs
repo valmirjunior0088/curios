@@ -134,7 +134,7 @@ const HELD_SLOPE: f64 = 3.0;
 
 /// How each stage's work grows as a program grows along each axis an author grows one: every growth compiled at three sizes, each double the last, each compile a phase from its parse to Cranelift's machine code, `<growth>/x<k>` at the `k`-fold size, and each stage read off the span its owner opens over it ([`STAGES`]), `<growth>/<stage>/x<k>`: its time, its calls, what it allocated and the bytes it took, and its looks, each sized by the growth's `n`.
 ///
-/// `cargo xbench measure growth_slopes` takes it. A compile's instructions are its phase's, its thread's and every thread it starts; a stage's are not read, since a span carries none.
+/// `cargo xbench measure growth_slopes` takes it.
 ///
 /// A slope is read off the figures, never filed: the second difference over the first across the three sizes, so what every compile pays whatever its size cancels, two linear and four quadratic. Looks alone repeat from run to run, so the measurement's own assert holds them alone to [`HELD_SLOPE`], in every stage of every growth but the [`UNHELD`] ones, a test of the suite holding them taking most of a minute; allocations and bytes move with the keys a run draws and times with the machine, and are read with their spans in the record, never bounded.
 ///
