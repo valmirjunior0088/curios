@@ -88,7 +88,7 @@ test text_holding_controls_writes_none_of_them =
         Test/equal(Frame/to_lines(f), ["a␛]0;x␇␊b"]),
         Test/assert(
             "no bell and no line feed is written",
-            Bytes/all(written, (b) => Byte/to_nat(b) != 0x07 && Byte/to_nat(b) != 0x0A)),
+            Bytes/all(written, (b) => b != '\u{7}' && b != '\n')),
         Test/equal(
             spelled(written),
             "^[[?2026h^[[?25l^[[2J^[[1;1H^[[0ma␛^[[1;3H]0;x␇^[[1;8H␊^[[1;9Hb^[[0m^[[?2026l")]);
@@ -148,7 +148,7 @@ let replay(start: Screen, written: Bytes) -> Screen =
             let n = Byte/to_nat(b);
             match state
             | 0 =>
-                match n == 0x1B
+                match n == '\u{1B}'
                 | true => go(flush(s, text), more, 0x[], 0x[], 1)
                 | false => go(s, more, 0x[..text, b], params, 0)
                 end

@@ -6,7 +6,7 @@ use /std/Bool/{True, Holds};
 --- Whether a terminal draws `c` rather than reading it as a control: it is none of the C0 controls, DEL or the C1 controls.
 pub let printable(c: Char) -> Bool =
     let code = Char/to_nat(c);
-    0x20 <= code && (code < 0x7F || 0x9F < code);
+    ' ' <= code && (code < '\u{7F}' || '\u{9F}' < code);
 
 --- One grapheme cluster as a terminal draws it, one or two columns wide. Every character in it is proved printable, so no glyph reaches a terminal as a control; its width is the one `of_cluster` measured, since only this module builds glyphs.
 pub struct Glyph: Type {
@@ -36,7 +36,7 @@ pub let space: Glyph =
 
 -- Whether `c` asks for the emoji presentation of what it follows.
 let selects_emoji(c: Char) -> Bool =
-    Char/to_nat(c) == 0xFE0F;
+    c == '\u{FE0F}';
 
 -- Whether `c` takes two columns where it stands in a cluster.
 let wide_in_cluster(c: Char) -> Bool =
@@ -79,8 +79,8 @@ let pictured(code: Nat, @block: Holds(0x2400 <= code && code < 0x2440)) -> Glyph
 pub let picture(c: Char) -> Glyph =
     let code = Char/to_nat(c);
     match
-    | code < 0x20 => pictured(0x2400 + code)
-    | code == 0x7F => pictured(0x2421)
+    | code < ' ' => pictured(0x2400 + code)
+    | code == '\u{7F}' => pictured(0x2421)
     | _ => Glyph { chars = ['�'], wide = false }
     end;
 

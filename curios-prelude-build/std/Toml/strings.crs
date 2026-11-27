@@ -59,7 +59,7 @@ let crlf() -> Parse(Str, Option({Char, Char})) =
 --- Whether `c` stands in a string as written whatever delimits it: a tab, or any character that is no control character.
 let is_text(c: Char) -> Bool =
     let n = Char/to_nat(c);
-    n == '\t' || n >= 0x20 && n != 0x7F;
+    n == '\t' || n >= ' ' && n != '\u{7F}';
 
 --- A basic string's body from where it stands: the runs of the input between its escapes and the character each escape names, joined after `acc`, up to the closing quote.
 let basic_body(acc: Str) -> Parse(Str, Str) =

@@ -1,4 +1,4 @@
-use /std/{Nat, Bool, Byte, Str, Bytes, List, Vec, Option};
+use /std/{Nat, Bool, Str, Bytes, List, Vec, Option};
 use /std/Tui/{Style, Glyph, Tile, Frame, View, Mode, ansi};
 
 struct Pen: Type {
@@ -9,7 +9,7 @@ struct Pen: Type {
 
 -- Whether every terminal agrees on how far `text` moves the cursor: text of ASCII alone.
 let agreed(text: Bytes) -> Bool =
-    Bytes/all(text, (b) => Byte/to_nat(b) < 0x80);
+    Bytes/all(text, (b) => b < '\u{80}');
 
 -- The pen once `tile` is written at `x`, `y`, unless it is what `before` shows there. After a glyph whose width terminals may disagree on the pen forgets where it stands, so the next tile it writes moves there first: a terminal that measures a glyph otherwise misplaces that glyph alone.
 let paint(pen: Pen, x: Nat, y: Nat, tile: Tile, before: Option(Tile)) -> Pen =

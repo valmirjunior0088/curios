@@ -5,7 +5,7 @@ let shown(@A: Type, r: Result(Parse/Error, A), f: (A) -> Str) -> Str =
     match r | success(a) => f(a) | failure(e) => Parse/Error/to_str(e) end;
 
 let pair() -> Parse(Str, {Str, Str}) =
-    let word = Parse/str/take_while((c) => Char/to_nat(c) != 32)!;
+    let word = Parse/str/take_while((c) => c != ' ')!;
     let _ = Parse/str/expect(' ')!;
     let () = Parse/str/literal("wö")!;
     let rest = Parse/str/rest()!;

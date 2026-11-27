@@ -6,7 +6,7 @@ use /std/Bool/{True, Holds};
 --- Whether `b` may stand in a field value: the tab, the space, and every octet past them but DEL, obs-text included (RFC 9110 §5.5). No other control octet may, a line's end least of all.
 pub let admits(b: Byte) -> Bool =
     let n = Byte/to_nat(b);
-    n == '\t' || n >= 32 && n != 127;
+    n == '\t' || n >= ' ' && n != '\u{7F}';
 
 --- A field's value: the octets the wire carries, none of them a control octet except tab, so no value can end its line. It is octets rather than text, since a value may hold obs-text; `to_str` reads one that is text. A literal is checked where it is written, and octets met at run time go through `of_bytes`.
 pub struct Value: pub Type {

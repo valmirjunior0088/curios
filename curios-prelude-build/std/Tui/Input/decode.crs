@@ -27,7 +27,7 @@ let control(n: Nat, @byte: Holds(n <= 255)) -> Key =
     | 0x7F | 0x08 => Key/plain(Key/Code/backspace())
     | 0x1B => Key/plain(Key/Code/escape())
     | 0 => Key/with_ctrl(Key/Code/char(' '))
-    | _, n <= 0x1A => Key/with_ctrl(Key/Code/char(low(n + 0x60)))
+    | _, n <= '\u{1A}' => Key/with_ctrl(Key/Code/char(low(n + 0x60)))
     | _ => Key/with_ctrl(Key/Code/char(low(n + 0x40)))
     end;
 
@@ -318,7 +318,7 @@ pub let decode(bytes: Bytes) -> {inputs: List(Input), replies: List(Reply), rest
             | 0x1B => key(Key/plain(Key/Code/escape()), i + 1)
             | _, Nat/in_range(second, 0x20, 0x7E) =>
                 key(Key/with_alt(Key/Code/char(low(second))), i + 2)
-            | _, second < 0x20 || second == 0x7F =>
+            | _, second < ' ' || second == '\u{7F}' =>
                 key(Key { ..control(second), alt = true }, i + 2)
             | _ => key(Key/plain(Key/Code/escape()), i + 1)
             end
@@ -337,8 +337,8 @@ pub let decode(bytes: Bytes) -> {inputs: List(Input), replies: List(Reply), rest
             let n = Byte/to_nat(head);
             let step =
                 match
-                | n == 0x1B => escape(i)
-                | n < 0x20 || n == 0x7F => key(control(n), i + 1)
+                | n == '\u{1B}' => escape(i)
+                | n < ' ' || n == '\u{7F}' => key(control(n), i + 1)
                 | _ =>
                     match Str/classify(head)
                     | ascii() => scalar(i, 0)

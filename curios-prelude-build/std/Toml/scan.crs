@@ -12,7 +12,7 @@ pub let is_bare_char(c: Char) -> Bool =
 
 let is_comment_char(c: Char) -> Bool =
     let n = Char/to_nat(c);
-    n == '\t' || Nat/in_range(n, ' ', '~') || n >= 0x80;
+    n == '\t' || Nat/in_range(n, ' ', '~') || n >= '\u{80}';
 
 --- Spaces and tabs, as many as there are.
 pub let ws() -> Parse(Str, {}) =

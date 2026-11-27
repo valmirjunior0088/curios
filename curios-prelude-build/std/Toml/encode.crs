@@ -17,7 +17,7 @@ let escaped(c: Char) -> Option(Str) =
     | '\u{C}' => Option/some("\\f")
     | '\r' => Option/some("\\r")
     | _ =>
-        match n < 0x20 || n == 0x7F
+        match n < ' ' || n == '\u{7F}'
         | true =>
             Option/some(
                 Str/flatten([
