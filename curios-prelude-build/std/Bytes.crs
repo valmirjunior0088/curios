@@ -122,7 +122,44 @@ let eq_of_eql(a: Bytes, b: Bytes, h: Holds(eql(a, b))) -> Eq()(a, b) =
 let no_empty(k: Byte, p: Bytes, e: Eq()(0x[], 0x[k, ..p])) -> False =
     Eq/subst((m) => Holds(0 == m), Eq/cong(length, e), True/qed());
 
--- Course-of-values induction, because the recursion divides rather than decrements. Each step takes the encoding apart at its first byte, the digit and the rest by the cons's two injections, recovers the two numbers' high parts from the induction hypothesis and their low digits from the byte round trip, and rejoins both by Euclid's recombination.
+-- An encoding of zero is the encoding of zero alone: any other is a cons, and an empty encoding is none.
+let encodes_zero_alone(d: Nat, e: Eq()(of_nat(0), of_nat(d))) -> Eq()(0, d) =
+    match d
+    | 0 => Eq/refl()
+    | dp + 1 =>
+        match no_empty(Nat/to_byte((dp + 1) % 256), of_nat((dp + 1) / 256), e)
+        end
+    end;
+
+-- The high parts of two positive numbers whose encodings are one encode alike: the rests past the first bytes, by the cons's injection of its tail.
+let highs_encode_alike(
+    x: Nat,
+    y: Nat,
+    e: Eq()(of_nat(x + 1), of_nat(y + 1)),
+) -> Eq()(of_nat((x + 1) / 256), of_nat((y + 1) / 256)) =
+    cons_inj_tail(e);
+
+-- The low digits of two positive numbers whose encodings are one agree: the first bytes are one, by the cons's injection of its head, and a byte read back is the digit it was made from.
+let digits_agree(
+    x: Nat,
+    y: Nat,
+    e: Eq()(of_nat(x + 1), of_nat(y + 1)),
+) -> Eq()((x + 1) % 256, (y + 1) % 256) =
+    Eq/cong(Byte/to_nat, cons_inj_head(e));
+
+-- Euclid's recombination: two numbers alike in their quotients and their remainders by 256 are rejoined alike.
+let recombined(
+    x: Nat,
+    y: Nat,
+    highs: Eq()(x / 256, y / 256),
+    digits: Eq()(x % 256, y % 256),
+) -> Eq()(256 * (x / 256) + x % 256, 256 * (y / 256) + y % 256) =
+    Eq/subst(
+        (v) => Eq()(256 * (x / 256) + x % 256, 256 * (y / 256) + v),
+        digits,
+        Eq/subst((u) => Eq()(256 * (x / 256) + x % 256, 256 * u + x % 256), highs, Eq/refl()));
+
+-- Course-of-values induction, because the recursion divides rather than decrements. Each step takes the encodings apart at their first bytes: zero against anything is `encodes_zero_alone`'s, and two positive numbers rejoin their high parts, alike by the induction hypothesis, with their low digits.
 --- Distinct numbers encode distinctly.
 pub let of_nat_inj(a: Nat, b: Nat, same: Eq()(of_nat(a), of_nat(b))) -> Eq()(a, b) =
     Nat/descend(
@@ -131,47 +168,18 @@ pub let of_nat_inj(a: Nat, b: Nat, same: Eq()(of_nat(a), of_nat(b))) -> Eq()(a, 
         (n, ih) =>
             (d, e) =>
                 match n
-                | 0 =>
-                    match d
-                    | 0 => Eq/refl()
-                    | dp + 1 =>
-                        match no_empty(Nat/to_byte((dp + 1) % 256), of_nat((dp + 1) / 256), e)
-                        end
-                    end
+                | 0 => encodes_zero_alone(d, e)
                 | np + 1 =>
                     match d
-                    | 0 =>
-                        match no_empty(
-                            Nat/to_byte((np + 1) % 256),
-                            of_nat((np + 1) / 256),
-                            Eq/sym(e))
-                        end
+                    | 0 => Eq/sym(encodes_zero_alone(np + 1, Eq/sym(e)))
                     | dq + 1 =>
-                        let heads: Eq()(of_nat((np + 1) / 256), of_nat((dq + 1) / 256)) =
-                            cons_inj_tail(e);
-                        let digits: Eq()((np + 1) % 256, (dq + 1) % 256) =
-                            Eq/cong(Byte/to_nat, cons_inj_head(e));
-                        let highs: Eq()((np + 1) / 256, (dq + 1) / 256) =
+                        recombined(
+                            np + 1,
+                            dq + 1,
                             ih((np + 1) / 256, high_below(np + 1, True/qed()))(
                                 (dq + 1) / 256,
-                                heads);
-                        let rejoined: Eq()(
-                            256 * ((np + 1) / 256) + (np + 1) % 256,
-                            256 * ((dq + 1) / 256) + (dq + 1) % 256) =
-                            Eq/subst(
-                                (y) =>
-                                    Eq()(
-                                        256 * ((np + 1) / 256) + (np + 1) % 256,
-                                        256 * ((dq + 1) / 256) + y),
-                                digits,
-                                Eq/subst(
-                                    (x) =>
-                                        Eq()(
-                                            256 * ((np + 1) / 256) + (np + 1) % 256,
-                                            256 * x + (np + 1) % 256),
-                                    highs,
-                                    Eq/refl()));
-                        rejoined
+                                highs_encode_alike(np, dq, e)),
+                            digits_agree(np, dq, e))
                     end
                 end,
         a)(
