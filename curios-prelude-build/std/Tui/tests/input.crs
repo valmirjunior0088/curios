@@ -58,6 +58,17 @@ test the_kitty_form_reads_the_code_and_modifiers =
             Input/key(Key { ..Key/plain(Key/Code/char('a')), shift = true }),
             Input/key(Key/with_ctrl(Key/Code/enter()))]);
 
+-- A named key the protocol numbers by its character's scalar is that key: Escape, Tab, and Backspace by either of the two characters a terminal sends for it.
+test the_kitty_form_names_the_control_keys_by_their_characters =
+    Test/equal(
+        inputs(0x[0x1B, '[', '2', '7', 'u', 0x1B, '[', '9', 'u', 0x1B, '[', '1', '2', '7', 'u',
+            0x1B, '[', '8', 'u']),
+        [
+            k(Key/Code/escape()),
+            k(Key/Code/tab()),
+            k(Key/Code/backspace()),
+            k(Key/Code/backspace())]);
+
 -- A code's sub-parameters are read past, Super is a modifier, and a lock key's bit is no modifier at all: Caps Lock on leaves `a` plain.
 test the_kitty_form_reads_super_and_leaves_the_locks_out =
     Test/equal(
