@@ -1,4 +1,5 @@
-use /std/{List, Option, Eq, Ord, Hash, Map};
+use /std/{List, Option, Eq, Hash, Map};
+use /std/ops/{Ord};
 use /std/List/{Member};
 use /std/Map/internal/{Node};
 use /std/Bool/{True, False, Holds};

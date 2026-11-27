@@ -1,5 +1,5 @@
-use /std/{Nat, Bool, Option, Ord, Hash, Spell, Str, Show, proved};
-use /std/ops/{Eql};
+use /std/{Nat, Bool, Option, Hash, Spell, Str, Show, proved};
+use /std/ops/{Ord, Eql};
 use /std/time/{iso8601};
 use /std/Bool/{Holds};
 

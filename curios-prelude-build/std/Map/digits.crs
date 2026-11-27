@@ -1,4 +1,5 @@
-use /std/{Nat, Byte, Bytes, Bool, Eq, Ord, Ordering, proved};
+use /std/{Nat, Byte, Bytes, Bool, Eq, Ordering, proved};
+use /std/ops/{Ord};
 use /std/Bool/{True, Holds};
 
 -- A byte's high nibble.

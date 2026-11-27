@@ -68,7 +68,7 @@ pub struct SyntaxRegistry {
 }
 
 impl SyntaxRegistry {
-    /// Every registered name, for the prelude build's presence check. The operator concepts appear once per method that dispatches through them, so `/std/Ord/Ord` recurs — a duplicate costs a redundant assertion and nothing else.
+    /// Every registered name, for the prelude build's presence check. The operator concepts appear once per method that dispatches through them, so `/std/ops/Ord/Ord` recurs — a duplicate costs a redundant assertion and nothing else.
     ///
     /// Each group answers for its own slots instead of having them reached through from here, so that the exhaustive pattern sits in the same scope as the fields it has to keep up with.
     pub fn targets(self) -> impl Iterator<Item = SyntaxName> {
@@ -707,7 +707,7 @@ pub struct SpellDerivation {
     pub hidden: SyntaxName,
 }
 
-/// The names a derived `Ord` witness body is written with: its own method, applied to each payload pair; the names its laws' proofs apply ([`OrdLaws`]); and the two `/std/Ord` combinators the body folds their answers through — `lexicographic` within one constructor, `by_tag` across two, with `Ordering/eq` filling the arm that cannot be reached because the tags already agreed — and `Ordering/is_lt` and `is_le`, which read `lt` and `le` off the same comparison.
+/// The names a derived `Ord` witness body is written with: its own method, applied to each payload pair; the names its laws' proofs apply ([`OrdLaws`]); and the two `/std/ops/Ord` combinators the body folds their answers through — `lexicographic` within one constructor, `by_tag` across two, with `Ordering/eq` filling the arm that cannot be reached because the tags already agreed — and `Ordering/is_lt` and `is_le`, which read `lt` and `le` off the same comparison.
 ///
 /// No string machinery, and deliberately: `lexicographic` takes the payload answers alone, where `Spell`'s renderers take a constructor path. An `Ordering` has no text to re-parse and no report to read, so the path would be a literal nothing consumes — and carrying one would put every `/std/Str` name back into this row's vocabulary for a value that is never rendered.
 #[derive(Debug, Clone, Copy)]

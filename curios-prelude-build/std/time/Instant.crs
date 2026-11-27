@@ -1,5 +1,5 @@
-use /std/{Nat, Int, Io, Ord, Hash};
-use /std/ops/{Eql};
+use /std/{Nat, Int, Io, Hash};
+use /std/ops/{Ord, Eql};
 use /std/time/{Duration};
 
 --- A reading of the monotonic clock: nanoseconds since its origin, which two readings share only within one run.

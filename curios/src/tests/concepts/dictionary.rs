@@ -30,8 +30,8 @@ fn use_entry_fills_a_concept_field_explicitly() {
 #[test]
 fn a_witness_never_writes_its_superclass_slot() {
     let source = r#"
-        use /std/{print, Str, Bool, Ord, Ordering};
-        use /std/ops/{Eql};
+        use /std/{print, Str, Bool, Ordering};
+        use /std/ops/{Eql, Ord};
         induct Mine: pub Type | a() | b() end
         satisfy Eql(Mine) { .. }
         let other: Eql(Mine) =
@@ -59,8 +59,8 @@ fn a_witness_never_writes_its_superclass_slot() {
 #[test]
 fn a_superclass_reads_alike_through_the_table_and_through_a_witness() {
     let source = r#"
-        use /std/{print, Str, Bool, Ord, Ordering};
-        use /std/ops/{Eql};
+        use /std/{print, Str, Bool, Ordering};
+        use /std/ops/{Eql, Ord};
         induct Mine: pub Type | a() | b() end
         satisfy Eql(Mine) { .. }
         satisfy Ord(Mine) { .. }

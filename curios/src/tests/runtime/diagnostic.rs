@@ -147,7 +147,7 @@ fn keeps_the_name_of_a_stalled_unfolding() {
 #[test]
 fn keeps_the_call_of_a_method_whose_unfolding_stalls() {
     let source = r#"
-        use /std/{Nat, Eq, Ord, Ordering};
+        use /std/{Nat, Eq, Ordering}; use /std/ops/{Ord};
         let claim(a: Nat, b: Nat) -> Eq()(Ord/ord(a, b), Ordering/eq()) = Eq/refl();
         claim
         "#;

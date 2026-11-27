@@ -32,8 +32,8 @@ fn superclass_projection_resolves() {
 #[test]
 fn prelude_ord_superclass_projects() {
     let source = r#"
-        use /std/{Nat, Bool, Ord};
-        use /std/ops/{Eql};
+        use /std/{Nat, Bool};
+        use /std/ops/{Eql, Ord};
         pub let equal(@A : Type, use Ord(A), x : A, y : A) -> Bool = Eql/eql(x, y);
         let n : Nat = 4;
         /std/print(Bool/to_str(equal(n, n)))
@@ -91,8 +91,8 @@ fn a_superclass_edge_is_in_scope_for_a_later_field_type() {
 #[test]
 fn a_superclass_edge_is_reached_by_no_label() {
     let projected = r#"
-        use /std/{Nat, Bool, Str, Ord, print};
-        use /std/ops/{Eql};
+        use /std/{Nat, Bool, Str, print};
+        use /std/ops/{Eql, Ord};
         let peek(@A: Type, o: Ord(A)) -> Eql(A) = o._super0;
         print("no")
         "#;
@@ -136,7 +136,7 @@ fn a_literals_law_is_stated_over_the_superclass_it_writes() {
     let report = error(source);
     assert!(
         report.contains(
-            "expected: `(a: Nat, b: Nat) -> /std/Eq(@/std/Ordering)(/std/Ord/ord(a, b), /std/Ordering/eq())`"
+            "expected: `(a: Nat, b: Nat) -> /std/Eq(@/std/Ordering)(/std/ops/Ord/ord(a, b), /std/Ordering/eq())`"
         ),
         "{report}"
     );

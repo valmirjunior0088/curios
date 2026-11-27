@@ -1,3 +1,7 @@
+--- A total order, over an `Eql` superclass: what sorting and ordered collections ask for, the three-way answer it gives, and the laws a theorem may ask of a comparator, each named once.
+pub mod Ord;
+pub use Ord/{let Ord};
+
 use /std/{Bool, Eq};
 use /std/Bool/{Holds};
 

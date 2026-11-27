@@ -1,5 +1,5 @@
-use /std/{Nat, List, Option, Ord, Hash, Spell};
-use /std/ops/{Eql};
+use /std/{Nat, List, Option, Hash, Spell};
+use /std/ops/{Ord, Eql};
 
 --- A month of the year, declared in calendar order, so the order `Ord` derives is the calendar's.
 pub induct Month: pub Type

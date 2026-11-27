@@ -1,4 +1,5 @@
-use /std/{Nat, Eq, Ordering, Ord};
+use /std/{Nat, Eq, Ordering};
+use /std/ops/{Ord};
 use /std/Bool/{True};
 
 --- The order of the two.

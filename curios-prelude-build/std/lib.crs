@@ -14,9 +14,9 @@ pub use Eq/{let Eq};
 pub mod Bool;
 pub use Bool/{let Bool};
 
---- A total order, over an `Eql` superclass: what sorting and ordered collections ask for, the three-way answer it gives, and the laws a theorem may ask of a comparator, each named once.
-pub mod Ord;
-pub use Ord/{let Ord, Ordering};
+--- The three-way answer a comparison gives, with its distinctness proofs.
+pub mod Ordering;
+pub use Ordering/{let Ordering};
 
 --- A value's encoding as the bytes that identify it, and the digest of one.
 ---

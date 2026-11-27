@@ -1,5 +1,6 @@
 -- Packed atom splices, the folds that sum a sequence, and a packed value shown.
-use /std/{Str, Nat, Byte, Bytes, Bool, Eq, List, Option, Ordering, Ord, Show, Test};
+use /std/{Str, Nat, Byte, Bytes, Bool, Eq, List, Option, Ordering, Show, Test};
+use /std/ops/{Ord};
 use /std/Bool/{Holds};
 
 -- `..` splices one generator into a packed literal, between literal runs and adjacent to another atom. `i` and `bang` are bound rather than written, so the run is genuinely spliced rather than folded at parse time.

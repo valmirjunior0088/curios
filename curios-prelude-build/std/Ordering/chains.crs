@@ -5,7 +5,7 @@ use /std/Bool/{True, Holds};
 -- Stated with `||`, of which conversion absorbs a `true` operand on either side: what a `gt` settles is settled whatever the other answers are, so a proof at `chains(first, Ordering/gt(), across)`, or at `chains(Ordering/lt(), second, Ordering/lt())`, takes no case of the answers left open.
 --- Whether three answers chain: the first is `gt`, or the second is, or the third is the step of the first two ([`Ordering/then`]).
 ---
---- A comparison's answers at `a` and `b`, at `b` and `c`, and at `a` and `c` chain ([`/std/Ord/chains`]), and [`Ordering/then`] keeps that ([`then`]), so an order built of steps carries across a middle element ([`le`]) where each of its pieces does.
+--- A comparison's answers at `a` and `b`, at `b` and `c`, and at `a` and `c` chain ([`/std/ops/Ord/chains`]), and [`Ordering/then`] keeps that ([`then`]), so an order built of steps carries across a middle element ([`le`]) where each of its pieces does.
 pub let chains(first: Ordering, second: Ordering, across: Ordering) -> Bool =
     Ordering/is_gt(first) || Ordering/is_gt(second) || across == Ordering/then(first, second);
 

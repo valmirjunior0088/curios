@@ -7,8 +7,8 @@ use {crate::test_support::*, curios_common::fill};
 #[test]
 fn derived_order_ranks_constructors_then_payloads() {
     let source = r#"
-        use /std/{Nat, Str, Ord, Show, print};
-        use /std/ops/{Eql};
+        use /std/{Nat, Str, Show, print};
+        use /std/ops/{Eql, Ord};
         induct Tree: pub Type | leaf(Nat) | node(Tree, Tree) end
         satisfy Eql(Tree) { .. }
         satisfy Ord(Tree) { .. }
@@ -32,9 +32,9 @@ fn derived_order_ranks_constructors_then_payloads() {
 #[test]
 fn every_order_answers_the_comparison_operators() {
     let source = r#"
-        use /std/{Nat, Bool, Str, Ord, Ordering, print};
+        use /std/{Nat, Bool, Str, Ordering, print};
         use /std/time/{Month};
-        use /std/ops/{Eql};
+        use /std/ops/{Eql, Ord};
         induct Tree: pub Type | leaf(Nat) | node(Tree, Tree) end
         satisfy Eql(Tree) { .. }
         satisfy Ord(Tree) { .. }
@@ -55,8 +55,8 @@ fn every_order_answers_the_comparison_operators() {
 #[test]
 fn a_struct_and_a_parameterized_family_order_fieldwise() {
     let source = r#"
-        use /std/{Nat, Str, Ord, Show, print};
-        use /std/ops/{Eql};
+        use /std/{Nat, Str, Show, print};
+        use /std/ops/{Eql, Ord};
         struct Point: pub Type { x: Nat, y: Nat }
         induct Box(A: Type): pub Type | boxed(A) end
         satisfy Eql(Point) { .. }
@@ -79,8 +79,8 @@ fn a_struct_and_a_parameterized_family_order_fieldwise() {
 #[test]
 fn a_parameterized_family_with_a_constructor_of_no_fields_derives_its_order() {
     let source = r#"
-        use /std/{Nat, Str, Ord, Show, print};
-        use /std/ops/{Eql};
+        use /std/{Nat, Str, Show, print};
+        use /std/ops/{Eql, Ord};
         induct T(A: Type): pub Type | a() | b(A) end
         satisfy (@A: Type, use Eql(A)) => Eql(T(A)) { .. }
         satisfy (@A: Type, use Ord(A)) => Ord(T(A)) { .. }
@@ -99,8 +99,8 @@ fn a_parameterized_family_with_a_constructor_of_no_fields_derives_its_order() {
 #[test]
 fn a_family_nested_through_a_witness_over_its_order_alone_derives_its_order() {
     let source = r#"
-        use /std/{Str, Ord, Show, print};
-        use /std/ops/{Eql};
+        use /std/{Str, Show, print};
+        use /std/ops/{Eql, Ord};
         induct Box(A: Type): pub Type | boxed(A) end
         induct Forest: pub Type | none() | some(Box(Forest)) end
         satisfy (@A: Type, use Eql(A)) => Eql(Box(A)) { .. }
@@ -121,8 +121,8 @@ fn a_family_nested_through_a_witness_over_its_order_alone_derives_its_order() {
 fn proofs_and_implicit_payloads_take_no_part_in_ordering() {
     // A proof contributes no piece, which under a first-difference-wins fold is exactly what answering `eq` would be; an implicit index is fixed by the payloads it indexes and is never named.
     let source = r#"
-        use /std/{Nat, Str, Eq, Ord, Show, print};
-        use /std/ops/{Eql};
+        use /std/{Nat, Str, Eq, Show, print};
+        use /std/ops/{Eql, Ord};
         induct Certified: pub Type | cert(n: Nat, proof: Eq()(n, n)) end
         satisfy Eql(Certified) { .. }
         satisfy Ord(Certified) { .. }
@@ -140,7 +140,7 @@ fn proofs_and_implicit_payloads_take_no_part_in_ordering() {
 fn an_order_derivation_needs_the_equality_its_concept_requires() {
     // `Ord`'s superclass slot is left unfilled by the derived record, so resolution asks for it exactly as it would for a written literal that omitted it — and reports at the declaration when it is missing, the superclass spelled as its reader reaches it: `Eql` is in scope here by its path alone.
     let source = r#"
-        use /std/{Nat, Ord, print};
+        use /std/{Nat, print}; use /std/ops/{Ord};
         induct Colour: pub Type | red() | green(Nat) end
         satisfy Ord(Colour) { .. }
         print("")
@@ -160,7 +160,7 @@ fn an_order_derivation_needs_the_equality_its_concept_requires() {
 fn the_standard_library_derives_order_for_ordering() {
     // `/std/Ordering` carries the one derived `Ord` witness in the prelude, which is what exercises the derivation's scheduler edges: they matter only within a unit, and a program compiled against `/std` is a unit of its own.
     let source = r#"
-        use /std/{Str, Ordering, Ord, Show, print};
+        use /std/{Str, Ordering, Show, print}; use /std/ops/{Ord};
         let show(a: Ordering, b: Ordering) -> Str = Str/concat(Show/show(Ord/ord(a, b)), " ");
         let entry() -> /std/Io({}) =
             let _ = print(show(Ordering/lt(), Ordering/eq()))!;
@@ -178,10 +178,10 @@ fn the_standard_library_derives_order_for_ordering() {
 #[test]
 fn a_derived_witness_proves_the_orders_laws() {
     let source = r#"
-        use /std/{Nat, Bool, Str, List, Eq, Ord, print};
-        use /std/Ord/{Ordering};
+        use /std/{Nat, Bool, Str, List, Eq, print};
+        use /std/{Ordering};
         use /std/Bool/{True, Holds};
-        use /std/ops/{Eql};
+        use /std/ops/{Eql, Ord};
 
         induct Tree: Type | leaf(Nat) | node(Tree, Tree) end
         induct Doc: Type | num(Nat) | arr(List(Doc)) | obj(List({Str, Doc})) end
@@ -282,10 +282,10 @@ fn a_witness_whose_order_breaks_a_law_is_refused_where_it_is_declared() {
     let program = |ord: &str, flips: &str, carries: &str, tied: &str| {
         fill!(
             r#"
-            use /std/{Bool, Eq, Ord, print};
-            use /std/Ord/{Ordering};
+            use /std/{Bool, Eq, print};
+            use /std/{Ordering};
             use /std/Bool/{True};
-            use /std/ops/{Eql};
+            use /std/ops/{Eql, Ord};
             induct Side: Type | left() | right() end
             satisfy Eql(Side) { .. }
             let ord(a: Side, b: Side) -> Ordering =
@@ -368,9 +368,9 @@ fn a_witness_whose_order_breaks_a_law_is_refused_where_it_is_declared() {
     );
 
     let lawless = r#"
-        use /std/{Bool, Ord, print};
-        use /std/Ord/{Ordering};
-        use /std/ops/{Eql};
+        use /std/{Bool, print};
+        use /std/{Ordering};
+        use /std/ops/{Eql, Ord};
         induct Side: Type | left() | right() end
         satisfy Eql(Side) { .. }
         satisfy Ord(Side) {

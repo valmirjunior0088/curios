@@ -22,8 +22,8 @@ pub use IndicConjunctBreak/{let IndicConjunctBreak};
 pub mod EastAsianWidth;
 pub use EastAsianWidth/{let EastAsianWidth};
 
-use /std/{Nat, Byte, Bool, Bytes, Option, Ordering, Eq, Str, Show, Spell, Fmt, Ord, proved};
-use /std/ops/{Eql};
+use /std/{Nat, Byte, Bool, Bytes, Option, Ordering, Eq, Str, Show, Spell, Fmt, proved};
+use /std/ops/{Ord, Eql};
 use /std/Bool/{True, Holds};
 
 --- One Unicode scalar value.

@@ -373,9 +373,9 @@ fn a_bound_over_one_length_reached_by_two_routes_discharges() {
 fn a_member_bound_discharges_through_a_row_the_module_declares() {
     assert_eq!(
         run(r#"
-        use /std/{Str, Nat, Bool, Eq, Ord, Ordering};
+        use /std/{Str, Nat, Bool, Eq, Ordering};
         use /std/Bool/{Holds};
-        use /std/ops/{Eql, Rem};
+        use /std/ops/{Eql, Rem, Ord};
         struct Num: Type { n : Nat }
         let ord(a : Num, b : Num) -> Ordering = Nat/ord(a.n, b.n);
         let lt(a : Num, b : Num) -> Bool = a.n < b.n;

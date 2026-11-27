@@ -6,8 +6,8 @@ pub use then/{let then};
 pub mod chains;
 pub use chains/{let chains};
 
-use /std/{Bool, Eq, Hash, Ord, Show, Spell};
-use /std/ops/{Eql};
+use /std/{Bool, Eq, Hash, Show, Spell};
+use /std/ops/{Ord, Eql};
 use /std/Bool/{False};
 
 --- The three-way answer a comparison gives.

@@ -1,8 +1,8 @@
 mod tests;
 
-use /std/{Nat, Int, Byte, Bytes, Bool, Char, Option, List, Str, Eq, Ordering, Ord, Hash, Show,
-    Spell, Fmt, Io, rand, proved};
-use /std/ops/{Eql};
+use /std/{Nat, Int, Byte, Bytes, Bool, Char, Option, List, Str, Eq, Ordering, Hash, Show, Spell,
+    Fmt, Io, rand, proved};
+use /std/ops/{Ord, Eql};
 use /std/time/{Timestamp};
 use /std/Bool/{Holds};
 

@@ -1,7 +1,7 @@
-use /std/{Bytes, Nat, Bool, Option, List, Vec, Eq, Hash, Ord, Ordering, proved};
+use /std/{Bytes, Nat, Bool, Option, List, Vec, Eq, Hash, Ordering, proved};
+use /std/ops/{Ord, Eql};
 use /std/List/{Member, Pairwise};
 use /std/Map/digits/{digit, small, crit, Parting, parting, Apart, turned, reheaded, before};
-use /std/ops/{Eql};
 use /std/Bool/{True, False, Holds};
 
 --- A trie's node: nothing, a key with its value, or a branch at the position its keys first differ at, holding sixteen twigs, the one at each digit holding the keys with that digit there.

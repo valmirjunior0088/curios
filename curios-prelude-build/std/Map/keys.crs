@@ -1,4 +1,5 @@
-use /std/{List, Eq, Ord, Hash};
+use /std/{List, Eq, Hash};
+use /std/ops/{Ord};
 use /std/List/{Pairwise};
 use /std/Map/{Map};
 use /std/Map/internal/{Node};

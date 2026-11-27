@@ -1,6 +1,6 @@
 -- `Map`, the sixteen-way trie over `Hash/Key`-encoded bytes: lookups, the canonical shape, and the rewriting functions.
-use /std/{Str, Nat, Int, Bool, Byte, Bytes, List, Option, Eq, Hash, Ord, Ordering, Map, Set, Test,
-    time};
+use /std/{Str, Nat, Int, Bool, Byte, Bytes, List, Option, Eq, Hash, Ordering, Map, Set, Test, time};
+use /std/ops/{Ord};
 use /std/Bool/{True, False, Holds};
 
 test a_key_an_empty_map_lacks_is_tried_as_none =

@@ -1,5 +1,5 @@
-use /std/{Bool, Eq, Show, Spell, Fmt, Ord, Ordering, Hash, Str, List, proved};
-use /std/ops/{Eql};
+use /std/{Bool, Eq, Show, Spell, Fmt, Ordering, Hash, Str, List, proved};
+use /std/ops/{Ord, Eql};
 use /std/Bool/{True};
 
 let parens(parts: List(Str)) -> Str =

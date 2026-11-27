@@ -1,8 +1,8 @@
 pub use /sys/{let Byte};
 pub use /sys/Byte/{to_nat};
 
-use /std/{Ordering, Nat, Bool, Show, Spell, Ord, Hash, Eq, proved};
-use /std/ops/{Eql, And, Or};
+use /std/{Ordering, Nat, Bool, Show, Spell, Hash, Eq, proved};
+use /std/ops/{Ord, Eql, And, Or};
 use /std/Bool/{True, Holds};
 
 --- Whether the two are equal.

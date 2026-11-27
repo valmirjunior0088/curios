@@ -1,5 +1,6 @@
 -- `Set`, a map from its elements to nothing: its laws read off `Map`'s, its order, and the operations that build one from two.
-use /std/{Str, Nat, Bool, List, Ord, Eq, Hash, Set, Test};
+use /std/{Str, Nat, Bool, List, Eq, Hash, Set, Test};
+use /std/ops/{Ord};
 use /std/Bool/{True};
 
 -- A `Set(K)` is a structure over `Map(K, {})`, whose leaves hold the keys themselves, so `to_list` hands the elements back typed — `List(Str)` here, joined without a decoder.

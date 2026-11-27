@@ -1,8 +1,8 @@
 pub use /sys/{let Option};
 pub use /sys/Option/{none, some};
 
-use /std/{Bool, Eq, Show, Spell, Fmt, Monad, Result, Ord, Hash};
-use /std/ops/{Eql};
+use /std/{Bool, Eq, Show, Spell, Fmt, Monad, Result, Hash};
+use /std/ops/{Ord, Eql};
 use /std/Bool/{True, False};
 
 --- `f` on the value, or `none`.

@@ -52,8 +52,8 @@ fn a_table_witness_reads_back_past_a_superclass_at_another_argument() {
     for wrapped in ["Nat", "A"] {
         let source = fill!(
             r#"
-            use /std/{Nat, Ord};
-            use /std/ops/{Eql};
+            use /std/{Nat};
+            use /std/ops/{Eql, Ord};
             pub struct Box(A: Type, use Eql(A)): pub Type { value: A }
             pub let v(@A: Type, use Ord(A), x: Box(${wrapped})) -> Nat = 0;
             pub let t: ? = v;

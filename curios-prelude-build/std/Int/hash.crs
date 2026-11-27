@@ -1,4 +1,5 @@
-use /std/{Nat, Int, Byte, Bytes, Eq, Ord, Ordering, proved};
+use /std/{Nat, Int, Byte, Bytes, Eq, Ordering, proved};
+use /std/ops/{Ord};
 use /std/Bool/{True, Holds};
 
 -- A run with every byte complemented, a byte at a time so that conversion carries it across a cons.

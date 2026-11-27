@@ -93,8 +93,8 @@ fn a_duplicate_across_two_modules_names_both() {
 fn orphan_witness_is_rejected() {
     control(
         r#"
-        use /std/{Bool, Ord, Ordering};
-        use /std/ops/{Eql};
+        use /std/{Bool, Ordering};
+        use /std/ops/{Eql, Ord};
         induct Mine : pub Type | m() end
         satisfy Eql(Mine) { .. }
         satisfy Ord(Mine) { .. }
@@ -106,8 +106,8 @@ fn orphan_witness_is_rejected() {
     .refused(&[
         ("satisfy Ord(Mine)", "satisfy Ord(Bool)"),
     ])
-    .by_elaborator_in("/witness~/std/Ord/Ord(Bool)", |error| {
-        matches!(error, Error::OrphanWitness { concept, key, witness } if *concept == global("/std/Ord/Ord") && pinned_key(key) == "Bool" && *witness == Qualifier::empty())
+    .by_elaborator_in("/witness~/std/ops/Ord/Ord(Bool)", |error| {
+        matches!(error, Error::OrphanWitness { concept, key, witness } if *concept == global("/std/ops/Ord/Ord") && pinned_key(key) == "Bool" && *witness == Qualifier::empty())
     });
 }
 

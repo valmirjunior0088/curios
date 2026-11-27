@@ -1,5 +1,5 @@
-use /std/{Int, Nat, Ord, Hash, Spell, Fmt, Str, Option, Show};
-use /std/ops/{Eql, Add, Sub};
+use /std/{Int, Nat, Hash, Spell, Fmt, Str, Option, Show};
+use /std/ops/{Ord, Eql, Add, Sub};
 use /std/time/{iso8601};
 
 --- A length of time, signed: one count of nanoseconds, so a sum and a difference are the count's own and a length below zero is one too.

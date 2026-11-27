@@ -1,9 +1,10 @@
-use /std/{Bytes, Bool, Eq, Hash, Ord, Ordering, proved};
+use /std/{Bytes, Bool, Eq, Hash, Ordering, proved};
+use /std/ops/{Ord};
 use /std/Bool/{False, Holds};
 
 --- How a key type encodes to the byte string that identifies it, with the proof that the encodings stand in the keys' own order.
 ---
---- The encoding is `/std/Hash`'s and the order `/std/Ord`'s, reached through the concept's parents rather than restated, so a type has one identity as bytes and one order. The concept adds the one law neither parent carries, `mono`, so a walk of the trie, which follows the encodings, follows the keys' order; that distinct keys encode distinctly, so the trie never merges two keys into one entry, follows from it ([`inj`]). A witness whose encoding collides or breaks the order is refused where it is declared.
+--- The encoding is `/std/Hash`'s and the order `/std/ops/Ord`'s, reached through the concept's parents rather than restated, so a type has one identity as bytes and one order. The concept adds the one law neither parent carries, `mono`, so a walk of the trie, which follows the encodings, follows the keys' order; that distinct keys encode distinctly, so the trie never merges two keys into one entry, follows from it ([`inj`]). A witness whose encoding collides or breaks the order is refused where it is declared.
 ---
 --- A type with an encoding and no order of its own takes its encoding's, and its `mono` is `Eq/refl()`.
 pub concept Key(K: Type): pub Type {

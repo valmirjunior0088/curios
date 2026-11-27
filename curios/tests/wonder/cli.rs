@@ -337,7 +337,7 @@ fn every_listed_witness_is_answered_by_the_name_it_leads_with() {
     let root = temporary("witness-names");
     fs::create_dir_all(&root).unwrap();
 
-    for concept in ["/std/Ord", "/std/Monad/Lift"] {
+    for concept in ["/std/ops/Ord", "/std/Monad/Lift"] {
         let listed = stdout(&curios(
             &root,
             &["wonder", "--name", concept, "--witnesses"],

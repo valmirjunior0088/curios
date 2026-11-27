@@ -1,4 +1,5 @@
-use /std/{List, Bool, Option, Eq, Ordering, Ord};
+use /std/{List, Bool, Option, Eq, Ordering};
+use /std/ops/{Ord};
 use /std/List/{Member, Permutation, Pairwise};
 use /std/Bool/{True, Holds};
 

@@ -1,5 +1,5 @@
-use /std/{Nat, Option, Ord, Hash, Spell};
-use /std/ops/{Eql};
+use /std/{Nat, Option, Hash, Spell};
+use /std/ops/{Ord, Eql};
 
 --- A day of the week, Monday first, as ISO 8601 numbers them.
 pub induct Weekday: pub Type

@@ -1,4 +1,5 @@
-use /std/{Nat, Bytes, Eq, Ord, Ordering, proved};
+use /std/{Nat, Bytes, Eq, Ordering, proved};
+use /std/ops/{Ord};
 use /std/Bool/{True, False, Holds};
 
 -- How many bytes follow a number's first.

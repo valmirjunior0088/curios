@@ -1,5 +1,6 @@
 -- The `List` functions every peer ships: structural predicates and searches, the fold-shaped builders, `traverse` over a monad, and the stable sort.
-use /std/{Nat, Str, Bool, List, Option, Eq, Ord, Ordering, Test};
+use /std/{Nat, Str, Bool, List, Option, Eq, Ordering, Test};
+use /std/ops/{Ord};
 use /std/Bool/{True, Holds};
 use /std/List/{Member, Permutation, Pairwise};
 

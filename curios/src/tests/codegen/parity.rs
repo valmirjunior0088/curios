@@ -115,7 +115,7 @@ fn a_bind_guard_matches_headed_catch_all_codegen() {
 #[test]
 fn concept_comparison_matches_direct_intrinsic_codegen() {
     let through_concept = r#"
-        use /std/{Nat, Bool, List, Str, Proc, Ord};
+        use /std/{Nat, Bool, List, Str, Proc}; use /std/ops/{Ord};
         pub let small(x : Nat) -> Bool = Ord/lt(x, 10);
         let entry() -> /std/Io({}) =
             let taint = List/length(Proc/args()!);

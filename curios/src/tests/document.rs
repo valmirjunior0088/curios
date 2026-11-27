@@ -86,7 +86,7 @@ fn the_standard_library_documents_from_the_archive() {
     let ordering = documentation
         .modules
         .iter()
-        .find(|module| module.path.join() == "/std/Ord/Ordering")
+        .find(|module| module.path.join() == "/std/Ordering")
         .expect("an Ordering module");
     let induct = ordering
         .declarations()
@@ -130,7 +130,7 @@ fn the_standard_library_documents_from_the_archive() {
     let ordered = documentation
         .modules
         .iter()
-        .find(|module| module.path.join() == "/std/Ord")
+        .find(|module| module.path.join() == "/std/ops/Ord")
         .and_then(|module| {
             module
                 .declarations()
@@ -162,7 +162,7 @@ fn the_standard_library_documents_from_the_archive() {
         flip.signature.marks.iter().any(|mark| matches!(
             &mark.marked,
             Marked::Name { referent, within: true, .. }
-                if referent.join() == "/std/Ord/Ordering/Ordering"
+                if referent.join() == "/std/Ordering/Ordering"
         )),
         "{:?}",
         flip.signature
@@ -193,7 +193,7 @@ fn the_standard_library_documents_from_the_archive() {
             Entry::Declaration(_) => None,
         })
         .expect("the line that exposes the constructors");
-    assert_eq!(exposed.owner.join(), "/std/Ord/Ordering/Ordering");
+    assert_eq!(exposed.owner.join(), "/std/Ordering/Ordering");
     assert_eq!(exposed.names, ["lt", "eq", "gt"]);
     assert_eq!(exposed.signature.text, "pub use Ordering/{lt, eq, gt}");
     assert_eq!(
@@ -207,10 +207,10 @@ fn the_standard_library_documents_from_the_archive() {
             })
             .collect::<Vec<_>>(),
         [
-            "/std/Ord/Ordering/Ordering",
-            "/std/Ord/Ordering/Ordering/lt",
-            "/std/Ord/Ordering/Ordering/eq",
-            "/std/Ord/Ordering/Ordering/gt",
+            "/std/Ordering/Ordering",
+            "/std/Ordering/Ordering/lt",
+            "/std/Ordering/Ordering/eq",
+            "/std/Ordering/Ordering/gt",
         ],
         "the owner and each member are marked as a signature's names are"
     );

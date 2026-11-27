@@ -71,7 +71,7 @@ fn equality_is_componentwise() {
 #[test]
 fn ordering_is_lexicographic() {
     let source = r#"
-        use /std/{Show, Ord, Ordering, Nat, Str, List};
+        use /std/{Show, Ordering, Nat, Str, List}; use /std/ops/{Ord};
         let p: {Nat, Nat} = (1, 2);
         let q: {Nat, Nat} = (1, 3);
         let r: {Nat, Nat} = (2, 2);

@@ -8,8 +8,8 @@ use crate::test_support::*;
 #[test]
 fn a_struct_derives_its_key_and_a_map_walks_its_keys_in_their_order() {
     let source = r#"
-        use /std/{Nat, Str, Hash, Map, Ord, print};
-        use /std/ops/{Eql};
+        use /std/{Nat, Str, Hash, Map, print};
+        use /std/ops/{Eql, Ord};
         struct Pair: pub Type { s: Str, n: Nat }
         satisfy Eql(Pair) { .. }
         satisfy Ord(Pair) { .. }
@@ -30,8 +30,8 @@ fn a_struct_derives_its_key_and_a_map_walks_its_keys_in_their_order() {
 #[test]
 fn an_inductive_derives_its_key_its_constructors_first_and_then_their_payloads() {
     let source = r#"
-        use /std/{Nat, Str, Hash, Map, Ord, print};
-        use /std/ops/{Eql};
+        use /std/{Nat, Str, Hash, Map, print};
+        use /std/ops/{Eql, Ord};
         induct Shape: pub Type | dot() | line(Nat) | square(Nat, Nat) end
         satisfy Eql(Shape) { .. }
         satisfy Ord(Shape) { .. }
@@ -53,8 +53,8 @@ fn an_inductive_derives_its_key_its_constructors_first_and_then_their_payloads()
 #[test]
 fn a_key_derives_under_a_premise_on_its_payloads_type() {
     let source = r#"
-        use /std/{Str, Hash, Map, Ord, print};
-        use /std/ops/{Eql};
+        use /std/{Str, Hash, Map, print};
+        use /std/ops/{Eql, Ord};
         induct Box(A: Type): pub Type | wrap(A) end
         satisfy (@A: Type, use Eql(A)) => Eql(Box(A)) { .. }
         satisfy (@A: Type, use Ord(A)) => Ord(Box(A)) { .. }
@@ -71,8 +71,8 @@ fn a_key_derives_under_a_premise_on_its_payloads_type() {
 #[test]
 fn an_inductive_that_holds_itself_derives_its_key() {
     let source = r#"
-        use /std/{Nat, Str, Hash, Map, Ord, print};
-        use /std/ops/{Eql};
+        use /std/{Nat, Str, Hash, Map, print};
+        use /std/ops/{Eql, Ord};
         induct Tree: pub Type | leaf(Nat) | node(Tree, Tree) end
         satisfy Eql(Tree) { .. }
         satisfy Ord(Tree) { .. }
@@ -92,8 +92,8 @@ fn an_inductive_that_holds_itself_derives_its_key() {
 #[test]
 fn a_family_holding_itself_through_another_keys_type_derives_its_key() {
     let source = r#"
-        use /std/{Nat, Str, Hash, Map, Ord, print};
-        use /std/ops/{Eql};
+        use /std/{Nat, Str, Hash, Map, print};
+        use /std/ops/{Eql, Ord};
         induct Box(A: Type): pub Type | wrap(A) end
         satisfy (@A: Type, use Eql(A)) => Eql(Box(A)) { .. }
         satisfy (@A: Type, use Ord(A)) => Ord(Box(A)) { .. }
@@ -120,8 +120,8 @@ fn a_family_holding_itself_through_another_keys_type_derives_its_key() {
 #[test]
 fn a_payload_with_no_key_is_reported_against_the_payload() {
     let source = r#"
-        use /std/{Nat, Hash, Ord};
-        use /std/ops/{Eql};
+        use /std/{Nat, Hash};
+        use /std/ops/{Eql, Ord};
         struct Inner: pub Type { n: Nat }
         satisfy Eql(Inner) { .. }
         satisfy Ord(Inner) { .. }
@@ -145,8 +145,8 @@ fn a_payload_with_no_key_is_reported_against_the_payload() {
 #[test]
 fn a_key_over_a_written_order_is_refused_naming_the_order() {
     let source = r#"
-        use /std/{Hash, Ord, Ordering, Eq};
-        use /std/ops/{Eql};
+        use /std/{Hash, Ordering, Eq};
+        use /std/ops/{Eql, Ord};
         induct Two: pub Type | low() | high() end
         satisfy Eql(Two) { .. }
         let reversed(x: Two, y: Two) -> Ordering =
@@ -198,8 +198,8 @@ fn a_key_over_a_written_order_is_refused_naming_the_order() {
 #[test]
 fn a_key_over_a_written_encoding_is_refused_naming_the_encoding() {
     let source = r#"
-        use /std/{Hash, Ord};
-        use /std/ops/{Eql};
+        use /std/{Hash};
+        use /std/ops/{Eql, Ord};
         induct Two: pub Type | low() | high() end
         satisfy Eql(Two) { .. }
         satisfy Ord(Two) { .. }
@@ -222,8 +222,8 @@ fn a_key_over_a_written_encoding_is_refused_naming_the_encoding() {
 #[test]
 fn a_written_encoding_that_writes_the_derived_one_keys_a_derived_key() {
     let source = r#"
-        use /std/{Nat, Str, Hash, Map, Ord, print};
-        use /std/ops/{Eql};
+        use /std/{Nat, Str, Hash, Map, print};
+        use /std/ops/{Eql, Ord};
         struct Point: pub Type { x: Nat, y: Nat }
         satisfy Eql(Point) { .. }
         satisfy Ord(Point) { .. }

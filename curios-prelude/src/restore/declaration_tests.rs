@@ -105,7 +105,7 @@ const PURITY: &[(&str, Purity)] = &[
     ("ops", Purity::Pure),
     ("Eq", Purity::Pure),
     ("Bool", Purity::Pure),
-    ("Ord", Purity::Pure),
+    ("Ordering", Purity::Pure),
     ("Hash", Purity::Pure),
     ("Show", Purity::Pure),
     ("Spell", Purity::Pure),

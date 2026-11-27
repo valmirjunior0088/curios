@@ -168,8 +168,8 @@ fn syn_add_concept_resolves_everywhere() {
 #[test]
 fn eql_and_ord_resolve_across_intrinsics() {
     let source = r#"
-        use /std/{Nat, Int, Bool, Str, Ord};
-        use /std/ops/{Eql};
+        use /std/{Nat, Int, Bool, Str};
+        use /std/ops/{Eql, Ord};
         let a : Bool = Eql/eql(2, 2);
         let b : Bool = Eql/eql("abc", "abc");
         let c : Bool = Ord/lt(+1, +2);

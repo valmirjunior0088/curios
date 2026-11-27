@@ -1,4 +1,5 @@
-use /std/{Nat, Byte, Bytes, Eq, Ord, Ordering, proved};
+use /std/{Nat, Byte, Bytes, Eq, Ordering, proved};
+use /std/ops/{Ord};
 use /std/Bool/{True, Holds};
 
 --- `b` with each zero byte written `0x00 0xFF` and closed by `0x00 0x01`: a run that parts at a byte from any other run so written, in the order of the runs themselves.

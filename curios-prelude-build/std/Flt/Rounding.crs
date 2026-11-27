@@ -1,5 +1,5 @@
-use /std/{Show, Spell, Ord, Hash};
-use /std/ops/{Eql};
+use /std/{Show, Spell, Hash};
+use /std/ops/{Ord, Eql};
 
 --- Which representable value an inexact result becomes: one of IEEE 754's five rounding-direction attributes (§4.3).
 ---

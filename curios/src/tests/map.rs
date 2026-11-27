@@ -6,8 +6,8 @@ use crate::test_support::*;
 #[test]
 fn a_colliding_key_witness_is_rejected() {
     let source = r#"
-        use /std/{Bytes, Map, Hash, Eq, Ord};
-        use /std/ops/{Eql};
+        use /std/{Bytes, Map, Hash, Eq};
+        use /std/ops/{Eql, Ord};
         pub induct Side : pub Type
         | left()
         | right()
@@ -30,7 +30,7 @@ fn a_colliding_key_witness_is_rejected() {
     let message = error(source);
     assert!(message.contains("type mismatch"), "{message}");
     assert!(
-        message.contains("expected: `Eq(@Ord/Ordering)(Ord/Ordering/lt(), Ord/Ordering/eq())`"),
+        message.contains("expected: `Eq(@/std/Ordering)(/std/Ordering/lt(), /std/Ordering/eq())`"),
         "{message}"
     );
 }
@@ -39,8 +39,8 @@ fn a_colliding_key_witness_is_rejected() {
 #[test]
 fn a_key_witness_out_of_its_order_is_rejected() {
     let source = r#"
-        use /std/{Bytes, Map, Hash, Eq, Ord};
-        use /std/ops/{Eql};
+        use /std/{Bytes, Map, Hash, Eq};
+        use /std/ops/{Eql, Ord};
         pub induct Side : pub Type
         | left()
         | right()
@@ -63,7 +63,7 @@ fn a_key_witness_out_of_its_order_is_rejected() {
     let message = error(source);
     assert!(message.contains("type mismatch"), "{message}");
     assert!(
-        message.contains("expected: `Eq(@Ord/Ordering)(Ord/Ordering/lt(), Ord/Ordering/gt())`"),
+        message.contains("expected: `Eq(@/std/Ordering)(/std/Ordering/lt(), /std/Ordering/gt())`"),
         "{message}"
     );
 }
@@ -72,7 +72,7 @@ fn a_key_witness_out_of_its_order_is_rejected() {
 #[test]
 fn a_function_under_a_key_alone_sorts_its_keys_and_states_their_order() {
     let source = r#"
-        use /std/{Nat, Int, Bool, Str, List, Map, Hash, Ord};
+        use /std/{Nat, Int, Bool, Str, List, Map, Hash}; use /std/ops/{Ord};
         use /std/Bool/{Holds};
         let sorted(@K: Type, use Hash/Key(K), keys: List(K)) -> List(K) =
             List/sort(keys);

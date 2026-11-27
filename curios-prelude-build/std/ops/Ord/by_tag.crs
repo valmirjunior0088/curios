@@ -1,4 +1,5 @@
-use /std/{Nat, Eq, Ord, Ordering};
+use /std/{Nat, Eq, Ordering};
+use /std/ops/{Ord};
 use /std/Bool/{Holds};
 
 --- Two constructors ordered by declaration position, answering `same` where they agree.

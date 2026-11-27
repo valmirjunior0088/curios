@@ -1,5 +1,5 @@
-use /std/{Nat, Int, Str, Io, Ord, Hash, Show, Spell, Fmt, Option};
-use /std/ops/{Eql};
+use /std/{Nat, Int, Str, Io, Hash, Show, Spell, Fmt, Option};
+use /std/ops/{Ord, Eql};
 use /std/time/{Duration, Offset, OffsetDateTime, iso8601};
 
 --- A moment: nanoseconds since 1970-01-01T00:00:00Z, counted as POSIX counts its seconds, with no leap second, and signed, so a moment before 1970 is one too.

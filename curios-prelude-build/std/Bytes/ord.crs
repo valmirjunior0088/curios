@@ -2,7 +2,8 @@
 pub mod below;
 pub use below/{let below};
 
-use /std/{Nat, Byte, Bytes, Bool, Eq, Ordering, Ord, proved};
+use /std/{Nat, Byte, Bytes, Bool, Eq, Ordering, proved};
+use /std/ops/{Ord};
 use /std/Bool/{True, Holds};
 
 --- Bytewise, a proper prefix first.

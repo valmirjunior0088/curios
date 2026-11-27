@@ -1,10 +1,10 @@
 --- The rules of UAX #29 that decide where an extended grapheme cluster ends.
 mod grapheme;
 
-use /std/{Nat, Bytes, Bool, Char, Option, Str, Eq, Ord, proved};
+use /std/{Nat, Bytes, Bool, Char, Option, Str, Eq, proved};
+use /std/ops/{Ord, Eql};
 use /std/Char/{GraphemeBreak};
 use /std/Str/{utf8};
-use /std/ops/{Eql};
 use /std/Bool/{True, Holds};
 
 --- Whether a character may begin at the front of `rest`: it is empty, or its first byte continues none.

@@ -1,4 +1,5 @@
-use /std/{List, Bytes, Eq, Hash, Ord, Ordering};
+use /std/{List, Bytes, Eq, Hash, Ordering};
+use /std/ops/{Ord};
 use /std/Bool/{True, Holds};
 
 --- Lexicographic, a proper prefix first.

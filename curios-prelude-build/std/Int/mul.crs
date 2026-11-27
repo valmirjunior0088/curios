@@ -1,6 +1,7 @@
 pub use /sys/Int/{mul};
 
-use /std/{Int, Eq, Ord, proved};
+use /std/{Int, Eq, proved};
+use /std/ops/{Ord};
 use /std/Bool/{Holds};
 
 -- A factor above zero cancels: the order of two products by it is the order of what it multiplies, which the elaborator proves from the facts in scope, once in each direction.

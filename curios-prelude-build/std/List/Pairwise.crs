@@ -1,4 +1,5 @@
-use /std/{List, Bool, Eq, Ord};
+use /std/{List, Bool, Eq};
+use /std/ops/{Ord};
 use /std/List/{Member, ordered};
 use /std/Bool/{True, Holds};
 

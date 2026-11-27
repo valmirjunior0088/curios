@@ -347,8 +347,8 @@ fn a_read_through_a_member_not_known_to_terminate_is_refused_naming_the_member()
 #[test]
 fn a_written_key_recurses_through_its_own_entry_over_its_superclasses() {
     let source = r#"
-        use /std/{Nat, Str, Hash, Map, Ord, Ordering, Eq, print};
-        use /std/ops/{Eql};
+        use /std/{Nat, Str, Hash, Map, Ordering, Eq, print};
+        use /std/ops/{Eql, Ord};
         induct Tree: pub Type | leaf(Nat) | node(Tree, Tree) end
         satisfy Eql(Tree) { .. }
         satisfy Ord(Tree) { .. }
@@ -397,8 +397,8 @@ fn a_written_key_recurses_through_its_own_entry_over_its_superclasses() {
 #[test]
 fn a_witness_reads_its_own_method_through_its_entry_as_written() {
     let source = r#"
-        use /std/{Ord, Ordering, Eq, print};
-        use /std/ops/{Eql};
+        use /std/{Ordering, Eq, print};
+        use /std/ops/{Eql, Ord};
         induct Two: pub Type | low() | high() end
         satisfy Eql(Two) { .. }
         let reversed(x: Two, y: Two) -> Ordering =

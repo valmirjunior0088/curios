@@ -44,8 +44,8 @@ fn a_derived_hash_writes_no_position_for_a_struct() {
 #[test]
 fn a_derived_encoding_orders_as_the_derived_order_does() {
     let source = r#"
-        use /std/{Nat, Bytes, Str, Hash, Ord, Ordering, print};
-        use /std/ops/{Eql};
+        use /std/{Nat, Bytes, Str, Hash, Ordering, print};
+        use /std/ops/{Eql, Ord};
         struct Pair: pub Type { s: Str, n: Nat }
         satisfy Eql(Pair) { .. }
         satisfy Ord(Pair) { .. }

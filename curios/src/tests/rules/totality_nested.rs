@@ -201,7 +201,7 @@ fn a_record_handed_on_states_what_it_applied_where_it_was_answered() {
 fn a_family_nested_through_a_law_that_infers_its_answers_descends() {
     control(
         r#"
-        use /std/{Nat, Eq, List, Ord, Ordering};
+        use /std/{Nat, Eq, List, Ordering}; use /std/ops/{Ord};
 
         concept Order(A: Type): pub Type {
             cmp(A, A) -> Ordering,

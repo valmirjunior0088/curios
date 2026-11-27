@@ -1,5 +1,5 @@
-use /std/{Nat, Int, Eq, Ord, Ordering, Hash, Spell, Str, Option, Show};
-use /std/ops/{Eql};
+use /std/{Nat, Int, Eq, Ordering, Hash, Spell, Str, Option, Show};
+use /std/ops/{Ord, Eql};
 use /std/time/{Date, Time, DateTime, Offset, Timestamp, iso8601};
 
 --- A date and a time of day at an offset from UTC: RFC 3339's `date-time`, a moment that keeps the offset it was written with.

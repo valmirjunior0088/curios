@@ -269,7 +269,7 @@ fn a_concept_without_a_derivation_is_refused_by_name() {
 #[test]
 fn the_signature_refusals_fire_on_a_derived_witness_as_on_a_written_one() {
     let orphan = r#"
-        use /std/{Bool, Ord};
+        use /std/{Bool}; use /std/ops/{Ord};
         satisfy Ord(Bool) { .. }
         /std/print("")
         "#;

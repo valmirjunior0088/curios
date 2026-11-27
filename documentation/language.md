@@ -1245,9 +1245,8 @@ satisfy Rem(Hours) {
 A field written `use` is a superclass, unnamed. Its type reduces to a concept application, as a `use` parameter's does, so an alias of one is a superclass too. A field takes no `@`: a concept's hidden members are its superclasses.
 
 ```crs
-use /std/{Bool};
+use /std/{Bool, Ordering};
 use /std/ops/{Eql};
-use /std/Ord/{Ordering};
 
 pub concept Ord(A: Type): pub Type {
     use Eql(A),
@@ -1323,7 +1322,8 @@ A concept with no parameter has no registered witness: a value of it is supplied
 A second dictionary for an unsealed concept at the same key is an ordinary concept value, supplied explicitly; a sealed concept refuses the literal outside its module. It proves the concept's laws as a witness does: the reversed order below takes each of its own from `Nat`'s, with the operands swapped.
 
 ```crs
-use /std/{Eq, List, Nat, Ord};
+use /std/{Eq, List, Nat};
+use /std/ops/{Ord};
 
 pub let descending(values: List(Nat)) -> List(Nat) =
     let reverse: Ord(Nat) =
@@ -1346,8 +1346,8 @@ A witness whose body is `..` alone is derived: the compiler writes its body from
 `Spell`, `Eql`, `Ord`, `Hash` and `Hash/Key` derive; every other concept refuses the form by name, and a written witness stays the norm. A derived `Hash/Key` proves its law of the order and the encoding a derivation writes, so it is derived beside a derived `Ord` and `Hash`, and its type keys a `Map` and fills a `Set`.
 
 ```crs
-use /std/{Nat, Ord, Spell};
-use /std/ops/{Eql};
+use /std/{Nat, Spell};
+use /std/ops/{Eql, Ord};
 
 pub struct Point: pub Type {
     x: Nat,

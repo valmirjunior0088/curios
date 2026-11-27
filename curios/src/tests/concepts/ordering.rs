@@ -25,7 +25,7 @@ fn strings_compare_by_code_point_and_bytes_and_booleans_bytewise() {
 #[test]
 fn lists_options_and_results_order_through_ord() {
     let source = r#"
-        use /std/{Str, Nat, List, Option, Result, Ordering, Ord, Show, Bool};
+        use /std/{Str, Nat, List, Option, Result, Ordering, Show, Bool}; use /std/ops/{Ord};
         let none: Option(Nat) = Option/none();
         let bad: Result(Str, Nat) = Result/failure("e");
         /std/print(Str/join(",", [

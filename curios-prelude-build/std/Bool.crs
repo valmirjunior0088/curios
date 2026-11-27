@@ -9,8 +9,8 @@ pub use and/{let and};
 pub mod or;
 pub use or/{let or};
 
-use /std/{Str, Option, Eq, Show, Spell, Ordering, Ord, Hash};
-use /std/ops/{Eql, Or, And};
+use /std/{Str, Option, Eq, Show, Spell, Ordering, Hash};
+use /std/ops/{Ord, Eql, Or, And};
 
 --- The other value.
 pub let not(b: Bool) -> Bool =

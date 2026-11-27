@@ -1,12 +1,8 @@
---- The three-way answer a comparison gives, with its distinctness proofs.
-pub mod Ordering;
-pub use Ordering/{let Ordering};
-
 --- Two constructors ordered by declaration position, with the laws of that order.
 pub mod by_tag;
 pub use by_tag/{let by_tag};
 
-use /std/{List, Bool, Eq};
+use /std/{List, Bool, Eq, Ordering};
 use /std/ops/{Eql};
 use /std/Bool/{True, Holds};
 

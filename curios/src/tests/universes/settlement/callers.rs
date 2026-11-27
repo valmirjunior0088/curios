@@ -486,7 +486,7 @@ fn a_level_nothing_holds_settles_at_its_least_value() {
 #[test]
 fn a_declaration_under_a_key_and_an_order_over_one_carrier_is_judged_alike() {
     let source = r#"
-        use /std/{Nat, List, Map, Hash, Ord};
+        use /std/{Nat, List, Map, Hash}; use /std/ops/{Ord};
         pub let both(@K: Type, use Hash/Key(K), use Ord(K), keys: List(K)) -> List(K) =
             let m: Map(K, Nat) = Map/of_list(List/map(keys, (k: K) => (k, 0)));
             List/sort(Map/keys(m));

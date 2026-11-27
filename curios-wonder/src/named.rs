@@ -1035,7 +1035,7 @@ pub fn declared_as(declared: Declared) -> &'static str {
 /// One witness in scope a declaration takes part in ([`Described::witnesses`]).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Witnessed {
-    /// Its name as Curios/Core writes it, which `--name` reads back: `/std/Nat/witness~/std/Ord/Ord(Nat)`.
+    /// Its name as Curios/Core writes it, which `--name` reads back: `/std/Nat/witness~/std/ops/Ord/Ord(Nat)`.
     pub name: String,
     /// Where it is written, its name being its head, where its unit holds its text.
     pub written: Option<Declaration>,

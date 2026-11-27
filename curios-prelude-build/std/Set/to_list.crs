@@ -1,4 +1,5 @@
-use /std/{List, Ord, Map, Hash};
+use /std/{List, Map, Hash};
+use /std/ops/{Ord};
 use /std/List/{Pairwise};
 use /std/Set/{Set};
 use /std/Bool/{Holds};

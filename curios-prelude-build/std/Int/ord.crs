@@ -1,4 +1,5 @@
-use /std/{Int, Bool, Eq, Ordering, Ord};
+use /std/{Int, Bool, Eq, Ordering};
+use /std/ops/{Ord};
 use /std/Bool/{True, False, Holds};
 
 --- The order of the two.

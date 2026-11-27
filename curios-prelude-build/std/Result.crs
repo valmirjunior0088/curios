@@ -1,7 +1,7 @@
 pub use Result/{failure, success};
 
-use /std/{Bool, Eq, Show, Spell, Fmt, Option, Ordering, Ord, Monad};
-use /std/ops/{Eql};
+use /std/{Bool, Eq, Show, Spell, Fmt, Option, Ordering, Monad};
+use /std/ops/{Ord, Eql};
 use /std/Bool/{True};
 
 --- Success or failure, the failure's type first.
