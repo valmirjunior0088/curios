@@ -1,4 +1,4 @@
-use /std/{Str, Nat, Bool, List, Option, Cli};
+use /std/{Str, Nat, Bool, List, Option, Io, Cli};
 use /std/Cli/{Field, Kind, Presence, Positional, Positionals, Command};
 use /std/Bool/{True, False, Holds};
 
@@ -226,8 +226,8 @@ let pick(
         end
     end;
 
---- The parse of the command `name` of the group `p` was parsed against, where the line chose it, and `none` where it chose another. A name the group lacks is refused where it is written.
-pub let command(
+-- The parse of the command `name` of the group `p` was parsed against, where the line chose it, and `none` where it chose another: what a handler is run on.
+let command(
     @c: Command,
     p: Parsed(c),
     name: Str,
@@ -237,3 +237,57 @@ pub let command(
     | leaf(_) => match ok end
     | group(_, chosen) => pick(chosen, name, @present_in(name, @ok))
     end;
+
+--- What runs where the line chose the command of the group `c` named `name`: `run`, handed that command's parse.
+pub struct Handler(c: Command): pub Type {
+    name: Str,
+    @known: HasCommand(c, name),
+    run: (Parsed(Named(c, name))) -> Io({}),
+}
+
+--- The handler of the command of `c` named `name`: `run`, handed that command's parse where the line chose it. A name the group lacks is refused where it is written, as `get` refuses one.
+pub let on(
+    @c: Command,
+    name: Str,
+    @known: HasCommand(c, name),
+    run: (Parsed(Named(c, name))) -> Io({}),
+) -> Handler(c) =
+    Handler { name = name, @known = known, run = run };
+
+--- That no command of `names` is left unhandled: what a dispatch that leaves some out reduces to, those names in the group's order. Nothing proves it, so the dispatch is refused where it is written.
+pub induct Uncovered: (names: List(Str)) -> pub Prop
+end
+
+-- The names of `c`'s commands, in the order the group lists them.
+let commands_of(c: Command) -> List(Str) =
+    match c
+    | leaf(_, _, _, _) => []
+    | group(_, _, _, commands) => List/map(commands, /std/Cli/name)
+    end;
+
+--- That `handled` names every command of the group `c`, decided by reduction: a list that leaves some out reduces to `Uncovered` of them.
+pub let Covered(c: Command, handled: List(Str)) -> Prop =
+    match List/filter(commands_of(c), (n) => Bool/not(List/contains(handled, n)))
+    | [] => True
+    | [n, ..more] => Uncovered([n, ..more])
+    end;
+
+-- The first of `handlers` whose command the line chose, run on that command's parse; a list that covers every command leaves none of the line's unrun.
+let run_chosen(@c: Command, p: Parsed(c), handlers: List(Handler(c))) -> Io({}) =
+    match handlers
+    | [] => Io/pure(())
+    | [h, ..more] =>
+        match command(p, h.name, @h.known)
+        | some(parsed) => h.run(parsed)
+        | none() => run_chosen(p, more)
+        end
+    end;
+
+--- The handler of the command the line chose among the group `p` was parsed against, run on that command's parse. Every command of the group needs one: a list that leaves some out is refused where it is written, naming them, as an `on` naming no command is.
+pub let dispatch(
+    @c: Command,
+    p: Parsed(c),
+    handlers: List(Handler(c)),
+    @_: Covered(c, List/map(handlers, (h) => h.name)),
+) -> Io({}) =
+    run_chosen(p, handlers);

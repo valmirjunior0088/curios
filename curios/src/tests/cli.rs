@@ -10,7 +10,7 @@ use {
 fn against(body: &str) -> String {
     error(&fill!(
         r#"
-        use /std/{Cli, Bool, Option, print};
+        use /std/{Cli, Bool, Option, Io, print};
 
         let deps: Cli =
             Cli/declare(
@@ -32,8 +32,8 @@ fn against(body: &str) -> String {
 #[test]
 fn a_misspelled_name_is_refused_rather_than_answered() {
     let refused = against(
-        r#"pub let read(p: Cli/Parsed(deps.command)) -> Bool =
-            match Cli/command(p, "add") | some(a) => let _port = Cli/get(a, "prot"); true | none() => false end;"#,
+        r#"pub let read(p: Cli/Parsed(deps.command)) -> Io({}) =
+            Cli/dispatch(p, [Cli/on("add", (a) => let _port = Cli/get(a, "prot"); Io/pure(()))]);"#,
     );
 
     assert!(
@@ -45,18 +45,31 @@ fn a_misspelled_name_is_refused_rather_than_answered() {
     );
 }
 
-/// A command the group lacks is refused the same way, by `HasCommand`, naming the group's command nearest to it.
+/// A handler for a command the group lacks is refused the same way, by `HasCommand`, naming the group's command nearest to it.
 #[test]
 fn a_misspelled_command_is_refused_rather_than_answered() {
     let refused = against(
-        r#"pub let read(p: Cli/Parsed(deps.command)) -> Bool =
-            match Cli/command(p, "ad") | some(_) => true | none() => false end;"#,
+        r#"pub let read(p: Cli/Parsed(deps.command)) -> Io({}) =
+            Cli/dispatch(p, [Cli/on("ad", (_) => Io/pure(())), Cli/on("add", (_) => Io/pure(()))]);"#,
     );
 
     assert!(
         refused.contains("Cli/HasCommand(")
             && refused
                 .contains(r#"which reduces to `Cli/Unknown("ad", Option/some("add"), ["add"])`"#),
+        "{refused}"
+    );
+}
+
+/// A dispatch that leaves a command without a handler is refused where it is written, by `Covered`, which reduces to `Uncovered` of the commands left out: a command a program forgets is no line it silently ignores.
+#[test]
+fn a_dispatch_that_leaves_a_command_out_is_refused_naming_it() {
+    let refused =
+        against(r#"pub let read(p: Cli/Parsed(deps.command)) -> Io({}) = Cli/dispatch(p, []);"#);
+
+    assert!(
+        refused.contains("Cli/Covered(")
+            && refused.contains(r#"which reduces to `Cli/Uncovered(["add"])`"#),
         "{refused}"
     );
 }
@@ -277,11 +290,11 @@ fn a_non_utf8_variable_is_refused_by_its_name() {
     );
 }
 
-/// A command line of groups, read by a program that reaches a command two groups down through `command`.
+/// A command line of groups, read by a program that reaches a command two groups down, each group dispatching to its handlers.
 fn deps() -> Compiled {
     compile(
         r#"
-        use /std/{Cli, Str, Option, print};
+        use /std/{Cli, Str, Option, Io, print};
 
         let deps: Cli =
             Cli/declare(
@@ -298,14 +311,10 @@ fn deps() -> Compiled {
                 Option/some("0.1.0"));
 
         Cli/main(deps, (p) =>
-            match Cli/command(p, "registry")
-            | some(r) =>
-                match Cli/command(r, "add")
-                | some(a) => print(Str/flatten(["adding ", Cli/get(a, "name"), "\n"]))
-                | none() => print("nothing\n")
-                end
-            | none() => print("nothing\n")
-            end)
+            Cli/dispatch(p, [
+                Cli/on("registry", (r) =>
+                    Cli/dispatch(r, [
+                        Cli/on("add", (a) => print(Str/flatten(["adding ", Cli/get(a, "name"), "\n"])))]))]))
         "#,
     )
     .expect("the entry compiles")
