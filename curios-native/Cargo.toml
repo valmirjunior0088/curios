@@ -16,6 +16,8 @@ workspace = true
 test-support = ["dep:log"]
 
 [dependencies]
+# The spans a host call is read apart by, `profile!` over `tracing` alone, so the launcher takes nothing more of the compiler's than that.
+curios-tracing = { workspace = true }
 # `ForeignStore`, which a bundle carries archived: the rows a payload's `ffi` imports are typed by cannot be recovered from the payload.
 curios-abi = { workspace = true }
 # rkyv itself, for the bundle archive the launcher reads.

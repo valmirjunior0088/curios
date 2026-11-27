@@ -422,15 +422,23 @@ impl Answers {
                 params: Li::shape(),
                 returned: Replied::<Ro::Reply>::returned(),
             },
+            // A call's three parts, each a span: its operands read out of the guest, the host's answer, and the reply written back, so what the crossing itself costs is the call's span less these.
             Entered::of(
-                move |caller, params, results| match f(Li::lift(caller, params)?).answered() {
-                    Answered::Now(reply) => {
-                        Replied { op, reply }.reply(caller, results).map(|()| None)
+                move |caller, params, results| {
+                    let operands =
+                        curios_tracing::profile!("host::lift" => Li::lift(caller, params))?;
+                    match curios_tracing::profile!("host::answer" => f(operands).answered()) {
+                        Answered::Now(reply) => curios_tracing::profile!(
+                            "host::lower" => Replied { op, reply }.reply(caller, results)
+                        )
+                        .map(|()| None),
+                        Answered::Later(later) => Ok(Some(filed(later))),
                     }
-                    Answered::Later(later) => Ok(Some(filed(later))),
                 },
                 move |caller, reply: Ro::Reply, results| {
-                    Replied { op, reply }.reply(caller, results)
+                    curios_tracing::profile!(
+                        "host::lower" => Replied { op, reply }.reply(caller, results)
+                    )
                 },
             ),
         );
@@ -713,12 +721,17 @@ fn link(
         }
     };
 
+    // Each call a span grouped by its row, from the closure's entry to its return: what Wasmtime's entry and trampoline cost is the guest's time around it.
+    let row = name.to_string();
     linker
         .func_new(
             Namespace::Ffi.as_str(),
             name,
             host_func_type(engine, declared),
-            move |mut caller, params, results| trampoline(&mut caller, params, results),
+            move |mut caller, params, results| {
+                curios_tracing::profile!("host::call", group = %row);
+                trampoline(&mut caller, params, results)
+            },
         )
         .map(|_| ())
         .map_err(|error| {
