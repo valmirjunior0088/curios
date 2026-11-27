@@ -1,7 +1,7 @@
 what = "The jig's own crates, whose names start with x: these task files' runner, the bench and the board"
 
-# The scripts the task files run, each beside the task file of its step; the one that holds the agent files to the tree, the agent files, `CLAUDE.md` and the Markdown under `.claude/`, and the patterns of the files that hold the sources' names.
-shell.run = ["git", "ls-files", "--", "xtask/tasks/*.sh"]
+# The scripts the task files run, each beside the task file of its step, and the template the installer is rendered from; the one that holds the agent files to the tree, the agent files, `CLAUDE.md` and the Markdown under `.claude/`, and the patterns of the files that hold the sources' names.
+shell.run = ["git", "ls-files", "--", "xtask/tasks/*.sh", "xtask/tasks/*.sh.in"]
 scripts.agents = "xtask/tasks/jig/agents.sh"
 agent_files.run = ["git", "ls-files", "--", "CLAUDE.md", ".claude/*.md"]
 sources = ["*.rs", "*.crs", "*.toml", "*.js", "*.sh", "*.yml"]

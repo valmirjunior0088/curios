@@ -169,7 +169,7 @@ run = [
 what = "Render the install script a release attaches, its version baked in, under .artifacts/install.sh beside the release's other assets"
 produces.script = ".artifacts/install.sh"
 run = [
-    { write = "{.installer.produces.script}", template = "xtask/tasks/install.sh" },
+    { write = "{.installer.produces.script}", template = "xtask/tasks/install.sh.in" },
 ]
 
 [clean]
