@@ -806,10 +806,10 @@ fn a_library_checked_with_its_tests_is_narrated_as_that() {
     assert_eq!(
         steps,
         [
-            "Checking `/app` with its tests",
-            "Checked `/app` with its tests",
-            "Storing `/app`",
-            "Stored `/app`",
+            "Checking `/app` · tests",
+            "Checked `/app` · tests",
+            "Storing `/app` · tests",
+            "Stored `/app` · tests",
             "Checking `/app`",
             "Checked `/app`",
             "Storing `/app`",

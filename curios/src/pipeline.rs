@@ -259,6 +259,8 @@ pub struct Steps {
     program: Option<Tree>,
     /// Whether the program's open node is `emit`, the one a failure ends rather than a refusal.
     emitting: bool,
+    /// Whether the program is the one that runs the subject's tests, which its tree says beside the subject as the unit's tree compiled with them does.
+    tests: bool,
 }
 
 impl Steps {
@@ -270,12 +272,21 @@ impl Steps {
             unit: None,
             program: None,
             emitting: false,
+            tests: false,
         }
     }
 
     /// The narration of a program's compile: `subject` is the entry, named beside `manifest` where the invocation stands elsewhere, and `then` what follows its build.
     pub fn program(subject: &Subject, manifest: Option<&Path>, then: Then) -> Self {
         Self::new(subject, manifest, Closing::Program(then))
+    }
+
+    /// The narration of the program that runs `subject`'s tests: a program's, its tree saying beside the subject that it is the tests'.
+    pub fn tests(subject: &Subject, manifest: Option<&Path>, then: Then) -> Self {
+        Self {
+            tests: true,
+            ..Self::program(subject, manifest, then)
+        }
     }
 
     /// The narration of a library's compile, where no program is: `subject` is the last unit, and its tree goes on past the fold.
@@ -310,11 +321,12 @@ impl Steps {
                 compiled,
             } => {
                 let subject = Subject::Mounted(*prefix);
-                let mut tree = Tree::of(&subject, None);
-                // A question compiles its subject with its tests and then again as what stands on it is built: the first is checked as that, which tells the two trees of one unit apart.
-                let check = Step::Check {
-                    tested: matches!(compiled, Compiled::Tested),
+                // A question compiles its subject with its tests and then again as what stands on it is built: the first tree says so beside its subject, which tells the two trees of one unit apart.
+                let mut tree = match compiled {
+                    Compiled::Tested => Tree::tested(&subject, None),
+                    Compiled::Built => Tree::of(&subject, None),
                 };
+                let check = Step::Check;
 
                 tree.open(check, verdicts.is_none() && !self.goes_on(&subject));
                 self.unit = Some((subject, tree));
@@ -326,9 +338,9 @@ impl Steps {
                     (Closing::Checked, false) => true,
                     (Closing::Checked, true) | (Closing::Units | Closing::Library, _) => return,
                 };
-                let mut tree = Tree::of(&self.subject, self.manifest.as_deref());
+                let mut tree = program_tree(&self.subject, self.manifest.as_deref(), self.tests);
 
-                tree.open(Step::Check { tested: false }, last);
+                tree.open(Step::Check, last);
                 self.program = Some(tree);
             }
             // What the cabinet held is not narrated, and is settled.
@@ -442,7 +454,15 @@ impl Steps {
                 .map(|(_, tree)| tree),
         };
 
-        opened.unwrap_or_else(|| Tree::of(&self.subject, self.manifest.as_deref()))
+        opened.unwrap_or_else(|| program_tree(&self.subject, self.manifest.as_deref(), self.tests))
+    }
+}
+
+/// The tree of `subject`'s program, beside `manifest` as [`Tree::of`] names it, and `· tests` beside it where the program runs the subject's tests, whether its build was narrated or its payload reused.
+pub fn program_tree(subject: &Subject, manifest: Option<&Path>, tests: bool) -> Tree {
+    match tests {
+        true => Tree::tested(subject, manifest),
+        false => Tree::of(subject, manifest),
     }
 }
 

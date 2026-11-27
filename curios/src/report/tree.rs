@@ -228,13 +228,17 @@ impl Trees {
                 tree,
                 subject,
                 manifest,
+                tested,
             } => {
-                let line = match &manifest {
+                let mut line = match &manifest {
                     Some(manifest) => bold(subject)
                         .then(" ")
                         .then(dim(format_args!("({manifest})"))),
                     None => bold(subject),
                 };
+                if tested {
+                    line = line.then(dim(" · tests"));
+                }
                 self.drawn.insert(
                     tree,
                     Drawn {

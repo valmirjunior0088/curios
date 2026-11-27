@@ -98,6 +98,7 @@ fn a_nodes_lines_beneath_are_drawn_with_its_closing() {
             tree,
             subject: "/app".to_string(),
             manifest: None,
+            tested: false,
         },
         Event::Began {
             tree,
@@ -138,10 +139,11 @@ fn record() -> Vec<Event> {
             tree: library,
             subject: "/app".to_string(),
             manifest: Some("../curios.toml".to_string()),
+            tested: true,
         },
         Event::Began {
             tree: library,
-            node: Node::Step(Step::Check { tested: true }),
+            node: Node::Step(Step::Check),
             last: false,
         },
         Event::Closed {
@@ -164,6 +166,7 @@ fn record() -> Vec<Event> {
             tree: program,
             subject: "/app".to_string(),
             manifest: None,
+            tested: false,
         },
         Event::Began {
             tree: program,
@@ -203,7 +206,7 @@ fn both_drawings_say_every_fact_of_one_record() {
     for fact in [
         "/app",
         "../curios.toml",
-        "with its tests",
+        "· tests",
         "refused in 0.1s",
         "the cabinet is read-only",
         "/app/draws",
@@ -228,20 +231,22 @@ fn a_plain_line_names_its_subject_whatever_is_open_beside_it() {
             tree: library,
             subject: "/lib".to_string(),
             manifest: None,
+            tested: true,
         },
         Event::Named {
             tree: program,
             subject: "app".to_string(),
             manifest: None,
+            tested: false,
         },
         Event::Began {
             tree: library,
-            node: Node::Step(Step::Check { tested: true }),
+            node: Node::Step(Step::Check),
             last: false,
         },
         Event::Began {
             tree: program,
-            node: Node::Step(Step::Check { tested: false }),
+            node: Node::Step(Step::Check),
             last: false,
         },
         Event::Closed {
@@ -261,7 +266,7 @@ fn a_plain_line_names_its_subject_whatever_is_open_beside_it() {
 
     assert_eq!(
         drawn,
-        "Checking `/lib` with its tests\nChecking `app`\nChecked `app`: refused in 0.1s\nChecked `/lib` with its tests in 0.1s\n"
+        "Checking `/lib` · tests\nChecking `app`\nChecked `app`: refused in 0.1s\nChecked `/lib` · tests in 0.1s\n"
     );
 }
 
@@ -389,8 +394,9 @@ fn one_at_a_time() -> Vec<Event> {
             tree: unit,
             subject: "/app".to_string(),
             manifest: None,
+            tested: false,
         },
-        step(unit, Step::Check { tested: false }, false),
+        step(unit, Step::Check, false),
         done(unit),
         Event::Settled,
         step(unit, Step::Store, true),
@@ -399,8 +405,9 @@ fn one_at_a_time() -> Vec<Event> {
             tree: program,
             subject: "app".to_string(),
             manifest: None,
+            tested: false,
         },
-        step(program, Step::Check { tested: false }, false),
+        step(program, Step::Check, false),
         done(program),
         step(program, Step::Build, false),
         done(program),
@@ -460,10 +467,11 @@ fn a_subject_that_ends_behind_an_older_one_is_written_in_its_turn() {
         tree,
         subject: subject.to_string(),
         manifest: None,
+        tested: false,
     };
     let check = |tree| Event::Began {
         tree,
-        node: Node::Step(Step::Check { tested: false }),
+        node: Node::Step(Step::Check),
         last: true,
     };
     let done = |tree| Event::Closed {
@@ -523,10 +531,11 @@ fn a_tree_is_parted_from_what_stands_above_it_by_one_blank_line() {
             tree: library,
             subject: "/app".to_string(),
             manifest: None,
+            tested: false,
         },
         Event::Began {
             tree: library,
-            node: Node::Step(Step::Check { tested: false }),
+            node: Node::Step(Step::Check),
             last: true,
         },
         Event::Closed {
@@ -542,6 +551,7 @@ fn a_tree_is_parted_from_what_stands_above_it_by_one_blank_line() {
             tree: program,
             subject: "app".to_string(),
             manifest: None,
+            tested: false,
         },
         Event::Stood {
             tree: program,
@@ -572,6 +582,7 @@ fn a_tree_is_parted_from_what_stands_above_it_by_one_blank_line() {
             tree: unit,
             subject: "/app".to_string(),
             manifest: None,
+            tested: false,
         },
         Event::Stood {
             tree: unit,
@@ -605,10 +616,11 @@ fn a_region_holds_a_third_of_the_terminal_and_counts_the_rest() {
             tree,
             subject: format!("/unit{subject}"),
             manifest: None,
+            tested: false,
         };
         let began = Event::Began {
             tree,
-            node: Node::Step(Step::Check { tested: false }),
+            node: Node::Step(Step::Check),
             last: true,
         };
         screen.write(&live.draw(named, start, (80, 12)).shown);
@@ -641,10 +653,11 @@ fn a_running_check_shows_how_far_it_has_come_at_the_next_tick() {
             tree: unit,
             subject: "/app".to_string(),
             manifest: None,
+            tested: false,
         },
         Event::Began {
             tree: unit,
-            node: Node::Step(Step::Check { tested: false }),
+            node: Node::Step(Step::Check),
             last: false,
         },
     ] {

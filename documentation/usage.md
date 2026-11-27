@@ -316,14 +316,14 @@ curios test --target browser     # the same tests, run by whatever opens the pri
 
 Each unit is compiled as its own test program — the same compilation `run` performs, with the final term replaced by a synthesized scheduler over that unit's selected tests, `/test/main`, which the toolchain's unit `/test` declares and a test compilation alone links, for that term alone — and every selected test runs in an instantiation of its own, reporting each check it found failed to its runner. The unit itself is compiled with every test it declares whatever the filter, and is the one `wonder` and `check` read; the filter narrows the program, so only the tests it selects are built past the front end, and a unit it selects none from builds no program. A unit holds its tests only here and in what `wonder` and `check` ask of it: `run`, `compile` and a unit compiled for the units after it leave them out.
 
-The report is on standard error, on each subject's own tree, after the nodes that built its test program ([What a command reports](#what-a-command-reports)). A unit and its test program are each a subject, so a library is named twice: checked with its tests and filed, then built into the program that runs them.
+The report is on standard error, on each subject's own tree, after the nodes that built its test program ([What a command reports](#what-a-command-reports)). A unit and its test program are each a subject, so a library is named twice, `· tests` beside its name each time: checked with its tests and filed, then built into the program that runs them. A unit compiled without its tests, as a dependency or what an executable stands on, and an executable, are named alone.
 
 ```text
-/demo
-├─ check with its tests; 0.3s
+/demo · tests
+├─ check; 0.3s
 └─ store; 0.0s
 
-/demo
+/demo · tests
 ├─ check; 0.0s
 ├─ build; 0.2s
 ├─ emit; 0.4s
@@ -495,8 +495,8 @@ Several subjects are each admitted alone, as `format` admits its, every one befo
 Standard error narrates what had to be compiled, as [`wonder`](#wonder) does, and its last line counts what was found, the lints always and the errors and goals beside them where there were any — `2 lints`, `0 lints`, `1 lint, 1 error`, `0 lints, 1 goal`:
 
 ```text
-/demo
-├─ check with its tests; 0.3s
+/demo · tests
+├─ check; 0.3s
 └─ store; 0.0s
 
 demo

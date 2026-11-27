@@ -24,8 +24,8 @@ impl Opened {
 /// A step done for a subject, which each drawing spells its own way: `check` in the tree, `Checking` and `Checked` plain.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Step {
-    /// A unit or a program checked, `tested` where it is checked with the tests it declares.
-    Check { tested: bool },
+    /// A unit or a program checked.
+    Check,
     /// A unit handed to the cabinet.
     Store,
     /// A program lowered and optimized.
@@ -52,8 +52,7 @@ impl Step {
     /// The node's label in the tree: `check with its tests`.
     pub fn label(self) -> &'static str {
         match self {
-            Step::Check { tested: false } => "check",
-            Step::Check { tested: true } => "check with its tests",
+            Step::Check => "check",
             Step::Store => "store",
             Step::Build => "build",
             Step::Emit => "emit",
@@ -70,7 +69,7 @@ impl Step {
     /// The verb a plain line opens on where the step begins: `Checking`.
     pub fn doing(self) -> &'static str {
         match self {
-            Step::Check { .. } => "Checking",
+            Step::Check => "Checking",
             Step::Store => "Storing",
             Step::Build => "Building",
             Step::Emit => "Emitting",
@@ -87,7 +86,7 @@ impl Step {
     /// The verb a plain line opens on where the step ends, or where it is said at once: `Checked`.
     pub fn done(self) -> &'static str {
         match self {
-            Step::Check { .. } => "Checked",
+            Step::Check => "Checked",
             Step::Store => "Stored",
             Step::Build => "Built",
             Step::Emit => "Emitted",
@@ -98,14 +97,6 @@ impl Step {
             Step::Pin => "Pinned",
             Step::Format => "Formatted",
             Step::Try => "Try",
-        }
-    }
-
-    /// What a plain line says after the subject: ` with its tests`.
-    pub fn rest(self) -> &'static str {
-        match self {
-            Step::Check { tested: true } => " with its tests",
-            _ => "",
         }
     }
 }
@@ -131,11 +122,12 @@ pub enum Closing {
 /// One thing the transcript is told.
 #[derive(Debug, Clone)]
 pub enum Event {
-    /// A tree for `subject`, beside the manifest that governs it as the reader would spell it where the invocation stands elsewhere: its line is written with its first node, or as it is left where it names the manifest.
+    /// A tree for `subject`, beside the manifest that governs it as the reader would spell it where the invocation stands elsewhere, and `tested` where it compiles the subject with its tests: its line is written with its first node, or as it is left where it names the manifest.
     Named {
         tree: Opened,
         subject: String,
         manifest: Option<String>,
+        tested: bool,
     },
     /// A node of `tree` begins, `last` where its tree plans no node after it.
     Began {

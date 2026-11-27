@@ -25,6 +25,8 @@ struct Named {
     subject: String,
     /// The manifest beside the subject, until a line has named it.
     manifest: Option<String>,
+    /// Whether the subject is compiled with its tests, or is the program that runs them, said beside it on every line that names it.
+    tested: bool,
     /// The node open on the tree, by which its closing and what its work writes are drawn.
     open: Option<Node>,
 }
@@ -32,21 +34,21 @@ struct Named {
 impl Named {
     /// The subject in backticks, the manifest beside it where no line has named it yet: `` `hello` (../curios.toml) ``.
     fn subject(&mut self) -> Piece {
-        let subject = quoted(&self.subject);
-
-        match self.manifest.take() {
-            Some(manifest) => subject.then(" ").then(dim(format_args!("({manifest})"))),
-            None => subject,
+        let mut subject = quoted(&self.subject);
+        if let Some(manifest) = self.manifest.take() {
+            subject = subject.then(" ").then(dim(format_args!("({manifest})")));
         }
+        if self.tested {
+            subject = subject.then(dim(" · tests"));
+        }
+
+        subject
     }
 
     /// The line a closing of the open node opens on: a step's past verb and the subject, or a test's path.
     fn closing(&mut self) -> Piece {
         match self.open.take() {
-            Some(Node::Step(step)) => Piece::from(step.done())
-                .then(" ")
-                .then(self.subject())
-                .then(step.rest()),
+            Some(Node::Step(step)) => Piece::from(step.done()).then(" ").then(self.subject()),
             Some(Node::Test(path)) => Piece::from("Tested ").then(quoted(&path)),
             None => self.subject(),
         }
@@ -79,12 +81,14 @@ impl Lines {
                 tree,
                 subject,
                 manifest,
+                tested,
             } => {
                 self.named.insert(
                     tree,
                     Named {
                         subject,
                         manifest,
+                        tested,
                         open: None,
                     },
                 );
@@ -94,10 +98,7 @@ impl Lines {
             Event::Began { tree, node, .. } => {
                 let named = self.named.entry(tree).or_default();
                 let began = match &node {
-                    Node::Step(step) => Piece::from(step.doing())
-                        .then(" ")
-                        .then(named.subject())
-                        .then(step.rest()),
+                    Node::Step(step) => Piece::from(step.doing()).then(" ").then(named.subject()),
                     Node::Test(path) => Piece::from("Testing ").then(quoted(path)),
                 };
                 named.open = Some(node);
@@ -122,8 +123,7 @@ impl Lines {
             } => {
                 let line = Piece::from(step.done())
                     .then(" ")
-                    .then(self.named.entry(tree).or_default().subject())
-                    .then(step.rest());
+                    .then(self.named.entry(tree).or_default().subject());
 
                 indented(closed(line, Closing::Stands(stands)).then("\n"), beneath)
             }

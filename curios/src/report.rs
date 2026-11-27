@@ -294,6 +294,15 @@ pub struct Tree {
 impl Tree {
     /// A tree for `subject`, naming `manifest` beside it when the invocation does not stand in the manifest's directory, which is the one case where what governs could otherwise be a guess.
     pub fn of(subject: &Subject, manifest: Option<&Path>) -> Self {
+        Self::named(subject, manifest, false)
+    }
+
+    /// A tree for `subject` compiled with its tests, or for the program that runs them, which its line says beside it, `/app · tests`, and `manifest` as [`Tree::of`] names it.
+    pub fn tested(subject: &Subject, manifest: Option<&Path>) -> Self {
+        Self::named(subject, manifest, true)
+    }
+
+    fn named(subject: &Subject, manifest: Option<&Path>, tested: bool) -> Self {
         let here = env::current_dir().and_then(|here| here.canonicalize());
         let opened = Opened::minted();
         tell(Event::Named {
@@ -302,6 +311,7 @@ impl Tree {
             manifest: manifest
                 .zip(here.ok())
                 .and_then(|(manifest, here)| spelled_from(manifest, &here)),
+            tested,
         });
 
         Self {

@@ -13,8 +13,8 @@ use host::*;
 use {
     crate::{
         Access, Failure, Opened, Piece, Quoted, Relayed, Reporting, Run, Served, Steps, Subject,
-        Then, Tree, Wrote, alone, bound, keep, kept, port_of, reader, relay, serve_run, total,
-        troubled, url,
+        Then, Tree, Wrote, alone, bound, keep, kept, port_of, program_tree, reader, relay,
+        serve_run, total, troubled, url,
     },
     curios::{Outcome, TestSubject, Tested, test_subjects},
     curios_browser::{Posted, Stream},
@@ -187,7 +187,7 @@ pub fn compiled(
     then: Then,
 ) -> Result<(Tested, Tree), CompileError> {
     // Two callbacks write one narration, so it is lent to each in turn.
-    let steps = RefCell::new(Steps::program(shown, subject.manifest(), then));
+    let steps = RefCell::new(Steps::tests(shown, subject.manifest(), then));
     let tested = subject.compile(
         budget,
         verdicts,
@@ -486,7 +486,7 @@ pub fn serve_tests(
             // Its tests are run once every subject is built and the address is said, so its build's tree ends here and its tests stand on one of their own.
             Some(files) => {
                 planned.push_back((
-                    Tree::of(&shown, subject.manifest()),
+                    program_tree(&shown, subject.manifest(), true),
                     tested.modules().to_vec(),
                 ));
                 pages.push((Served { files }, tested.scheduled().count()));

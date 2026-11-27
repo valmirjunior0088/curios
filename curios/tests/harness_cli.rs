@@ -157,12 +157,12 @@ fn every_outcome_reports_in_declaration_order_and_exits_one() {
     in_order(
         &stderr(&output),
         &[
-            "Checking `/app` with its tests\n",
-            "Checked `/app` with its tests in ",
-            "Stored `/app` in ",
-            "Checked `/app` in ",
-            "Built `/app` in ",
-            "Emitted `/app` in ",
+            "Checking `/app` · tests\n",
+            "Checked `/app` · tests in ",
+            "Stored `/app` · tests in ",
+            "Checked `/app` · tests in ",
+            "Built `/app` · tests in ",
+            "Emitted `/app` · tests in ",
             "Testing `/app/doubling_passes`\nTested `/app/doubling_passes`: passed in ",
             "Testing `/app/addition_passes`\nTested `/app/addition_passes`: passed in ",
             "Testing `/app/equality_fails`\n`/app/equality_fails`> comparing\nTested `/app/equality_fails`: failed in ",
@@ -174,12 +174,12 @@ fn every_outcome_reports_in_declaration_order_and_exits_one() {
             "Tested `/app/exits_seven`: exited 7 in ",
             "; lib.crs:17:6\n",
             "Tested `/app/effect_passes`: passed in ",
-            "Tested `/app`: 3 passed, 1 failed, 1 trapped, 1 exited in ",
+            "Tested `/app` · tests: 3 passed, 1 failed, 1 trapped, 1 exited in ",
             "Checked `/app` in ",
             "Stored `/app` in ",
-            "Checking `app`\n",
-            "Checked `app` in ",
-            "Tested `app`: 0 passed, 0 failed\n",
+            "Checking `app` · tests\n",
+            "Checked `app` · tests in ",
+            "Tested `app` · tests: 0 passed, 0 failed\n",
         ],
     );
     assert!(
@@ -234,7 +234,7 @@ test fails_quietly =
             "; lib.crs:3:6\n",
             "Tested `/app/fails_quietly`: exited 1 in ",
             "; lib.crs:6:6\n",
-            "Tested `/app`: 0 passed, 0 failed, 2 exited in ",
+            "Tested `/app` · tests: 0 passed, 0 failed, 2 exited in ",
         ],
     );
     assert_eq!(output.status.code(), Some(1));
@@ -282,7 +282,7 @@ test mutters =
             "Testing `/app/quiet`\nTested `/app/quiet`: passed in ",
             "Testing `/app/draws`\nTested `/app/draws`: passed in ",
             "Testing `/app/mutters`\n`/app/mutters`> half\nTested `/app/mutters`: passed in ",
-            "Tested `/app`: 3 passed, 0 failed in ",
+            "Tested `/app` · tests: 3 passed, 0 failed in ",
         ],
     );
 
@@ -319,9 +319,9 @@ fn a_filter_selects_by_path_prefix_and_a_second_run_reuses_the_payload() {
     in_order(
         &stderr(&cold),
         &[
-            "Emitted `/app` in ",
+            "Emitted `/app` · tests in ",
             "Testing `/app/addition_passes`\nTested `/app/addition_passes`: passed in ",
-            "Tested `/app`: 1 passed, 0 failed, 5 skipped in ",
+            "Tested `/app` · tests: 1 passed, 0 failed, 5 skipped in ",
         ],
     );
     assert_eq!(cold.status.code(), Some(0));
@@ -332,8 +332,8 @@ fn a_filter_selects_by_path_prefix_and_a_second_run_reuses_the_payload() {
         &stderr(&warm),
         &[
             "Testing `/app/addition_passes`\nTested `/app/addition_passes`: passed in ",
-            "Tested `/app`: 1 passed, 0 failed, 5 skipped in ",
-            "Tested `app`: 0 passed, 0 failed\n",
+            "Tested `/app` · tests: 1 passed, 0 failed, 5 skipped in ",
+            "Tested `app` · tests: 0 passed, 0 failed\n",
             "1 passed, 0 failed, 5 skipped; ",
         ],
     );
@@ -407,7 +407,7 @@ end
             "Tested `/app/first`: passed in ",
             "Tested `/app/second`: passed in ",
             "Tested `/app/Inner/kept`: passed in ",
-            "Tested `/app`: 3 passed, 0 failed, 2 skipped in ",
+            "Tested `/app` · tests: 3 passed, 0 failed, 2 skipped in ",
         ],
     );
     // A run of one subject ends on that subject's tally, which is the run's.
@@ -474,9 +474,9 @@ fn a_target_runs_only_the_tests_of_what_it_selects() {
     in_order(
         &stderr(&executable),
         &[
-            "Checking `app`\n",
+            "Checking `app` · tests\n",
             "Tested `/in_app`: passed in ",
-            "Tested `app`: 1 passed, 0 failed in ",
+            "Tested `app` · tests: 1 passed, 0 failed in ",
         ],
     );
     assert!(
@@ -489,9 +489,9 @@ fn a_target_runs_only_the_tests_of_what_it_selects() {
     in_order(
         &stderr(&loose),
         &[
-            "Checking `scratch/loose.crs`\n",
+            "Checking `scratch/loose.crs` · tests\n",
             "Tested `/loose/in_loose`: passed in ",
-            "Tested `scratch/loose.crs`: 1 passed, 0 failed in ",
+            "Tested `scratch/loose.crs` · tests: 1 passed, 0 failed in ",
         ],
     );
 }
@@ -507,9 +507,9 @@ fn a_module_on_standard_input_runs_its_own_tests_and_is_no_program_to_run() {
     in_order(
         &stderr(&tested),
         &[
-            "Checking `<stdin>`\n",
+            "Checking `<stdin>` · tests\n",
             "Tested `/stdin/in_piped`: passed in ",
-            "Tested `<stdin>`: 1 passed, 0 failed in ",
+            "Tested `<stdin>` · tests: 1 passed, 0 failed in ",
         ],
     );
     assert_eq!(tested.status.code(), Some(0));
@@ -606,9 +606,9 @@ fn a_live_test_run_leaves_the_trees_and_nothing_of_the_region() {
     in_order(
         &shown,
         &[
-            "/app\n├─ check with its tests; ",
+            "/app · tests\n├─ check; ",
             "\n└─ store; ",
-            "s\n\n/app\n├─ check; ",
+            "s\n\n/app · tests\n├─ check; ",
             "\n├─ build; ",
             "\n├─ emit; ",
             "\n├─ /app/doubling_passes; ✓ passed in ",
@@ -621,13 +621,13 @@ fn a_live_test_run_leaves_the_trees_and_nothing_of_the_region() {
             "└─ 3 passed, 1 failed, 1 trapped, 1 exited; ",
             "s\n\n/app\n├─ check; ",
             "\n└─ store; ",
-            "s\n\napp\n├─ check; ",
+            "s\n\napp · tests\n├─ check; ",
             "\n└─ 0 passed, 0 failed\n\n3 passed, 1 failed, 1 trapped, 1 exited; ",
         ],
     );
     // A row the region left would name a node again, or count units.
     assert_eq!(shown.matches("├─ /app/").count(), 6, "{shown}");
-    assert_eq!(shown.matches("├─ check; ").count(), 3, "{shown}");
+    assert_eq!(shown.matches("├─ check; ").count(), 4, "{shown}");
     assert!(!shown.contains(" units; "), "{shown}");
 }
 

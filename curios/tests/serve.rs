@@ -354,10 +354,10 @@ fn test_serves_the_run_at_the_root_and_ends_with_the_tally_once_every_step_is_ta
     in_order(
         &shown,
         &[
-            "Emitted `/app` in ",
-            "Emitted `app` in ",
-            "Checking `quiet`\n",
-            "Tested `quiet`: 0 passed, 0 failed\n",
+            "Emitted `/app` · tests in ",
+            "Emitted `app` · tests in ",
+            "Checking `quiet` · tests\n",
+            "Tested `quiet` · tests: 0 passed, 0 failed\n",
         ],
     );
     // The step handed over is the test in hand, begun: the one whose ending is yet to be said while its page runs.
@@ -404,11 +404,11 @@ fn test_serves_the_run_at_the_root_and_ends_with_the_tally_once_every_step_is_ta
                 "    expected: `2`\n",
                 "Testing `/app/exits`\n",
                 "Tested `/app/exits`: exited 7 in _; lib.crs:9:6\n",
-                "Tested `/app`: 1 passed, 1 failed, 1 exited in _\n",
+                "Tested `/app` · tests: 1 passed, 1 failed, 1 exited in _\n",
                 "Testing `/own`\n",
                 "{drawn}",
                 "Tested `/own`: passed in _\n",
-                "Tested `app`: 1 passed, 0 failed in _\n",
+                "Tested `app` · tests: 1 passed, 0 failed in _\n",
                 "2 passed, 1 failed, 1 exited; _\n",
             ),
             port = port,
@@ -444,11 +444,11 @@ fn test_exits_zero_once_every_selected_test_has_passed() {
     in_order(
         &opening,
         &[
-            "Checked `/app` in ",
-            "Tested `/app`: 0 passed, 0 failed, 3 skipped\n",
-            "Emitted `app` in ",
-            "Checking `quiet`\n",
-            "Tested `quiet`: 0 passed, 0 failed\n",
+            "Checked `/app` · tests in ",
+            "Tested `/app` · tests: 0 passed, 0 failed, 3 skipped\n",
+            "Emitted `app` · tests in ",
+            "Checking `quiet` · tests\n",
+            "Tested `quiet` · tests: 0 passed, 0 failed\n",
         ],
     );
     assert!(
@@ -464,7 +464,7 @@ fn test_exits_zero_once_every_selected_test_has_passed() {
         untimed(&closing),
         concat!(
             "Tested `/own`: passed in _\n",
-            "Tested `app`: 1 passed, 0 failed in _\n",
+            "Tested `app` · tests: 1 passed, 0 failed in _\n",
             "1 passed, 0 failed, 3 skipped; _\n",
         )
     );
