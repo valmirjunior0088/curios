@@ -1,24 +1,23 @@
-//! The live drawing: what is settled above what is open.
+//! The live drawing: what is written for good, and beneath it a status redrawn.
 //!
-//! **Above, for good, the oldest open subject streams as the tree drawing writes it**: its line, each node once it closes, what its tests write quoted beneath their nodes. A subject that begins while an older one is open is held, shown in the region, until every subject opened before it has ended; then what it holds is written and it streams in turn. So the scrollback is the tree drawing's bytes in the order subjects opened, and with one subject open at a time it is the tree drawing's bytes exactly.
+//! **Above, for good, the tree drawing's bytes as it writes them**: each subject's line, each node once it closes, what its tests write quoted beneath their nodes. Subjects are narrated one at a time, so the scrollback is the tree drawing's bytes exactly.
 //!
-//! **Beneath, a region redrawn**: the streaming subject's running node, then each held subject's tree so far, capped at a third of the terminal's rows with `+ N more`, then what is done, `2 of 7 units; 2.4s`. A running node reads as it will when it closes, its time after `;`, and a check behind `·` how far it has come, `├─ check; 2.4s · 416 of 1,040 · `/std/Map/insert``, which the clock alone draws. Every row is cut at the terminal's width, `…` where cut, and drawn dim: the region is what is not settled yet.
+//! **Beneath, the status**: the running node as it will read when it closes, its time after `;`, and of a check behind `·` how far it has come, `├─ check; 2.4s · 416 of 1,040 · `/std/Map/insert``, which the clock alone draws; then what is done, `2 of 7 units; 2.4s`, directly beneath the node, or directly beneath what is written for good where no node runs. Each line is clipped at the terminal's width and drawn dim: the status is what is not settled yet.
 //!
-//! **Nothing to restore.** A frame is a carriage return, a cursor up over the rows the region took, an erase to the end of the screen, what is written above, and the region again: no alternate screen, no raw mode, no hidden cursor. An interrupted command leaves its last frame; a finished one leaves none ([`Live::finish`]).
+//! **The cursor is the boundary.** Between frames the cursor stands at the start of the status's first line, where what is written for good ends, so a terminal that reflows on a resize carries the boundary with the text it stands in. A frame erases from the cursor to the end of the screen, which takes the status however a narrowing wrapped it, writes what is for good, then writes the status with autowrap off, so each line takes one row whatever width the terminal has by the time it reads the frame, and moves back up over the lines that write drew alone: nothing is counted across frames, and no mode is left set.
+//!
+//! **Every ending erases it.** The finish writes the tally for good, a blank line above it, in the regular colour; a signal or a panic that ends the command writes what the finish would have written then ([`Live::farewell`]), which each frame leaves for it.
 //!
 //! **Time and the terminal are handed in**: every frame is drawn for a moment and a size the caller reads, so a frame is a function of what the drawing was told and when.
 
 use {
-    super::{Event, Opened, Trees, grouped, seconds},
+    super::{Event, Trees, grouped, seconds},
     crate::{Piece, reader},
     curios_common::clusters,
-    std::{collections::BTreeMap, mem, time::Instant},
+    std::{mem, time::Instant},
 };
 
-/// The fewest rows a region is given, whatever a third of the terminal comes to.
-const FEWEST_ROWS: usize = 3;
-
-/// A node a subject runs, as the region shows it until it closes.
+/// A node that runs, as the status shows it until it closes.
 struct Running {
     /// The node's connector and label, as the tree draws them: `├─ check`.
     label: String,
@@ -35,38 +34,26 @@ struct Walk {
 }
 
 impl Running {
-    /// The node's row at `now`, as it will read when it closes, its time after `;`, then how far its check has come: `├─ check; 2.4s · 416 of 1,040 · `/std/Map/insert``.
-    fn row(&self, now: Instant) -> String {
-        let mut row = format!(
+    /// The node's line at `now`, as it will read when it closes, its time after `;`, then how far its check has come: `├─ check; 2.4s · 416 of 1,040 · `/std/Map/insert``.
+    fn line(&self, now: Instant) -> String {
+        let mut line = format!(
             "{}; {}",
             self.label,
             seconds(now.saturating_duration_since(self.began))
         );
         if let Some(walk) = &self.walked {
-            row.push_str(&format!(
+            line.push_str(&format!(
                 " · {} of {}",
                 grouped(walk.done as u64),
                 grouped(walk.of as u64)
             ));
             if let Some(on) = &walk.on {
-                row.push_str(&format!(" · `{on}`"));
+                line.push_str(&format!(" · `{on}`"));
             }
         }
 
-        row
+        line
     }
-}
-
-/// What the drawing holds of one open subject.
-#[derive(Default)]
-struct Open {
-    /// What the tree drawing wrote of it and is not written above yet: all of it while the subject is held, and for the streaming subject its open node's label, unterminated, until a byte must follow it.
-    held: Piece,
-    running: Option<Running>,
-    /// Whether the node it last opened is the last its tree plans, whose closing ends the subject.
-    last: bool,
-    /// Whether it ended while held, to be written whole once it streams.
-    ended: bool,
 }
 
 /// What a frame writes: everything, as the reader sees it, and what of it is written for good, which a run keeps for a page.
@@ -76,23 +63,21 @@ pub struct Frame {
     pub above: Piece,
 }
 
-/// The live drawing, with what it holds of each open subject and of the region it drew last.
+/// The live drawing, with what it holds of the open node and of the status it drew last.
 pub struct Live {
     trees: Trees,
-    /// The open subjects, in the order they opened: the first streams.
-    order: Vec<Opened>,
-    open: BTreeMap<Opened, Open>,
+    /// What the tree drawing wrote and is not written above yet: the open node's label, unterminated, until a byte must follow it.
+    held: Piece,
+    running: Option<Running>,
     /// The units the folds planned, and how many of them are settled.
     planned: usize,
     settled: usize,
     started: Instant,
-    /// The rows the region took when last drawn, which the next frame moves up over.
-    drawn: usize,
-    /// The region as last drawn, so an unchanged one is not drawn again.
-    region: Vec<String>,
-    /// Whether something writes past the drawing: no region is drawn until a node closes again.
+    /// The status as last drawn, so an unchanged one is not drawn again.
+    status: Vec<String>,
+    /// Whether something writes past the drawing: no status is drawn until a node closes again.
     quiet: bool,
-    /// Whether the command has finished: no region is drawn again.
+    /// Whether the command has finished: no status is drawn again.
     finished: bool,
 }
 
@@ -101,13 +86,12 @@ impl Live {
     pub fn new(started: Instant) -> Self {
         Self {
             trees: Trees::new(),
-            order: Vec::new(),
-            open: BTreeMap::new(),
+            held: Piece::default(),
+            running: None,
             planned: 0,
             settled: 0,
             started,
-            drawn: 0,
-            region: Vec::new(),
+            status: Vec::new(),
             quiet: false,
             finished: false,
         }
@@ -115,13 +99,9 @@ impl Live {
 
     /// The frame `event`, told at `now`, is drawn as on a terminal of `size`, its columns and rows.
     pub fn draw(&mut self, event: Event, now: Instant, size: (u16, u16)) -> Frame {
-        // How far a check has come moves its running node alone, which the clock draws at its next tick: told for each declaration, it would otherwise redraw the region as often.
-        if let Event::Walked { tree, done, of, on } = event {
-            if let Some(running) = self
-                .open
-                .get_mut(&tree)
-                .and_then(|open| open.running.as_mut())
-            {
+        // How far a check has come moves its running node alone, which the clock draws at its next tick: told for each declaration, it would otherwise redraw the status as often.
+        if let Event::Walked { done, of, on, .. } = event {
+            if let Some(running) = self.running.as_mut() {
                 running.walked = Some(Walk { done, of, on });
             }
             return Frame::default();
@@ -131,231 +111,142 @@ impl Live {
             Event::Settled => self.settled += 1,
             _ => {}
         }
-        let Some(tree) = event.tree() else {
-            // Under no subject, what is said is written above at once.
+        if event.tree().is_none() {
+            // Under no subject, what is said is written above at once, beside whatever the open node holds.
             let above = self.trees.draw(event);
             return self.framed(above, now, size);
-        };
-        let opening = match &event {
-            Event::Began { last, .. } => Some(*last),
-            _ => None,
-        };
-        let ends = match &event {
-            Event::Closed { .. } | Event::Tested { .. } => {
-                self.open.get(&tree).is_some_and(|open| open.last)
-            }
-            Event::Stood { last, .. } => *last,
-            Event::Summed { .. } | Event::Left { .. } => true,
-            _ => false,
-        };
+        }
+        let opening = matches!(event, Event::Began { .. });
         let drawn = self.trees.draw(event);
-        // A tree named and nothing written of it is no open subject: what the cabinet held says nothing.
-        if drawn.plain.is_empty() && !self.order.contains(&tree) {
+        // A tree named and nothing written of it says nothing, and moves nothing: what the cabinet held, a tree yet to open.
+        if drawn.plain.is_empty() {
             return self.framed(Piece::default(), now, size);
         }
 
-        let open = self.opened(tree);
-        open.held = mem::take(&mut open.held).then(drawn);
-        open.running = opening.map(|_| Running {
-            label: split(&open.held).1.plain,
+        self.held = mem::take(&mut self.held).then(drawn);
+        let (above, unterminated) = split(&self.held);
+        self.held = unterminated;
+        self.running = opening.then(|| Running {
+            label: self.held.plain.clone(),
             began: now,
             walked: None,
         });
-        if let Some(last) = opening {
-            open.last = last;
-        }
-        let mut above = match self.order.first() == Some(&tree) {
-            true => self.streamed(),
-            false => Piece::default(),
-        };
-        if ends {
-            above = above.then(self.ended(tree));
-        }
         // A closing is the drawing's own again, whatever wrote past it while the node ran.
-        self.quiet &= opening.is_some();
+        self.quiet &= opening;
 
         self.framed(above, now, size)
     }
 
-    /// The subject `tree`, opened where it was not: it streams or waits from its first written line.
-    fn opened(&mut self, tree: Opened) -> &mut Open {
-        if !self.order.contains(&tree) {
-            self.order.push(tree);
-        }
-        self.open.entry(tree).or_default()
-    }
-
-    /// What the streaming subject holds up to its last line's end, which is written above; the rest, its open node's label, stays held.
-    fn streamed(&mut self) -> Piece {
-        let Some(open) = self.order.first().and_then(|tree| self.open.get_mut(tree)) else {
-            return Piece::default();
-        };
-        let (settled, unterminated) = split(&open.held);
-        open.held = unterminated;
-
-        settled
-    }
-
-    /// `tree` ended: where it streams, what it holds is written, and each subject opened after it streams in turn, written whole where it ended while it waited.
-    fn ended(&mut self, tree: Opened) -> Piece {
-        if self.order.first() != Some(&tree) {
-            if let Some(open) = self.open.get_mut(&tree) {
-                open.ended = true;
-                open.running = None;
-            }
-            return Piece::default();
-        }
-        let mut above = Piece::default();
-        while let Some(next) = self.order.first().copied() {
-            let Some(open) = self.open.get(&next) else {
-                break;
-            };
-            if next != tree && !open.ended {
-                above = above.then(self.streamed());
-                break;
-            }
-            let held = self
-                .open
-                .remove(&next)
-                .map(|open| open.held)
-                .unwrap_or_default();
-            above = above.then(held);
-            self.order.remove(0);
-        }
-
-        above
-    }
-
-    /// A frame writing `above`, erasing the region before it and drawing it again after; nothing where neither changed.
+    /// A frame writing `above`, erasing the status before it and drawing it again after; nothing where neither changed.
     fn framed(&mut self, above: Piece, now: Instant, size: (u16, u16)) -> Frame {
-        let region = match self.quiet || self.finished {
+        let status = match self.quiet || self.finished {
             true => Vec::new(),
-            false => self.rows(now, size),
+            false => self.lines(now, size),
         };
-        if above.plain.is_empty() && region == self.region {
+        if above.plain.is_empty() && status == self.status {
             return Frame::default();
         }
         let mut shown = self.erased();
         shown.push_str(&above.shown);
-        for row in &region {
-            shown.push_str(&reader().dim(row));
-            shown.push('\n');
-        }
-        self.drawn = region.len();
-        self.region = region;
+        shown.push_str(&below(&status));
+        self.status = status;
 
         Frame { shown, above }
     }
 
-    /// What erases the region as last drawn: back to the start of its first row, and everything from there down.
+    /// What erases the status as last drawn: everything from the cursor, which stands where what is written for good ends, to the end of the screen.
     fn erased(&mut self) -> String {
-        let erased = match self.drawn {
-            0 => String::new(),
-            rows => format!("\r\x1b[{rows}A\x1b[J"),
+        let erased = match self.status.is_empty() {
+            true => String::new(),
+            false => "\x1b[J".to_string(),
         };
-        self.drawn = 0;
-        self.region.clear();
+        self.status.clear();
 
         erased
     }
 
-    /// The region at `now`, on a terminal of `size`.
-    fn rows(&self, now: Instant, size: (u16, u16)) -> Vec<String> {
-        if self.order.is_empty() {
-            return Vec::new();
-        }
-        let (columns, rows) = (usize::from(size.0), usize::from(size.1));
-        let tally = (self.planned > 0).then(|| {
+    /// The status at `now`, on a terminal of `size`, each line clipped at its width: the running node, and what is done; nothing where neither stands.
+    fn lines(&self, now: Instant, size: (u16, u16)) -> Vec<String> {
+        let running = self.running.as_ref().map(|running| running.line(now));
+
+        [running, self.tally(now)]
+            .into_iter()
+            .flatten()
+            .map(|line| clipped(&line, usize::from(size.0)))
+            .collect()
+    }
+
+    /// What is done at `now`, where the folds planned any units: `2 of 7 units; 24.5s`.
+    fn tally(&self, now: Instant) -> Option<String> {
+        (self.planned > 0).then(|| {
             format!(
                 "{} of {} units; {}",
                 self.settled,
                 self.planned,
                 seconds(now.saturating_duration_since(self.started))
             )
-        });
-        // A third of the terminal, less the tally's row and the row that counts what does not fit.
-        let room = (rows / 3).max(FEWEST_ROWS) - usize::from(tally.is_some()) - 1;
-        let mut region = Vec::new();
-        let mut shown = 0;
-        for (at, tree) in self.order.iter().enumerate() {
-            let open = &self.open[tree];
-            let mut block = match at {
-                // The streaming subject's settled lines stand above already.
-                0 => Vec::new(),
-                // The blank line that parts a tree from what stands above it costs the region a row it has none to spare for.
-                _ => split(&open.held)
-                    .0
-                    .plain
-                    .lines()
-                    .filter(|line| !line.is_empty())
-                    .map(str::to_string)
-                    .collect(),
-            };
-            if let Some(running) = &open.running {
-                block.push(running.row(now));
-            }
-            if shown > 0 && region.len() + block.len() > room {
-                break;
-            }
-            region.extend(block);
-            shown += 1;
-        }
-        let rest = self.order.len() - shown;
-        if rest > 0 {
-            region.push(format!("+ {rest} more"));
-        }
-        region.extend(tally);
-
-        region.iter().map(|row| cut(row, columns)).collect()
+        })
     }
 
-    /// Erase the region and draw none until a node closes again: something is about to write past the drawing — standard output, a program run, a child given a test's stream, a terminal taken.
+    /// Erase the status and draw none until a node closes again: something is about to write past the drawing — standard output, a program run, a child given a test's stream, a terminal taken.
     pub fn settle(&mut self) -> String {
         self.quiet = true;
 
         self.erased()
     }
 
-    /// The region erased ahead of a write past the drawing, which then stands where the region stood until it is drawn again.
+    /// The status erased ahead of a write past the drawing, which then stands where the status stood until it is drawn again.
     pub fn clear(&mut self) -> String {
         self.erased()
     }
 
-    /// What the region's clock draws at `now`: the region again where it changed or a running node's time moved, and nothing otherwise.
+    /// What the status's clock draws at `now`: the status again where it changed or a running node's time moved, and nothing otherwise.
     pub fn tick(&mut self, now: Instant, size: (u16, u16)) -> String {
         self.framed(Piece::default(), now, size).shown
     }
 
-    /// The line `tree`'s open node stands on, ended ahead of the first line its work writes: written above where `tree` streams, held where it waits.
-    pub fn cut(&mut self, tree: Opened) -> Frame {
-        let streams = self.order.first() == Some(&tree);
-        let open = self.opened(tree);
-        open.running = None;
-        open.held = mem::take(&mut open.held).then("\n");
-        let above = match streams {
-            true => self.streamed(),
-            false => Piece::default(),
-        };
+    /// The line the open node stands on, ended ahead of the first line its work writes, and written above.
+    pub fn cut(&mut self) -> Frame {
+        self.running = None;
+        let above = mem::take(&mut self.held).then("\n");
         let mut shown = self.erased();
         shown.push_str(&above.shown);
 
         Frame { shown, above }
     }
 
-    /// The command finished: every subject still held is written above in the order they opened, its open line ended, and the region erased for good.
-    pub fn finish(&mut self) -> Frame {
-        let mut above = Piece::default();
-        for tree in mem::take(&mut self.order) {
-            let held = self
-                .open
-                .remove(&tree)
-                .map(|open| open.held)
-                .unwrap_or_default();
-            above = above.then(held);
+    /// What the command's finish would write at `now`, which a signal or a panic that ends it writes in its place: the status erased, the open node's line ended, and the tally frozen; nothing once the command has finished.
+    pub fn farewell(&self, now: Instant) -> String {
+        if self.finished {
+            return String::new();
         }
-        if !above.plain.is_empty() && !above.plain.ends_with('\n') {
+        let mut shown = match self.status.is_empty() {
+            true => String::new(),
+            false => "\x1b[J".to_string(),
+        };
+        shown.push_str(&self.remaining(now).shown);
+
+        shown
+    }
+
+    /// What the open node holds, its line ended, then the tally at `now` frozen beneath a blank line.
+    fn remaining(&self, now: Instant) -> Piece {
+        let mut above = self.held.clone();
+        if !above.plain.is_empty() {
             above = above.then("\n");
         }
+        if let Some(tally) = self.tally(now) {
+            above = above.then("\n").then(tally).then("\n");
+        }
+
+        above
+    }
+
+    /// The command finished at `now`: what the open node holds is written above, its line ended, then the tally, and the status erased for good.
+    pub fn finish(&mut self, now: Instant) -> Frame {
+        let above = self.remaining(now);
+        self.held = Piece::default();
+        self.running = None;
         self.finished = true;
         let mut shown = self.erased();
         shown.push_str(&above.shown);
@@ -381,22 +272,35 @@ fn split(held: &Piece) -> (Piece, Piece) {
     )
 }
 
-/// `row` cut at its end to `columns`, `…` taking the last column where it is cut, and never inside a cluster.
-pub fn cut(row: &str, columns: usize) -> String {
-    let wide: usize = clusters(row).map(|(_, wide)| wide).sum();
-    if wide <= columns {
-        return row.to_string();
+/// The status drawn where the cursor stands, at the start of the line below what is written for good, and the cursor brought back to that start: autowrap off while it is written, so each line takes one row whatever width the terminal has by the time it reads the frame, which makes the move back up over the lines this write drew exact; nothing is counted across frames.
+fn below(status: &[String]) -> String {
+    if status.is_empty() {
+        return String::new();
     }
+    let lines = status
+        .iter()
+        .map(|line| reader().dim(line))
+        .collect::<Vec<_>>()
+        .join("\r\n");
+    let up = match status.len() - 1 {
+        0 => String::new(),
+        more => format!("\x1b[{more}A"),
+    };
+
+    format!("\x1b[?7l{lines}\x1b[?7h{up}\r")
+}
+
+/// `line` clipped at `columns`, by the cells each of its clusters takes.
+fn clipped(line: &str, columns: usize) -> String {
     let mut kept = String::new();
     let mut taken = 0;
-    for (cluster, wide) in clusters(row) {
-        if taken + wide + 1 > columns {
+    for (cluster, wide) in clusters(line) {
+        if taken + wide > columns {
             break;
         }
         kept.push_str(cluster);
         taken += wide;
     }
-    kept.push('…');
 
     kept
 }

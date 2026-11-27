@@ -497,7 +497,7 @@ impl Asking {
         }
     }
 
-    /// Part what was narrated from what follows it, once, the live region cleared before the answer is written past it.
+    /// Part what was narrated from what follows it, once, the live status cleared before the answer is written past it.
     fn parted(&mut self) {
         if mem::take(&mut self.narrated) {
             apart();

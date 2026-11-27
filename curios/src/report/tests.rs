@@ -4,8 +4,10 @@ use {
     super::*,
     curios_native::test_support::*,
     std::{
+        env,
         ffi::OsStr,
         path::Path,
+        process::{Command, Stdio},
         time::{Duration, Instant},
     },
 };
@@ -416,7 +418,7 @@ fn one_at_a_time() -> Vec<Event> {
     ]
 }
 
-/// The screen `events` leave, told a tenth of a second apart on `TERMINAL`, `finished` or interrupted after the last.
+/// The screen `events` leave, told a tenth of a second apart on `TERMINAL`, then `finished` a tenth after the last or interrupted there.
 fn screen(events: Vec<Event>, finished: bool) -> Screen {
     let start = Instant::now();
     let mut live = Live::new(start);
@@ -427,22 +429,25 @@ fn screen(events: Vec<Event>, finished: bool) -> Screen {
         screen.write(&live.draw(event, at(start, tenths), TERMINAL).shown);
     }
     if finished {
-        screen.write(&live.finish().shown);
+        screen.write(&live.finish(at(start, tenths + 1)).shown);
     }
 
     screen
 }
 
-/// With one subject open at a time, the screen a finished command leaves is the tree drawing's bytes: the region gone, nothing it showed left behind.
+/// The screen a finished command leaves is the tree drawing's bytes, then the tally frozen beneath a blank line: nothing the status showed is left behind.
 #[test]
-fn one_subject_at_a_time_leaves_the_trees_and_nothing_else() {
+fn a_finished_command_leaves_the_trees_then_the_tally() {
     let mut trees = Trees::default();
     let treed = one_at_a_time()
         .into_iter()
         .map(|event| trees.draw(event).plain)
         .collect::<String>();
 
-    assert_eq!(screen(one_at_a_time(), true).shown(), treed);
+    assert_eq!(
+        screen(one_at_a_time(), true).shown(),
+        format!("{treed}\n1 of 1 units; 1.5s\n")
+    );
 }
 
 /// Mid-run, the running node stands beneath what is settled, as it will read when it closes, its time after `;`, over the count of what is done; an interrupted command leaves that frame.
@@ -458,65 +463,108 @@ fn a_running_node_reads_as_it_will_when_it_closes() {
     );
 }
 
-/// A subject that begins while an older one is open waits in the region, its tree so far beneath the older one's running node; it is written above, whole and in its turn, once the older one ends, even where it ended first.
+/// A frame erases from the cursor, writes what is for good, then the status with autowrap off, each line clipped at the terminal's width, and brings the cursor back over the lines it drew to the start of the first: where what is written for good ends, which the next frame erases from.
 #[test]
-fn a_subject_that_ends_behind_an_older_one_is_written_in_its_turn() {
-    let older = Opened::minted();
-    let younger = Opened::minted();
-    let named = |tree, subject: &str| Event::Named {
-        tree,
-        subject: subject.to_string(),
-        manifest: None,
-        tested: false,
-    };
-    let check = |tree| Event::Began {
-        tree,
-        node: Node::Step(Step::Check),
-        last: true,
-    };
-    let done = |tree| Event::Closed {
-        tree,
-        closing: Closing::Done(Duration::from_millis(100)),
-        beneath: Vec::new(),
-    };
+fn a_frame_writes_the_status_unwrapped_and_returns_to_its_start() {
+    let start = Instant::now();
+    let mut live = Live::new(start);
+    let unit = Opened::minted();
+    let narrow = (12, 24);
+    let mut screen = Screen::default();
+    for event in [
+        Event::Planned { units: 2 },
+        Event::Named {
+            tree: unit,
+            subject: "/app".to_string(),
+            manifest: None,
+            tested: false,
+        },
+    ] {
+        screen.write(&live.draw(event, start, narrow).shown);
+    }
+    let began = live.draw(
+        Event::Began {
+            tree: unit,
+            node: Node::Step(Step::Check),
+            last: false,
+        },
+        start,
+        narrow,
+    );
+
+    assert_eq!(
+        began.shown,
+        "\x1b[J/app\n\x1b[?7l├─ check; 0.\r\n0 of 2 units\x1b[?7h\x1b[1A\r"
+    );
+    assert_eq!(began.above.plain, "/app\n");
+    screen.write(&began.shown);
+    screen.write("x");
+    assert_eq!(screen.shown(), "/app\nx─ check; 0.\n0 of 2 units\n");
+    // Where the time shows, a tick redraws the status, erasing the last from where the cursor came back to.
+    assert!(
+        live.tick(at(start, 3), TERMINAL)
+            .starts_with("\x1b[J\x1b[?7l")
+    );
+}
+
+/// A status line is clipped by the cells its clusters take: a wide character that would cross the terminal's edge is left out whole.
+#[test]
+fn a_status_line_is_clipped_by_the_cells_its_clusters_take() {
     let start = Instant::now();
     let mut live = Live::new(start);
     let mut screen = Screen::default();
-    for (event, tenths) in [
-        (named(older, "/lib"), 0),
-        (check(older), 1),
-        (named(younger, "app"), 2),
-        (check(younger), 3),
-        (done(younger), 5),
+    let unit = Opened::minted();
+    let size = (28, 24);
+    for event in [
+        Event::Named {
+            tree: unit,
+            subject: "/app".to_string(),
+            manifest: None,
+            tested: false,
+        },
+        Event::Began {
+            tree: unit,
+            node: Node::Step(Step::Check),
+            last: false,
+        },
+        Event::Walked {
+            tree: unit,
+            done: 1,
+            of: 2,
+            on: Some("日本".to_string()),
+        },
     ] {
-        screen.write(&live.draw(event, at(start, tenths), TERMINAL).shown);
+        screen.write(&live.draw(event, start, size).shown);
     }
-    assert_eq!(
-        screen.shown(),
-        "/lib\n└─ check; 0.4s\napp\n└─ check; 0.1s\n",
-        "the younger subject ended, and waits, settled, in the region"
-    );
+    screen.write(&live.tick(at(start, 3), size));
 
-    screen.write(&live.draw(done(older), at(start, 6), TERMINAL).shown);
-    assert_eq!(
-        screen.shown(),
-        "/lib\n└─ check; 0.1s\n\napp\n└─ check; 0.1s\n",
-        "both are written above in the order they opened, a blank line between, and no region is left"
-    );
+    assert_eq!(screen.shown(), "/app\n├─ check; 0.3s · 1 of 2 · `\n");
+}
 
-    // Both ended, so the next subject streams: what closes of it is written for good at once.
-    let next = Opened::minted();
-    let mut kept = String::new();
-    for (event, tenths) in [(named(next, "/next"), 7), (check(next), 8), (done(next), 9)] {
-        let frame = live.draw(event, at(start, tenths), TERMINAL);
-        screen.write(&frame.shown);
-        kept.push_str(&frame.above.plain);
+/// What a signal or a panic writes in the finish's place is what the finish would write then: the status erased, the open node's line ended, the tally frozen; once the command has finished, it is nothing.
+#[test]
+fn a_farewell_is_what_the_finish_would_write() {
+    let begun = one_at_a_time()[..3].to_vec();
+    let start = Instant::now();
+    let mut interrupted = Live::new(start);
+    let mut finished = Live::new(start);
+    let mut screen = Screen::default();
+    for (tenths, event) in (1..).zip(begun) {
+        screen.write(
+            &interrupted
+                .draw(event.clone(), at(start, tenths), TERMINAL)
+                .shown,
+        );
+        finished.draw(event, at(start, tenths), TERMINAL);
     }
-    assert_eq!(kept, "\n/next\n└─ check; 0.1s\n");
-    assert_eq!(
-        screen.shown(),
-        "/lib\n└─ check; 0.1s\n\napp\n└─ check; 0.1s\n\n/next\n└─ check; 0.1s\n"
-    );
+    let farewell = interrupted.farewell(at(start, 5));
+    let finish = finished.finish(at(start, 5));
+
+    assert_eq!(farewell, finish.shown);
+    screen.write(&farewell);
+    assert_eq!(screen.shown(), "/app\n├─ check\n\n0 of 1 units; 0.5s\n");
+    assert_eq!(finish.above.plain, "├─ check\n\n0 of 1 units; 0.5s\n");
+    assert_eq!(finished.farewell(at(start, 6)), "");
 }
 
 /// Each tree is a block parted from what stands above it by one blank line, as is a line under no subject, and a blank line already there is not doubled.
@@ -604,36 +652,6 @@ fn a_tree_is_parted_from_what_stands_above_it_by_one_blank_line() {
     assert_eq!(linted, "/app\n└─ format; rewritten\n\n2 lints\n");
 }
 
-/// More open subjects than a third of the terminal holds are counted, not shown.
-#[test]
-fn a_region_holds_a_third_of_the_terminal_and_counts_the_rest() {
-    let start = Instant::now();
-    let mut live = Live::new(start);
-    let mut screen = Screen::default();
-    for subject in 0..8 {
-        let tree = Opened::minted();
-        let named = Event::Named {
-            tree,
-            subject: format!("/unit{subject}"),
-            manifest: None,
-            tested: false,
-        };
-        let began = Event::Began {
-            tree,
-            node: Node::Step(Step::Check),
-            last: true,
-        };
-        screen.write(&live.draw(named, start, (80, 12)).shown);
-        screen.write(&live.draw(began, start, (80, 12)).shown);
-    }
-
-    // The streaming subject's line above, and a region of a third of the twelve rows beneath it.
-    assert_eq!(
-        screen.shown(),
-        "/unit0\n└─ check; 0.0s\n/unit1\n└─ check; 0.0s\n+ 6 more\n"
-    );
-}
-
 /// A running check shows behind `·` how far it has come, drawn at the clock's next tick rather than at each declaration; neither drawing writes any of it for good.
 #[test]
 fn a_running_check_shows_how_far_it_has_come_at_the_next_tick() {
@@ -678,15 +696,72 @@ fn a_running_check_shows_how_far_it_has_come_at_the_next_tick() {
     assert_eq!(Trees::default().draw(walked()).plain, "");
 }
 
-/// A row wider than the terminal is cut at its end, `…` in its last column.
+/// What the child half of [`a_panic_writes_the_farewell_ahead_of_what_it_says`] runs under, named by the variable its parent sets.
+const PANICKED_LIVE: &str = "CURIOS_TEST_PANICKED_LIVE";
+
+/// A panic in a live command erases the status and writes what the finish would have, the open node's line ended and the tally, ahead of what the panic says, which would otherwise land on the status where the cursor rests. A test cannot outlive the panic it means, so its child panics, run again from the test's own binary.
 #[test]
-fn a_row_wider_than_the_terminal_ends_in_an_ellipsis() {
-    assert_eq!(cut("├─ check; 2.4s", 80), "├─ check; 2.4s");
-    assert_eq!(cut("├─ check; 2.4s", 8), "├─ chec…");
-    assert_eq!(cut("日本語", 4), "日…");
+fn a_panic_writes_the_farewell_ahead_of_what_it_says() {
+    if env::var_os(PANICKED_LIVE).is_some() {
+        transcribe(Drawing::Live);
+        let unit = Opened::minted();
+        for event in [
+            Event::Planned { units: 1 },
+            Event::Named {
+                tree: unit,
+                subject: "/app".to_string(),
+                manifest: None,
+                tested: false,
+            },
+            Event::Began {
+                tree: unit,
+                node: Node::Step(Step::Check),
+                last: false,
+            },
+        ] {
+            tell(event);
+        }
+        panic!("a panic on purpose");
+    }
+
+    let ended = Command::new(env::current_exe().unwrap())
+        .args([
+            "--exact",
+            "report::tests::a_panic_writes_the_farewell_ahead_of_what_it_says",
+            "--nocapture",
+        ])
+        .env(PANICKED_LIVE, "1")
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped())
+        .output()
+        .expect("the test runs again as a child");
+    let mut screen = Screen::default();
+    screen.write(&String::from_utf8_lossy(&ended.stderr));
+    let shown = screen.shown();
+
+    assert!(!ended.status.success(), "{shown}");
+    let mut lines = shown.lines();
+    assert_eq!(lines.next(), Some("/app"), "{shown}");
+    assert_eq!(lines.next(), Some("├─ check"), "{shown}");
+    assert_eq!(lines.next(), Some(""), "{shown}");
+    assert!(
+        lines
+            .next()
+            .is_some_and(|tally| tally.starts_with("0 of 1 units; ")),
+        "{shown}"
+    );
+    // What the panic says follows, whatever blank line the hook that says it leads with.
+    let mut said = lines.skip_while(|line| line.is_empty());
+    assert!(
+        said.next()
+            .is_some_and(|line| line.starts_with("thread '") && line.contains("panicked at")),
+        "{shown}"
+    );
+    assert_eq!(said.next(), Some("a panic on purpose"), "{shown}");
 }
 
-/// A region is drawn for the terminal's size as it reports it, and for eighty columns and twenty-four rows in any measure it reports as nothing or where there is no terminal to ask.
+/// The status is drawn for the terminal's size as it reports it, and for eighty columns and twenty-four rows in any measure it reports as nothing or where there is no terminal to ask.
 #[test]
 fn a_terminal_that_reports_no_size_is_drawn_for_eighty_by_twenty_four() {
     assert_eq!(sized(Some((120, 40))), (120, 40));
@@ -695,9 +770,9 @@ fn a_terminal_that_reports_no_size_is_drawn_for_eighty_by_twenty_four() {
     assert_eq!(sized(None), (80, 24));
 }
 
-/// The region is gone before what writes past the drawing, and nothing of it is ever written for good.
+/// The status is gone before what writes past the drawing, and nothing of it is ever written for good.
 #[test]
-fn the_region_is_cleared_before_a_program_writes_and_never_kept() {
+fn the_status_is_cleared_before_a_program_writes_and_never_kept() {
     let events = one_at_a_time();
     let start = Instant::now();
     let mut live = Live::new(start);

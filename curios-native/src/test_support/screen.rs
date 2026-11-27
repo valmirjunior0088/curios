@@ -1,4 +1,4 @@
-//! A terminal as a drawing that redraws in place writes to one — the command line's live transcript —: a grid of rows under a cursor, moved by the four controls such a drawing writes — carriage return, newline, cursor up, erase to the end of the screen — and blind to paint, which no cell keeps.
+//! A terminal as a drawing that redraws in place writes to one — the command line's live transcript —: a grid of rows under a cursor, moved by the four controls such a drawing writes — carriage return, newline, cursor up, erase to the end of the screen — and blind to paint, which no cell keeps, and to autowrap's switch, since its rows have no width to wrap at: what autowrap holds is the bytes' to show.
 
 /// What a terminal shows, and where its cursor stands.
 #[derive(Default)]
@@ -21,6 +21,16 @@ impl Screen {
                 }
                 '\x1b' => {
                     assert_eq!(chars.next(), Some('['), "a control the drawing writes");
+                    // A private mode set or reset, autowrap's `?7l` and `?7h`, moves nothing.
+                    if chars.next_if_eq(&'?').is_some() {
+                        while chars.next_if(char::is_ascii_digit).is_some() {}
+                        let switched = chars.next();
+                        assert!(
+                            matches!(switched, Some('l' | 'h')),
+                            "a mode the drawing switches: {switched:?}"
+                        );
+                        continue;
+                    }
                     let mut count = String::new();
                     while let Some(digit) = chars.next_if(char::is_ascii_digit) {
                         count.push(digit);

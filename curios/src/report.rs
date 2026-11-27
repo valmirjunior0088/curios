@@ -15,7 +15,7 @@
 //!
 //! **Everything here goes to stderr.** `curios run` hands stdout to the program it executes, so a line of the transcript written there would corrupt `curios run report.crs > report.json`.
 //!
-//! **An event is data until it is drawn**, as a report is: what happened to which tree, its words as text, so whoever tells it holds nothing of the drawing and the drawing nothing of the compiler. Nothing written for good is taken back: the plain bytes are the same in a pipe, a log file and a CI transcript as they are on a terminal, colour apart, and the live drawing redraws only the region beneath what it has written.
+//! **An event is data until it is drawn**, as a report is: what happened to which tree, its words as text, so whoever tells it holds nothing of the drawing and the drawing nothing of the compiler. Nothing written for good is taken back: the plain bytes are the same in a pipe, a log file and a CI transcript as they are on a terminal, colour apart, and the live drawing redraws only the status beneath what it has written.
 //!
 //! **Colour is a layer, decided once** ([`paint`]): a subject bold, the tree and the times dim, and what went wrong red. It changes no byte beneath it, and a line is made of pieces built in both forms ([`Piece`]), as whoever reads standard error sees one and plain, which is what is kept of the transcript for a page ([`keep`]).
 //!
@@ -366,7 +366,7 @@ impl Tree {
         self.began.is_some()
     }
 
-    /// The open node, a check, has come this far: `done` of the `of` declarations it walks are finished, and it is on `on`, where it is on one. Only a live region shows it.
+    /// The open node, a check, has come this far: `done` of the `of` declarations it walks are finished, and it is on `on`, where it is on one. Only the live status shows it.
     pub fn walked(&self, done: usize, of: usize, on: Option<String>) {
         tell(Event::Walked {
             tree: self.opened,

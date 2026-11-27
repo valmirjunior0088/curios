@@ -566,7 +566,7 @@ fn run_delivers_both_streams_in_the_order_the_program_wrote_them() {
     assert!(output.ends_with("abc\n"), "{output}");
 }
 
-/// Live, a run leaves the compile's tree and then what the program wrote: the region is gone before the program's first byte, and none of it is left behind.
+/// Live, a run leaves the compile's tree and then what the program wrote: the status is gone before the program's first byte, and none of it is left behind.
 #[test]
 fn a_live_run_leaves_the_tree_then_what_the_program_wrote() {
     let root = temporary("live-run");
@@ -593,9 +593,9 @@ fn a_live_run_leaves_the_tree_then_what_the_program_wrote() {
     assert_eq!(shown.lines().count(), 6, "{shown}");
 }
 
-/// Live, a test run leaves each subject's tree as the tree drawing writes it: what a test writes quoted beneath its node, where the region stood when it wrote, and no line of the region left once the run ends.
+/// Live, a test run leaves each subject's tree as the tree drawing writes it, what a test writes quoted beneath its node where the status stood when it wrote, and once the run ends what is done beneath a blank line: no other line of the status is left.
 #[test]
-fn a_live_test_run_leaves_the_trees_and_nothing_of_the_region() {
+fn a_live_test_run_leaves_the_trees_then_the_tally() {
     let root = project("live-outcomes");
     let (status, output) = merged(&root, &["--progress", "live", "test"], "");
     assert_eq!(status.code(), Some(1), "{output}");
@@ -623,12 +623,20 @@ fn a_live_test_run_leaves_the_trees_and_nothing_of_the_region() {
             "\n└─ store; ",
             "s\n\napp · tests\n├─ check; ",
             "\n└─ 0 passed, 0 failed\n\n3 passed, 1 failed, 1 trapped, 1 exited; ",
+            "s\n\n2 of 2 units; ",
         ],
     );
-    // A row the region left would name a node again, or count units.
+    // A line the status left would name a node again, or count units a second time.
     assert_eq!(shown.matches("├─ /app/").count(), 6, "{shown}");
     assert_eq!(shown.matches("├─ check; ").count(), 4, "{shown}");
-    assert!(!shown.contains(" units; "), "{shown}");
+    assert_eq!(shown.matches(" units; ").count(), 1, "{shown}");
+    assert!(
+        shown
+            .lines()
+            .last()
+            .is_some_and(|last| last.starts_with("2 of 2 units; ")),
+        "{shown}"
+    );
 }
 
 #[test]

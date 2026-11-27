@@ -2,7 +2,7 @@
 //!
 //! **Drawn where it is told.** A label reaches the reader before the work it names, and a process that dies mid-step leaves its last line written, with nothing queued to lose. Whoever tells an event holds the lock for a line, and whoever relays what a test wrote for the write. Rust's standard error is unbuffered, so a line reaches the reader with no flushing of its own.
 //!
-//! **One transcript, drawn either way** ([`Drawing`]): live ([`Live`]) or as plain lines ([`Lines`]), chosen once, as the command starts ([`transcribe`]), before anything is written. The live drawing's clock is a thread of its own, which takes the same lock to redraw the region; what writes past the transcript — an answer, a program run, a child given a test's stream — has the region cleared first ([`settle`]), and the command's end clears it for good ([`finish`]).
+//! **One transcript, drawn either way** ([`Drawing`]): live ([`Live`]) or as plain lines ([`Lines`]), chosen once, as the command starts ([`transcribe`]), before anything is written. The live drawing's clock is a thread of its own, which takes the same lock to redraw the status; what writes past the transcript — an answer, a program run, a child given a test's stream — has the status cleared first ([`settle`]), the command's end clears it for good ([`finish`]), and a panic or a terminating signal that ends the command writes in its place what that end would have written ([`standard_error_leaving`]).
 //!
 //! **A run that sends pages its report keeps the transcript** ([`keep`]): every byte written from then on is, plain, what a page is sent, so the page shows what the terminal showed.
 
@@ -10,10 +10,10 @@ use {
     super::{Column, Event, Frame, Lines, Live, Opened, Owed, Trees, frame_of, framed_run},
     crate::{Piece, Quoted, Wrote, answered, reader},
     curios_common::Style,
-    curios_native::standard_error_size,
+    curios_native::{standard_error_farewell, standard_error_leaving, standard_error_size},
     std::{
         ffi::OsStr,
-        mem,
+        mem, panic,
         sync::{Mutex, MutexGuard, PoisonError},
         thread,
         time::{Duration, Instant},
@@ -95,12 +95,21 @@ struct Transcript {
 }
 
 impl Transcript {
-    /// Write `frame` on standard error as its reader sees it, and what it writes for good, plain, onto what is kept where a run keeps it: never a region, which is redrawn.
+    /// Write `frame` on standard error as its reader sees it, and what it writes for good, plain, onto what is kept where a run keeps it: never the status, which is redrawn.
     fn say(&mut self, frame: Frame) {
-        eprint!("{}", frame.shown);
+        self.show(&frame.shown);
         if let Some(kept) = self.kept.as_mut() {
             kept.extend_from_slice(frame.above.plain.as_bytes());
         }
+    }
+
+    /// Write `shown` on standard error, leaving what the live drawing's finish would write should a signal end the command after it.
+    fn show(&self, shown: &str) {
+        let farewell = match &self.drawer {
+            Drawer::Live(live) => live.farewell(Instant::now()),
+            Drawer::Trees(_) | Drawer::Lines(_) => String::new(),
+        };
+        standard_error_leaving(shown.as_bytes(), farewell.into_bytes());
     }
 
     /// Draw `event`, told at `now`.
@@ -112,12 +121,12 @@ impl Transcript {
         }
     }
 
-    /// What the work of `tree`'s open node is owed ahead of the first byte it writes: the end of the line its label stands open on in a tree, and nothing on a plain line, which is ended already.
-    fn cut(&mut self, tree: Opened) -> Frame {
+    /// What the work of the open node is owed ahead of the first byte it writes: the end of the line its label stands open on in a tree, and nothing on a plain line, which is ended already.
+    fn cut(&mut self) -> Frame {
         match &mut self.drawer {
             Drawer::Trees(_) => written(Piece::from("\n")),
             Drawer::Lines(_) => Frame::default(),
-            Drawer::Live(live) => live.cut(tree),
+            Drawer::Live(live) => live.cut(),
         }
     }
 }
@@ -135,7 +144,7 @@ fn measured() -> (u16, u16) {
     sized(standard_error_size())
 }
 
-/// The size a region is drawn for where a terminal reports `size`: as reported, or as a terminal is taken to be where there is none — a live drawing forced onto a pipe — and in each measure a terminal reports as nothing, as a pseudo-terminal no one sized does.
+/// The size the status is drawn for where a terminal reports `size`: as reported, or as a terminal is taken to be where there is none — a live drawing forced onto a pipe — and in each measure a terminal reports as nothing, as a pseudo-terminal no one sized does.
 pub fn sized(size: Option<(u16, u16)>) -> (u16, u16) {
     let (columns, rows) = size.unwrap_or(UNMEASURED);
     let given = |measure: u16, unmeasured: u16| match measure {
@@ -163,7 +172,7 @@ fn held() -> MutexGuard<'static, Transcript> {
     TRANSCRIPT.lock().unwrap_or_else(PoisonError::into_inner)
 }
 
-/// Make the transcript in `drawing` from here on. Chosen once, as the command starts, before anything is written; a live drawing starts its clock, which redraws the region as running nodes' times move.
+/// Make the transcript in `drawing` from here on. Chosen once, as the command starts, before anything is written; a live drawing starts its clock, which redraws the status as running nodes' times move, and has a panic write what the drawing's finish would, ahead of what the panic says.
 pub fn transcribe(drawing: Drawing) {
     held().drawer = match drawing {
         Drawing::Plain => Drawer::Lines(Lines::new()),
@@ -171,10 +180,16 @@ pub fn transcribe(drawing: Drawing) {
     };
     if drawing == Drawing::Live {
         thread::spawn(clock);
+        // The farewell the last frame left is written, never one drawn now: a panic inside a frame holds the transcript's lock.
+        let said = panic::take_hook();
+        panic::set_hook(Box::new(move |panicked| {
+            standard_error_farewell();
+            said(panicked);
+        }));
     }
 }
 
-/// The live drawing's clock: the region drawn again each tick, for as long as the drawing is live. Taking the transcript's lock, it never draws inside another's line.
+/// The live drawing's clock: the status drawn again each tick, for as long as the drawing is live. Taking the transcript's lock, it never draws inside another's line.
 fn clock() {
     loop {
         thread::sleep(TICK);
@@ -182,7 +197,8 @@ fn clock() {
         let Drawer::Live(live) = &mut transcript.drawer else {
             return;
         };
-        eprint!("{}", live.tick(Instant::now(), measured()));
+        let shown = live.tick(Instant::now(), measured());
+        transcript.show(&shown);
     }
 }
 
@@ -193,18 +209,20 @@ pub fn tell(event: Event) {
     transcript.say(frame);
 }
 
-/// Clear the live region and draw none until a node closes again: what follows writes past the transcript — an answer on standard output, the program a command runs.
+/// Clear the live status and draw none until a node closes again: what follows writes past the transcript — an answer on standard output, the program a command runs.
 pub fn settle() {
-    if let Drawer::Live(live) = &mut held().drawer {
-        eprint!("{}", live.settle());
+    let mut transcript = held();
+    if let Drawer::Live(live) = &mut transcript.drawer {
+        let shown = live.settle();
+        transcript.show(&shown);
     }
 }
 
-/// The command is ending: whatever the live drawing still holds is written, and its region is cleared for good. Called once, as the process ends, whatever the command came to.
+/// The command is ending: whatever the live drawing still holds is written, then its tally, and its status is cleared for good. Called once, as the process ends, whatever the command came to.
 pub fn finish() {
     let mut transcript = held();
     if let Drawer::Live(live) = &mut transcript.drawer {
-        let frame = live.finish();
+        let frame = live.finish(Instant::now());
         transcript.say(frame);
     }
 }
@@ -232,21 +250,22 @@ impl Relayed {
         Wrote::of(self.wrote, self.column)
     }
 
-    /// Note a write of the work of `tree`'s open node: the first is owed what the drawing owes a node's work ahead of it.
-    fn writing(&mut self, tree: Opened, transcript: &mut Transcript) {
+    /// Note a write of the work of the open node: the first is owed what the drawing owes a node's work ahead of it.
+    fn writing(&mut self, transcript: &mut Transcript) {
         if !mem::replace(&mut self.wrote, true) {
-            let cut = transcript.cut(tree);
+            let cut = transcript.cut();
             transcript.say(cut);
         }
     }
 }
 
-/// The work of `tree`'s open node, which `relayed` is of, writes past the transcript — a child given one of its streams, a terminal taken —, where its bytes are neither seen nor framed: the node's line is ended ahead of them, the live region is cleared and drawn no more until the node closes, and where they leave the line is taken as where the work left it.
-pub fn written_past(tree: Opened, relayed: &mut Relayed) {
+/// The work of the open node, which `relayed` is of, writes past the transcript — a child given one of its streams, a terminal taken —, where its bytes are neither seen nor framed: the node's line is ended ahead of them, the live status is cleared and drawn no more until the node closes, and where they leave the line is taken as where the work left it.
+pub fn written_past(relayed: &mut Relayed) {
     let mut transcript = held();
-    relayed.writing(tree, &mut transcript);
+    relayed.writing(&mut transcript);
     if let Drawer::Live(live) = &mut transcript.drawer {
-        eprint!("{}", live.settle());
+        let shown = live.settle();
+        transcript.show(&shown);
     }
 }
 
@@ -267,11 +286,12 @@ pub fn relay<E>(
         Quoted::Error => reader(),
     };
     let mut transcript = held();
-    // The live region is cleared, so the work's lines stand where it stood, and drawn again once they leave the stream at a line's start.
+    // The live status is cleared, so the work's lines stand where it stood, and drawn again once they leave the stream at a line's start.
     if let Drawer::Live(live) = &mut transcript.drawer {
-        eprint!("{}", live.clear());
+        let shown = live.clear();
+        transcript.show(&shown);
     }
-    relayed.writing(tree, &mut transcript);
+    relayed.writing(&mut transcript);
 
     let mut rest = bytes;
     let mut relayed_whole = Ok(());
@@ -291,7 +311,8 @@ pub fn relay<E>(
         rest = after;
     }
     if let (Drawer::Live(live), Column::Start) = (&mut transcript.drawer, relayed.column) {
-        eprint!("{}", live.tick(Instant::now(), measured()));
+        let shown = live.tick(Instant::now(), measured());
+        transcript.show(&shown);
     }
 
     relayed_whole

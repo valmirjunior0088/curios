@@ -86,7 +86,7 @@ impl<H: HostOps> HostFront for TestHost<H> {
     ) -> Result<ChildHandles, Failure> {
         // A child that inherits an output writes past this host, so what it writes is not framed. Where it leaves the line is not seen, and is taken as where the test left it.
         if stdout == StdioMode::Inherit || stderr == StdioMode::Inherit {
-            written_past(self.frame.tree, &mut self.frame.relayed());
+            written_past(&mut self.frame.relayed());
         }
 
         self.host.proc_spawn(argv, cwd, env, stdin, stdout, stderr)
@@ -94,7 +94,7 @@ impl<H: HostOps> HostFront for TestHost<H> {
 
     fn tty_take(&self, h: Handle, leave: Vec<u8>) -> Result<(), Failure> {
         // A terminal taken is written to past this host, unframed: the host behind writes `leave` on it when it is given back.
-        written_past(self.frame.tree, &mut self.frame.relayed());
+        written_past(&mut self.frame.relayed());
 
         self.host.tty_take(h, leave)
     }

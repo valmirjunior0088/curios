@@ -73,7 +73,8 @@ fn narrated(args: &[&str], named: Option<&str>) -> Output {
 #[test]
 fn a_pipe_is_drawn_plain_unless_the_flag_or_the_variable_asks_for_the_tree() {
     let plain = "Checking `<stdin>`\nChecked `<stdin>` in ";
-    let tree = "<stdin>\n├─ check; ";
+    // A tree opens on its subject's line, which plain lines never write.
+    let tree = "<stdin>\n";
     let drawn = |args: &[&str], named: Option<&str>| {
         let output = narrated(args, named);
         assert!(output.status.success(), "{output:?}");
