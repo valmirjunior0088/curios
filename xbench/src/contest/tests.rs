@@ -52,7 +52,7 @@ fn each_contestant_is_given_its_size_as_its_argument() {
     assert_eq!(rust.arguments, ["8"]);
 
     let wasm = invocation("rust-wasm", workload, 8, root);
-    assert_eq!(wasm.program, root.join(TWIN));
+    assert_eq!(wasm.program, twin(root));
     assert_eq!(wasm.arguments[0], "run");
     assert_eq!(wasm.arguments[2], "8");
 }

@@ -129,14 +129,19 @@ pub const CONTESTANTS: &[Contestant] = &[
     },
 ];
 
-/// Where the built contestants go: under the workspace's own build directory, so a sitting leaves nothing in the corpus.
-const ARTIFACTS: &str = "target/xbench";
+/// Where the built contestants go, with the runner one of them runs under: the bench's own artifacts, ignored as every `.artifacts/` is, so a sitting leaves nothing in the corpus and `target/` holds what Cargo builds alone.
+const ARTIFACTS: &str = "xbench/.artifacts/contest";
 
 /// The WebAssembly target the Rust contestant is built for. The workspace's own toolchain already carries it, so the bench installs nothing.
 const TARGET: &str = "wasm32-wasip2";
 
-/// The runner `rust-wasm` runs under, the bench's own binary over the engine `Cargo.lock` resolves for the compiler's own, built where the compiler is.
-const TWIN: &str = "target/release/twin";
+/// Where Cargo builds the runner `rust-wasm` runs under, the bench's own binary over the engine `Cargo.lock` resolves for the compiler's own: copied from here beside the contestants ([`twin`]).
+const BUILT_TWIN: &str = "target/release/twin";
+
+/// The runner a sitting runs `rust-wasm` under: Cargo's build of it, copied beside the contestants it runs.
+fn twin(root: &Path) -> PathBuf {
+    root.join(ARTIFACTS).join("twin")
+}
 
 /// How many independent batches a contestant is measured in. Between their medians is the span; two would make that span a single difference rather than an estimate of one.
 const GROUPS: usize = 5;
@@ -188,7 +193,7 @@ fn invocation(contestant: &str, workload: &Workload, size: u64, root: &Path) -> 
         },
         // The twin is no program: the bench's runner loads its precompile, on the engine the compiler embeds.
         _ => Invocation {
-            program: root.join(TWIN),
+            program: twin(root),
             arguments: vec![
                 "run".to_string(),
                 artifact.display().to_string(),
@@ -263,7 +268,7 @@ fn build(workload: &Workload, root: &Path) -> Result<(), String> {
 
     let rust = root.join(format!("{source}.rs")).display().to_string();
     let edition = edition(root)?;
-    let twin = component(workload, root).display().to_string();
+    let component = component(workload, root).display().to_string();
     run(
         "rustc",
         &["-O", "--edition", &edition, &rust, "-o", &output("rust")],
@@ -279,12 +284,16 @@ fn build(workload: &Workload, root: &Path) -> Result<(), String> {
             TARGET,
             &rust,
             "-o",
-            &twin,
+            &component,
         ],
         root,
     )?;
     // Compiled here, once, by the runner that loads it at every execution: what an execution spends is a load and a run.
-    run(TWIN, &["precompile", &twin, &output("rust-wasm")], root)?;
+    run(
+        &twin(root).display().to_string(),
+        &["precompile", &component, &output("rust-wasm")],
+        root,
+    )?;
 
     run(
         "target/release/curios",
@@ -409,6 +418,9 @@ pub fn contest_sitting(filed: usize) -> Result<(), String> {
         &["build", "--release", "--package", "xbench", "--bin", "twin"],
         &root,
     )?;
+    fs::copy(root.join(BUILT_TWIN), twin(&root)).map_err(|error| {
+        format!("{BUILT_TWIN} could not be copied beside the contestants: {error}")
+    })?;
 
     for workload in WORKLOADS {
         build(workload, &root)?;
