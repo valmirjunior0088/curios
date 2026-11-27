@@ -8,13 +8,13 @@ repository = "https://github.com/valmirjunior0088/curios"
 
 [grammars.curios]
 repository = "https://github.com/valmirjunior0088/curios"
-rev = "501a6346efe2370d550ddeb21bf414e4cd40e2f1"
-path = "editors/tree-sitter/base"
+rev = "87fc93f3ff60a4c15b8c4e9a9a63dfcc0c337b16"
+path = "editors/tree-sitter/curios"
 
 [grammars.curios_core]
 repository = "https://github.com/valmirjunior0088/curios"
-rev = "501a6346efe2370d550ddeb21bf414e4cd40e2f1"
-path = "editors/tree-sitter/core"
+rev = "bdae68d25b232c91864a005bf7a5cfdffa2bcdcf"
+path = "editors/tree-sitter/curios-core"
 
 [language_servers.curios]
 name = "Curios"
