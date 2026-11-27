@@ -46,7 +46,7 @@ default-members = ["curios*"]
 exclude = ["editors/zed"]
 
 [workspace.package]
-version = "0.16.25"
+version = "0.17.0"
 edition = "2024"
 description = "The Curios programming language: a dependently typed functional language compiled to WebAssembly-GC"
 license = "Apache-2.0"
