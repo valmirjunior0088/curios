@@ -13,8 +13,8 @@ use host::*;
 use {
     crate::{
         Access, Failure, Opened, Piece, Quoted, Relayed, Reporting, Run, Served, Steps, Subject,
-        Then, Tree, Wrote, alone, bound, keep, kept, port_of, program_tree, reader, relay,
-        serve_run, total, troubled, url,
+        Then, Tree, Wrote, alone, apart, bound, keep, kept, port_of, program_tree, reader, relay,
+        said, serve_run, total, troubled, url,
     },
     curios::{Outcome, TestSubject, Tested, test_subjects},
     curios_browser::{Posted, Stream},
@@ -291,6 +291,8 @@ pub struct Printer<'a> {
     matched: Vec<bool>,
     /// Every test the subjects compiled so far declare, selected or not: the paths a refused filter is answered with the nearest of.
     declared: Vec<Qualifier>,
+    /// What each test that did not pass is found by, in the order they ran: where its name is written, as `--at` takes a place, or its path where no place was kept.
+    unpassed: Vec<String>,
 }
 
 impl<'a> Printer<'a> {
@@ -309,6 +311,7 @@ impl<'a> Printer<'a> {
             hand: None,
             matched: vec![false; filters.len()],
             declared: Vec::new(),
+            unpassed: Vec::new(),
         }
     }
 
@@ -410,6 +413,10 @@ impl<'a> Printer<'a> {
             }
         };
 
+        if !matches!(word.as_str(), "passed") {
+            self.unpassed
+                .push(place.clone().unwrap_or_else(|| test.path.join()));
+        }
         hand.tree
             .ended(&word, taken, place.as_deref(), wrote, &beneath);
         hand.spent = Some(hand.spent.unwrap_or_default() + taken);
@@ -432,9 +439,14 @@ impl<'a> Printer<'a> {
         }
     }
 
-    /// The run's tally, as its last line, with what every test took together where any ran: where one subject ran, its tree closed on it already.
+    /// The run's end: where a test did not pass, where each such test is found, a line each in the order they ran, a blank line above and below; then the run's tally as its last line, with what every test took together where any ran. Where one subject ran and every test passed, its tree closed on its tally already.
     pub fn finished(&self) {
-        if self.closed != 1 {
+        if !self.unpassed.is_empty() {
+            apart();
+            said(self.unpassed.join("\n"));
+            apart();
+        }
+        if self.closed != 1 || !self.unpassed.is_empty() {
             total(self.totals.line(), self.spent);
         }
     }

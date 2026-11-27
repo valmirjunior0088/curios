@@ -525,6 +525,36 @@ fn a_module_on_standard_input_runs_its_own_tests_and_is_no_program_to_run() {
     );
 }
 
+/// A run where a test did not pass closes on where each such test is found, a line each in the order they ran, a blank line above and below, then on its tally, though one subject's tree closed on it already: the tests to go back to are the last thing a long run writes. A run where every test passed ends on its subject's tally alone.
+#[test]
+fn a_run_closes_on_where_each_test_that_did_not_pass_is_found() {
+    let root = temporary("unpassed");
+    fs::create_dir_all(&root).unwrap();
+    let module = "use /std/{Test};\n\ntest holds =\n    Test/assert(\"it holds\", true);\n\ntest falls =\n    Test/assert(\"it falls\", false);\n\ntest falls_too =\n    Test/assert(\"it falls too\", false);\n";
+
+    let failing = stderr(&fed(&root, &["--progress", "plain", "test", "-"], module));
+    let (_, end) = failing
+        .split_once("Tested `<stdin>` · tests: 1 passed, 2 failed in ")
+        .expect("the subject's tally");
+    let end = end.split_once('\n').expect("a line").1;
+    assert!(
+        end.starts_with("\n<stdin>:6:6\n<stdin>:9:6\n\n1 passed, 2 failed; "),
+        "{failing}"
+    );
+
+    let passing = stderr(&fed(
+        &root,
+        &["--progress", "plain", "test", "-"],
+        "use /std/{Test};\n\ntest holds =\n    Test/assert(\"it holds\", true);\n",
+    ));
+    assert!(
+        passing.trim_end().lines().last().is_some_and(
+            |last| last.starts_with("Tested `<stdin>` · tests: 1 passed, 0 failed in ")
+        ),
+        "{passing}"
+    );
+}
+
 /// `/std/Proc/args` promises opaque byte strings, so an argument that is not UTF-8 reaches the program as its bytes rather than being refused at the command line; the program spells each argument in hex through `Show` on `Bytes`.
 #[test]
 fn run_forwards_an_argument_that_is_not_utf8_as_its_bytes() {
@@ -622,7 +652,7 @@ fn a_live_test_run_leaves_the_trees_then_the_tally() {
             "s\n\n/app\n├─ check; ",
             "\n└─ store; ",
             "s\n\napp · tests\n├─ check; ",
-            "\n└─ 0 passed, 0 failed\n\n3 passed, 1 failed, 1 trapped, 1 exited; ",
+            "\n└─ 0 passed, 0 failed\n\nlib.crs:11:6\nlib.crs:14:6\nlib.crs:17:6\n\n3 passed, 1 failed, 1 trapped, 1 exited; ",
             "s\n\n2 of 2 units; ",
         ],
     );

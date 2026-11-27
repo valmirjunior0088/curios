@@ -447,7 +447,7 @@ test("a test page served by the command answers its word through its gateway, po
   assert.match(
     Buffer.from(next.written, "base64").toString() +
       Buffer.from(reply.written, "base64").toString(),
-    /^Tested `\/app\/doubling`: passed in \d+\.\ds\nTesting `\/app\/halving`\nTested `\/app\/halving`: failed in \d+\.\ds; lib\.crs:\d+:\d+\n {2}not equal\n {4}obtained: `2`\n {4}expected: `3`\nTested `\/app` · tests: 1 passed, 1 failed in \d+\.\ds\n1 passed, 1 failed; \d+\.\ds\n$/,
+    /^Tested `\/app\/doubling`: passed in \d+\.\ds\nTesting `\/app\/halving`\nTested `\/app\/halving`: failed in \d+\.\ds; lib\.crs:\d+:\d+\n {2}not equal\n {4}obtained: `2`\n {4}expected: `3`\nTested `\/app` · tests: 1 passed, 1 failed in \d+\.\ds\n\nlib\.crs:\d+:\d+\n\n1 passed, 1 failed; \d+\.\ds\n$/,
   );
 
   // The tests wrote nothing, the report is standard error's, and a failure fails the run.

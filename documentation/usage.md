@@ -336,13 +336,17 @@ The report is on standard error, on each subject's own tree, after the nodes tha
 │  > ■■■■
 │  ✓ passed in 0.1s
 └─ 2 passed, 1 failed; 0.1s
+
+lib.crs:7:6
+
+2 passed, 1 failed; 0.1s
 ```
 
 Each selected test is a node, opened by its path before the test runs, so a test that never ends is the one whose line stands open, and closed by how it ended, led by its mark, and what it took: `✓ passed`, or `✗` and `failed`, `trapped` or `exited N`, then where the test's name is written, as a report closes on its place, since a test that did not pass is one its reader goes to. Plain, a test begins on `` Testing `/demo/two_is_three` `` and ends on `` Tested `/demo/two_is_three`: failed in 0.0s; lib.crs:7:6 ``, its subject's tally on `` Tested `/demo`: 2 passed, 1 failed in 0.1s ``. A test that exits on its own has reported nothing, so it is `exited N` whatever `N`, `0` included, and one that waits on nothing that can wake it is `exited 1` beneath the `deadlock:` line it writes. The tests run module by module, the modules in the order each declares its first test.
 
 What a test writes is never held: it reaches the stream the test wrote it on, standard output or standard error, as it is written, each line behind a frame — in the tree its trunk and a quote mark, `│  >`, and plain the test's path in backticks and the mark, `` `/demo/render/draws_a_square`> `` —; the mark of a line on standard error is painted apart where colour is seen. In the tree its first byte ends the line its node opened on, and the node closes beneath what was written, its outcome's mark in the quote's column, whichever stream that was; a stream sent elsewhere carries its lines behind the frame too. Beneath a test's outcome stands what only the runner holds: a trap's text, and what a failing test found — each check that failed on a line, the steps that reached it leading, a `Test/step`'s label and `case 2` for the third case of a `Test/all`, as in `parsing: case 2: not equal`, and beneath it each value it compared behind its label, in backticks. Two things write past the frame and stand unframed: a child process a test starts with a stream of its own inherited, and a test that takes the terminal.
 
-A subject's tally closes its tree and the run's is the last line where more than one subject ran, one subject's tally being the run's, each with what its tests took together where any ran: `N passed, N failed` always, then `trapped`, `exited` and `skipped`, the tests the filter left out, when they happened. A subject that declares no test, or that the filter selects nothing from, closes with its tally at once.
+A subject's tally closes its tree and the run's is the last line where more than one subject ran or a test did not pass, one subject's tally being the run's otherwise, each with what its tests took together where any ran: `N passed, N failed` always, then `trapped`, `exited` and `skipped`, the tests the filter left out, when they happened. A subject that declares no test, or that the filter selects nothing from, closes with its tally at once. Where a test did not pass, the run closes on where each such test is found, a line each in the order they ran, a blank line above and below, before its tally: the place its name is written, as `--at` takes one, or its path where no place was kept, so the tests to go back to are the last thing a long run writes.
 
 A claim about every instance is [a `let`, not a test](language.md#test-declarations): a broken one fails the build, and `curios test` never sees it.
 
