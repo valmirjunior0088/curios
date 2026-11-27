@@ -14,7 +14,8 @@ use {
         Described, Diagnosis, Origin, Overlaid, Subject, described_core_text, described_entry,
         of_error, open, overlaid,
     },
-    curios_common::{Lineage, Qualifier},
+    curios_common::Lineage,
+    curios_core::Global,
     curios_cps::{held, rebuilds},
     curios_emit::emitted_functions,
     curios_module::Overlay,
@@ -34,6 +35,8 @@ pub enum Unfooted {
     Unit,
     /// The program did not compile as far as Wasm: what stopped it.
     Diagnostics(Vec<Diagnosis>),
+    /// The footprint of a witness: a program's functions are found by the path of the declaration whose text they are, and a witness has none.
+    Witness,
 }
 
 /// One function of the declaration's text, or one heap twin of it, and what became of it.
@@ -93,11 +96,14 @@ impl fmt::Display for Fate {
 pub fn footprint(
     budget: u64,
     subject: Subject,
-    asked: &Qualifier,
+    asked: &Global,
     overlay: &Overlay,
     cache: Option<&Verdicts>,
     progress: &mut dyn FnMut(Progress<'_>),
 ) -> Result<Option<(Described, Vec<Row>)>, Unfooted> {
+    if matches!(asked, Global::Witness(_)) {
+        return Err(Unfooted::Witness);
+    }
     let reached = cache.map(|cache| Overlaid::over(cache, overlay));
     let through = reached.as_ref().map(|cache| cache as &dyn Cache);
     let (units, origin, declares, package) = match subject {
@@ -157,7 +163,7 @@ pub fn footprint(
 fn core_text_footprint(
     budget: u64,
     origin: &Origin,
-    asked: &Qualifier,
+    asked: &Global,
     overlay: &Overlay,
     (cache, through): (Option<&Verdicts>, Option<&dyn Cache>),
     progress: &mut dyn FnMut(Progress<'_>),

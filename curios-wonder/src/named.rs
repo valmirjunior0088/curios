@@ -785,19 +785,14 @@ impl<'s> Saying<'s> {
     /// What the lowering says of `name` ([`said_of`]) and its totality, where the unit in scope that declares it recorded one, beside that unit: none for the subject's own. Asked by the path it is exposed at, or for a witness, which has none, by its head as written; its type is each text's to spell for its own reader. `None` for a name no lowered item declares.
     fn described(&self, name: Global) -> Option<(Described, Option<&'s Unit>)> {
         let (said, unit) = said_of(self, name)?;
-        let head = said.declaration.as_ref().map(|declaration| {
-            let label = &declaration.label;
-            label.source.text()[label.start..label.end].to_string()
+        let asked = answered_by(name, said.declaration.as_ref(), || {
+            absolute(&self.outside, &name)
         });
-        let asked = match (name, head) {
-            (Global::Witness(_), Some(head)) => head,
-            _ => absolute(&self.outside, &name),
-        };
 
         Some((
             Described {
                 asked,
-                path: name.path(),
+                path: declared_at(name),
                 declared: said.declared,
                 public: said.public,
                 declaration: said.declaration,
@@ -1040,6 +1035,8 @@ pub fn declared_as(declared: Declared) -> &'static str {
 /// One witness in scope a declaration takes part in ([`Described::witnesses`]).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Witnessed {
+    /// Its name as Curios/Core writes it, which `--name` reads back: `/std/Nat/witness~/std/Ord/Ord(Nat)`.
+    pub name: String,
     /// Where it is written, its name being its head, where its unit holds its text.
     pub written: Option<Declaration>,
     /// The module that declares it.
@@ -1078,7 +1075,7 @@ struct Lowered {
 pub fn described(
     budget: u64,
     subject: Subject,
-    asked: &Qualifier,
+    asked: &Global,
     overlay: &Overlay,
     cache: Option<&Verdicts>,
     progress: &mut dyn FnMut(Progress<'_>),
@@ -1124,7 +1121,7 @@ pub fn described(
 pub fn described_core_text(
     budget: u64,
     origin: &Origin,
-    asked: &Qualifier,
+    asked: &Global,
     overlay: &Overlay,
     (cache, through): (Option<&Verdicts>, Option<&dyn Cache>),
     progress: &mut dyn FnMut(Progress<'_>),
@@ -1143,8 +1140,8 @@ pub fn described_core_text(
 }
 
 /// The declaration `asked` names in `unit`, a unit read from Curios/Core over the prelude's roots `prelude`, as [`described`] answers it, where the text declares one at that path: off the unit, placed where the text writes it.
-pub fn described_in_text(prelude: &[&Unit], unit: &Unit, asked: &Qualifier) -> Option<Described> {
-    let name = Global::Authored(*asked);
+pub fn described_in_text(prelude: &[&Unit], unit: &Unit, asked: &Global) -> Option<Described> {
+    let name = *asked;
     let place = unit.places().place(&name)?;
     let declared = unit.core().items.declared_at(&name, place);
     let said = Lowered {
@@ -1183,7 +1180,7 @@ pub fn described_in_text(prelude: &[&Unit], unit: &Unit, asked: &Qualifier) -> O
 pub fn described_unit(
     budget: u64,
     units: &[RootSource],
-    asked: &Qualifier,
+    asked: &Global,
     through: Option<&dyn Cache>,
     progress: &mut dyn FnMut(Progress<'_>),
 ) -> Result<Option<Described>, Vec<Diagnosis>> {
@@ -1222,7 +1219,7 @@ pub fn described_unit(
 pub fn declared_where<'s>(
     scope: &[&'s Unit],
     own: &'s PreparedText,
-    asked: &Qualifier,
+    asked: &Global,
 ) -> Option<(Global, &'s PreparedText, Option<&'s Unit>)> {
     let name = resolved(scope, own, asked);
     let found = found(scope, own, &name)?;
@@ -1236,7 +1233,7 @@ pub fn described_entry(
     units: &[RootSource],
     entrypoint: &curios_surface::Entrypoint,
     loader: &RootSource,
-    asked: &Qualifier,
+    asked: &Global,
     through: Option<&dyn Cache>,
     progress: &mut dyn FnMut(Progress<'_>),
 ) -> Result<Option<Described>, Vec<Diagnosis>> {
@@ -1270,7 +1267,7 @@ pub fn described_entry(
 
 /// What the lowering says of `asked` over `scope` and the subject's own lowering `own`: the answer off the unit in scope that declares it, or what the lowering says of the subject's own declaration with the lexicons its scope keeps, for its elaboration to type; `None` where nothing is declared at it.
 fn said_by(
-    asked: &Qualifier,
+    asked: &Global,
     scope: &[&Unit],
     own: &PreparedText,
 ) -> Option<Result<Described, (Lowered, Vec<Lexicon>)>> {
@@ -1307,7 +1304,7 @@ fn said_by(
 pub fn referent(
     budget: u64,
     subject: Subject,
-    asked: &Qualifier,
+    asked: &Global,
     overlay: &Overlay,
     cache: Option<&Verdicts>,
     progress: &mut dyn FnMut(Progress<'_>),
@@ -1320,25 +1317,32 @@ pub fn referent(
     let facade = |declaration: &Option<Described>| {
         declaration.as_ref().map(|described| described.path.clone())
     };
+    // A witness's name is its identity: it names no module, and no resolver walks it.
+    let path = asked.qualifier();
     let (declaration, module, unnamed) = match subject {
         Subject::Unit { units } => {
             let units = tested_last(overlaid(units, overlay));
             let declaration = described_unit(budget, &units, asked, through, &mut *progress)?;
-            let module = exported_among(
-                budget,
-                &units,
-                None,
-                asked,
-                facade(&declaration).as_deref(),
-                through,
-                progress,
-            );
-            let unnamed = (declaration.is_none() && matches!(module, Ok(None))).then(|| {
-                Fold::new(budget, &units, through)
-                    .lowered_unit(|_| {}, |scope, own| own.unnamed_by(&texts(scope), asked))
-                    .ok()
-                    .flatten()
-            });
+            let module = match path {
+                Some(path) => exported_among(
+                    budget,
+                    &units,
+                    None,
+                    path,
+                    facade(&declaration).as_deref(),
+                    through,
+                    progress,
+                ),
+                None => Ok(None),
+            };
+            let unnamed = path
+                .filter(|_| declaration.is_none() && matches!(module, Ok(None)))
+                .map(|path| {
+                    Fold::new(budget, &units, through)
+                        .lowered_unit(|_| {}, |scope, own| own.unnamed_by(&texts(scope), path))
+                        .ok()
+                        .flatten()
+                });
 
             (declaration, module, unnamed.flatten())
         }
@@ -1350,13 +1354,13 @@ pub fn referent(
         } => {
             let (entrypoint, loader) = open(origin, declares, package.as_ref(), overlay)?;
             let (units, loader) = (overlaid(units, overlay), loader.tested());
-            let declaration = match mounting(&units, asked) {
+            let declaration = match path.and_then(|path| Some((path, mounting(&units, path)?))) {
                 // A path under a unit's mount names a declaration where that unit's lowering says so, so one that names a module alone is asked of no unit after it and of no check.
-                Some(holding)
+                Some((path, holding))
                     if !declared_among(
                         budget,
                         &units[..=holding],
-                        asked,
+                        path,
                         through,
                         &mut *progress,
                     )? =>
@@ -1373,26 +1377,31 @@ pub fn referent(
                     &mut *progress,
                 )?,
             };
-            let module = exported_among(
-                budget,
-                &units,
-                Some((&entrypoint, &loader)),
-                asked,
-                facade(&declaration).as_deref(),
-                through,
-                progress,
-            );
-            let unnamed = (declaration.is_none() && matches!(module, Ok(None))).then(|| {
-                Fold::new(budget, &units, through)
-                    .lowered(
-                        &entrypoint,
-                        &loader,
-                        |_| {},
-                        |scope, own, _| own.unnamed_by(&texts(scope), asked),
-                    )
-                    .ok()
-                    .flatten()
-            });
+            let module = match path {
+                Some(path) => exported_among(
+                    budget,
+                    &units,
+                    Some((&entrypoint, &loader)),
+                    path,
+                    facade(&declaration).as_deref(),
+                    through,
+                    progress,
+                ),
+                None => Ok(None),
+            };
+            let unnamed = path
+                .filter(|_| declaration.is_none() && matches!(module, Ok(None)))
+                .map(|path| {
+                    Fold::new(budget, &units, through)
+                        .lowered(
+                            &entrypoint,
+                            &loader,
+                            |_| {},
+                            |scope, own, _| own.unnamed_by(&texts(scope), path),
+                        )
+                        .ok()
+                        .flatten()
+                });
 
             (declaration, module, unnamed.flatten())
         }
@@ -1405,15 +1414,18 @@ pub fn referent(
                 (cache, through),
                 &mut *progress,
             )?;
-            let module = exported_among(
-                budget,
-                &[],
-                None,
-                asked,
-                facade(&declaration).as_deref(),
-                through,
-                progress,
-            );
+            let module = match path {
+                Some(path) => exported_among(
+                    budget,
+                    &[],
+                    None,
+                    path,
+                    facade(&declaration).as_deref(),
+                    through,
+                    progress,
+                ),
+                None => Ok(None),
+            };
 
             // Curios/Core names its declarations by their paths and no resolver reads it, so a path it names nothing at has no step to refuse.
             (declaration, module, None)
@@ -1474,7 +1486,7 @@ fn declared_among(
 ) -> Result<bool, Vec<Diagnosis>> {
     Fold::new(budget, units, through)
         .lowered_unit(progress, |scope, own| {
-            found(scope, own, &resolved(scope, own, asked)).is_some()
+            found(scope, own, &resolved(scope, own, &Global::Authored(*asked))).is_some()
         })
         .map_err(of_error)
 }
@@ -1783,8 +1795,36 @@ fn module_placed(lowered: &PreparedText, owned: bool, module: &Qualifier) -> Opt
 }
 
 /// The declaration `asked` names, a path read as a reader outside every module writes one: a declaration at it, or one some module exports there ([`PreparedText::named_by`]), by `own` and the units in `scope`.
-fn resolved(scope: &[&Unit], own: &PreparedText, asked: &Qualifier) -> Global {
-    Global::Authored(own.named_by(&texts(scope), asked).unwrap_or(*asked))
+fn resolved(scope: &[&Unit], own: &PreparedText, asked: &Global) -> Global {
+    match asked {
+        Global::Authored(path) => {
+            Global::Authored(own.named_by(&texts(scope), path).unwrap_or(*path))
+        }
+        Global::Witness(_) => *asked,
+    }
+}
+
+/// The path `name` is declared at, which a block closes on where no file holds its text: an authored declaration's path, and a witness's name as Curios/Core writes it, the one it is asked by.
+fn declared_at(name: Global) -> String {
+    match name {
+        Global::Authored(_) => name.path(),
+        Global::Witness(_) => name.faithful().to_string(),
+    }
+}
+
+/// What a declaration `name`, written as `declaration` where its text is held, is answered by: a witness by its head as its author wrote it, which says what it witnesses, and anything else, or a witness whose text is not held, by `path`.
+fn answered_by(
+    name: Global,
+    declaration: Option<&Declaration>,
+    path: impl FnOnce() -> String,
+) -> String {
+    match (name, declaration) {
+        (Global::Witness(_), Some(declaration)) => {
+            let label = &declaration.label;
+            label.source.text()[label.start..label.end].to_string()
+        }
+        _ => path(),
+    }
 }
 
 /// The lowerings of the units in `scope` that hold one, which a path is walked over beside the subject's own.
@@ -1924,6 +1964,7 @@ fn witnesses(saying: &Saying<'_>, found: &Found<'_>, name: &Global) -> Option<Ve
                             )
                         });
                         let witnessed = Witnessed {
+                            name: witness.faithful().to_string(),
                             written,
                             module: id.module().join(),
                             keyed,
@@ -1960,7 +2001,7 @@ fn absolute(spellings: &Spellings, global: &Global) -> String {
 
 /// `said` of the declaration `asked` names, with its type spelled for a reader standing at it ([`spelling_at`]), over `definitions`, the module of the unit that declares it, kept under `kept` where it keeps one, and `scope`, and its totality as `certification`, that unit's record, files it. The type is a definition's, or a constructor's as its family's entry makes it, and none where the module holds no definition under the name.
 fn spelled(
-    asked: &Qualifier,
+    asked: &Global,
     said: Lowered,
     definitions: &Definitions,
     kept: Option<(&Lexicon, &Places)>,
@@ -1978,12 +2019,16 @@ fn spelled(
     };
 
     Described {
-        asked: asked.join(),
-        path: name.path(),
+        asked: answered_by(name, said.declaration.as_ref(), || {
+            asked.faithful().to_string()
+        }),
+        path: declared_at(name),
         declared: said.declared,
         public: said.public,
         declaration: said.declaration,
-        stated: said.stated.or_else(|| adopted(&asked.join())),
+        stated: said
+            .stated
+            .or_else(|| asked.qualifier().and_then(|path| adopted(&path.join()))),
         type_: type_.map(|type_| type_.spelled(&spelling).to_string()),
         proof: proven(definitions, kept.map(|(_, places)| places), &name),
         totality: certification

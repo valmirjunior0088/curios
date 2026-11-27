@@ -16,9 +16,11 @@ use {
         value_parser,
     },
     curios_common::{Code, Qualifier, Report, nearest},
+    curios_core::Global,
     curios_elab::DEFAULT_BUDGET,
     curios_package::{FormatSettings, Refused, Target},
     curios_pipeline::Stage,
+    curios_surface::witness_named,
     curios_wonder::Place,
     std::{env, error::Error as _, ffi::OsString, mem, path::PathBuf, sync::LazyLock},
 };
@@ -468,8 +470,8 @@ pub enum Query {
     At(Place),
     /// Every span of the file the subject is asked through that the compiler classes, a row a line, answered off the check of the subject as a place is.
     Classes,
-    /// A declaration by the absolute path a program outside every module writes it by, answered off the unit that declares it, or, under a view, what the view answers of what the path names.
-    Name(Qualifier, Option<View>),
+    /// A declaration by the absolute path a program outside every module writes it by, or a witness by its name as Curios/Core writes it, answered off the unit that declares it, or, under a view, what the view answers of what the path names.
+    Name(Global, Option<View>),
     /// Whether the checkers admit the subject's closing term at `False`: the soundness board's question, asked of a program or a text of Curios/Core by the put the board asks it through.
     False,
     /// Every query, asked by an editor over the language server protocol of the documents it hands over: no subject, which the option refuses beside it where the line is parsed.
@@ -511,15 +513,19 @@ pub enum View {
     Witnesses,
 }
 
-/// A declaration's path as `--name` takes it: absolute, each segment written.
-fn declaration_path(written: &str) -> Result<Qualifier, String> {
+/// What `--name` names: a witness by its name as Curios/Core writes it and `--witnesses` lists it, `/std/Nat/witness~/std/Ops/Add(Nat)`, read by the reader Curios/Core is read with, and a declaration by its path, absolute, each segment written.
+fn declaration_named(written: &str) -> Result<Global, String> {
+    if let Some(witness) = witness_named(written) {
+        return Ok(Global::Witness(witness));
+    }
+
     written
         .strip_prefix('/')
         .map(|path| path.split('/').collect::<Vec<_>>())
         .filter(|segments| segments.iter().all(|segment| !segment.is_empty()))
-        .map(Qualifier::from)
+        .map(|segments| Global::Authored(Qualifier::from(segments)))
         .ok_or_else(|| {
-            "a declaration is named by its absolute path, as in `/std/Bool/not`".to_string()
+            "a declaration is named by its absolute path, as in `/std/Bool/not`, and a witness by its name as `--witnesses` lists it".to_string()
         })
 }
 
@@ -575,9 +581,9 @@ impl Args for Query {
                 Arg::new("name")
                     .long("name")
                     .value_name("PATH")
-                    .value_parser(declaration_path)
+                    .value_parser(declaration_named)
                     .help(NAME.query_help(
-                        "What an absolute path names in the subject's scope: a declaration, by what it is declared as, its type, its members and how many witnesses it takes part in, where, and its text; a module, by what it exposes; both where a path names both",
+                        "What an absolute path names in the subject's scope: a declaration, by what it is declared as, its type, its members and how many witnesses it takes part in, where, and its text; a module, by what it exposes; both where a path names both. A witness is named as `--witnesses` lists it, `/std/Nat/witness~/std/Ops/Add(Nat)`",
                     )),
             )
             .arg(flag(
@@ -590,7 +596,7 @@ impl Args for Query {
             .arg(Self::view(flag(
                 "witnesses",
                 WITNESSES.query_help(
-                    "Beside `--name`, the witnesses in scope the declaration takes part in, one row each: where it is written, and what it is keyed on or the concept it satisfies",
+                    "Beside `--name`, the witnesses in scope the declaration takes part in, one row each: its name, which `--name` takes, its head as written, and where it is written",
                 ),
             )))
             .arg(Self::view(flag(
@@ -645,7 +651,7 @@ impl FromArgMatches for Query {
             Query::At(place.clone())
         } else if matches.get_flag("classes") {
             Query::Classes
-        } else if let Some(path) = matches.get_one::<Qualifier>("name") {
+        } else if let Some(path) = matches.get_one::<Global>("name") {
             let view = if matches.get_flag("witnesses") {
                 Some(View::Witnesses)
             } else if matches.get_flag("footprint") {

@@ -1,6 +1,6 @@
 //! What a text names, held over one program that writes a name in every position the lowering resolves one.
 //!
-//! The program is written with a mark around each name the lowering does not resolve, `«name»` — one elaboration resolves — and is read with the marks taken out. Every path it writes is then held to what its text mentions, where it stands in no mark: one that ends in a declaration's name is a mention of that declaration over the whole path, each segment before its last that is a declaration's name — the family or the concept whose namespace it reaches — a mention of that declaration over the segment, and nothing else is one.
+//! The program is written with a mark around each name the lowering does not resolve, `«name»` — one elaboration resolves — and is read with the marks taken out. Every path it writes is then held to what its text mentions, the word that opens a witness, which has no name a program writes, naming the witness, where it stands in no mark: one that ends in a declaration's name is a mention of that declaration over the whole path, each segment before its last that is a declaration's name — the family or the concept whose namespace it reaches — a mention of that declaration over the segment, and nothing else is one.
 
 use {
     super::super::{test_support::*, *},
@@ -140,6 +140,12 @@ fn answers(marked: &str, baseline: Option<&PreparedText>) -> PreparedText {
         .iter()
         .flat_map(|text| text.mentions())
         .collect::<Vec<_>>();
+    // Every declaration's name, by where it is written: the word before a witness's is the one that opens it.
+    let declarations = texts
+        .iter()
+        .flat_map(|text| text.declares())
+        .map(|mention| (mention.span.start, mention.name))
+        .collect::<BTreeMap<_, _>>();
 
     // Every disagreement is told at once: a name whose place the lowering lost is seldom alone.
     let mut disagreements = Vec::new();
@@ -148,6 +154,14 @@ fn answers(marked: &str, baseline: Option<&PreparedText>) -> PreparedText {
         let silenced = silent.iter().any(|held| held.contains(&start));
         // Each segment before the last that reaches a declaration's namespace names the declaration over itself, and the last names its declaration over the whole path.
         let mut expected = Vec::new();
+        if matches!(path, "satisfy" | "and")
+            && let Some((_, witness)) = declarations
+                .range(end..)
+                .next()
+                .filter(|(_, name)| matches!(name, curios_core::Global::Witness(_)))
+        {
+            expected.push(((start, end), *witness));
+        }
         let mut at = start + usize::from(path.starts_with('/'));
         for segment in path.trim_start_matches('/').split('/') {
             let whole = at + segment.len() == end;

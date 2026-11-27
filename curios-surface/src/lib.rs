@@ -66,6 +66,7 @@ pub use print::{
 };
 
 mod parse;
+pub use parse::witness_named;
 use parse::*;
 
 mod module;

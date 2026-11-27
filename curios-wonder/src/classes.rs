@@ -30,6 +30,15 @@ impl Placed {
         let roots = root_prefixes();
         let mut classed = BTreeMap::new();
         for written in &self.texts {
+            // A word is the keyword it is, whatever it also answers: `satisfy` answers the witness it opens, which has no name of its own to stand at.
+            for word in &written.words {
+                classed.entry((word.start, word.end)).or_insert(Classed {
+                    span: word.clone(),
+                    class: Class::Keyword,
+                    declaration: false,
+                    default_library: false,
+                });
+            }
             // Each record's span, the whole span it answers over, and the path what it names lies at where that is a declaration's or a module's.
             let names = written.names.iter().map(|named| {
                 let path = match named.named {
@@ -73,14 +82,6 @@ impl Placed {
                     class,
                     declaration,
                     default_library,
-                });
-            }
-            for word in &written.words {
-                classed.entry((word.start, word.end)).or_insert(Classed {
-                    span: word.clone(),
-                    class: Class::Keyword,
-                    declaration: false,
-                    default_library: false,
                 });
             }
         }

@@ -211,6 +211,15 @@ fn parse_witness_name<'a>(state: ParserState<'a>) -> Parsed<'a, WitnessId> {
         .parse(state)
 }
 
+/// The witness `written` names, whole, as Curios/Core writes a witness's name, `/std/Nat/witness~/std/Ops/Add(Nat)`: what a question asks a witness by, since no program writes a path to one. None where `written` is no witness's name.
+pub fn witness_named(written: &str) -> Option<WitnessId> {
+    run_parser(
+        parse_witness_name.and_drop(take_eof()),
+        &Arc::new(Source::of(None, None, written)),
+    )
+    .ok()
+}
+
 /// The module a witness's name begins with, through its `witness~`.
 fn parse_witness_module<'a>(state: ParserState<'a>) -> Parsed<'a, Qualifier> {
     take_while(|character| is_identifier_char(character) || character == '/')

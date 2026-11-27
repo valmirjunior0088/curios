@@ -22,7 +22,7 @@ use top_level::*;
 pub use top_level::{ITEM_HEADS, parse_top_item};
 
 mod core_text;
-pub use core_text::{CoreFormatInput, parse_core_for_format};
+pub use core_text::{CoreFormatInput, parse_core_for_format, witness_named};
 
 #[cfg(test)]
 mod test_support;

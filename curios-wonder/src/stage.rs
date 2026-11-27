@@ -46,6 +46,8 @@ pub enum Refusal {
     Kept { file: Option<PathBuf> },
     /// A rung no lowering made, `text` or `core`, asked of Curios/Core, which is lowered by nothing: its rungs begin at `core-elab`.
     Lowered,
+    /// A rung past a unit's asked of a witness: a program's rungs find a declaration's part by its path, and a witness has none, so its rungs end at `core-elab`.
+    Witness,
 }
 
 /// `subject`'s representation at the rung `name`, compiled against its units and the prelude, handed to `shown` where the driver emits it: nothing a later rung does unmakes a rung already handed on, a panic on an invariant of its own among it.
@@ -248,7 +250,7 @@ fn last_unit(
 pub fn named_stage(
     budget: u64,
     subject: Subject,
-    asked: &Qualifier,
+    asked: &Global,
     name: &str,
     overlay: &Overlay,
     cache: Option<&Verdicts>,
@@ -369,7 +371,7 @@ pub fn named_stage(
             let own = Fold::new(budget, &[], through)
                 .core_text_unit(&source, module, &mut *progress, |prelude, unit| {
                     let described = described_in_text(prelude, unit, asked)?;
-                    let name = Global::Authored(*asked);
+                    let name = *asked;
                     let part = unit
                         .core()
                         .spelled(&narrowed(
@@ -428,12 +430,15 @@ impl Lowered<'_> {
 fn program_part(
     budget: u64,
     subject: Subject,
-    asked: &Qualifier,
+    asked: &Global,
     name: &str,
     overlay: &Overlay,
     through: Option<&dyn Cache>,
     progress: &mut dyn FnMut(Progress<'_>),
 ) -> Result<Option<(Described, String)>, Refusal> {
+    if matches!(asked, Global::Witness(_)) {
+        return Err(Refusal::Witness);
+    }
     let (units, origin, declares, package) = match subject {
         Subject::Entry {
             units,
@@ -506,7 +511,7 @@ fn program_part(
 fn core_text_part(
     budget: u64,
     origin: Origin,
-    asked: &Qualifier,
+    asked: &Global,
     name: &str,
     overlay: &Overlay,
     through: Option<&dyn Cache>,
@@ -602,7 +607,7 @@ fn text_part(described: &Described) -> Result<String, Refusal> {
 }
 
 /// The items the declaration `asked` names lowered to in the subject's own lowering `own`, over the units in `scope`; refused for a unit in scope's declaration, which keeps no lowering, with the file that holds it.
-fn lowered_part(asked: &Qualifier, scope: &[&Unit], own: &PreparedText) -> Result<String, Refusal> {
+fn lowered_part(asked: &Global, scope: &[&Unit], own: &PreparedText) -> Result<String, Refusal> {
     let Some((name, lowered, unit)) = declared_where(scope, own, asked) else {
         return Ok(String::new());
     };
@@ -627,7 +632,7 @@ fn lowered_part(asked: &Qualifier, scope: &[&Unit], own: &PreparedText) -> Resul
 
 /// The items the declaration `asked` names, in the elaborated module of the unit in `scope` that declares it, or in `elaborated`, the subject's own as elaborated, where the subject declares it: empty where neither holds it, as the subject's own does before it is handed.
 fn elaborated_part(
-    asked: &Qualifier,
+    asked: &Global,
     scope: &[&Unit],
     own: &PreparedText,
     elaborated: Option<&Definitions>,

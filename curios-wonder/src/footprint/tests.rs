@@ -1,6 +1,7 @@
 use {
     super::*,
     crate::{test_support::*, *},
+    curios_common::Qualifier,
     curios_elab::DEFAULT_BUDGET,
     curios_module::Overlay,
     curios_surface::WrittenIn,
@@ -16,7 +17,7 @@ fn rows_of(text: &str, path: &str) -> Option<Vec<Row>> {
     footprint(
         DEFAULT_BUDGET,
         loose(text),
-        &Qualifier::from([path]),
+        &Global::Authored(Qualifier::from([path])),
         &Overlay::default(),
         None,
         &mut |_| {},
@@ -30,7 +31,7 @@ fn a_module_has_no_footprint() {
     let refused = footprint(
         DEFAULT_BUDGET,
         loose("let helper(x : /std/Nat) -> /std/Nat = x + 1;\n"),
-        &Qualifier::from(["helper"]),
+        &Global::Authored(Qualifier::from(["helper"])),
         &Overlay::default(),
         None,
         &mut |_| {},

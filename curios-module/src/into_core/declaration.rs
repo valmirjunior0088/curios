@@ -515,6 +515,10 @@ pub(super) fn lower_declaration(
                 .map(|witness| {
                     let name = curios_core::Global::Witness(context.fresh_witness());
                     context.record_import_scope(Some(&name));
+                    // A witness has no name a program writes, so the word that opens it is where it is named: a place there answers it.
+                    if let Some(word) = witness.word.span().and_then(|span| context.extent(span)) {
+                        context.named(word, name);
+                    }
 
                     let concept_app = witness_concept_application(
                         &witness.concept,

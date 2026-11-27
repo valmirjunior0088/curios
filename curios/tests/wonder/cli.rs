@@ -315,9 +315,11 @@ fn a_block_points_to_the_view_listing_its_witnesses() {
         &["wonder", "--name", "/std/Show", "--witnesses", "app.crs"],
         "",
     ));
-    // Each witness is an entry on the block: its head as its author wrote it, closed by where it is written, or by the module that declares it where no file holds it.
+    // Each witness is an entry on the block: its name, which `--name` takes, its head as its author wrote it, closed by where it is written, or by the module that declares it where no file holds it.
     assert!(
-        listed.contains("\n├─ satisfy Show(Bool); /std/Bool\n"),
+        listed.contains(
+            "\n├─ /std/Bool/witness~/std/Show/Show(Bool): satisfy Show(Bool); /std/Bool\n"
+        ),
         "{listed}"
     );
     assert!(!listed.contains('\t'), "{listed}");
@@ -327,6 +329,147 @@ fn a_block_points_to_the_view_listing_its_witnesses() {
             .ends_with("└─ [declaration] /std/Show/Show"),
         "{listed}"
     );
+}
+
+/// The name each witness a listing holds leads its entry with is the one `--name` answers it by, whatever its key's heads are: a family's, an intrinsic type's, a tuple type's shape, and a concept of several arguments'.
+#[test]
+fn every_listed_witness_is_answered_by_the_name_it_leads_with() {
+    let root = temporary("witness-names");
+    fs::create_dir_all(&root).unwrap();
+
+    for concept in ["/std/Ord", "/std/Monad/Lift"] {
+        let listed = stdout(&curios(
+            &root,
+            &["wonder", "--name", concept, "--witnesses"],
+            "",
+        ));
+        let entries = listed
+            .lines()
+            .filter_map(|line| line.strip_prefix("├─ "))
+            .filter_map(|entry| entry.split_once(": satisfy"))
+            .collect::<Vec<_>>();
+        assert!(entries.len() > 2, "{listed}");
+
+        for (name, head) in entries {
+            // An entry closes on where its witness is written, past its head; the block's entry is its source, its prose above its head.
+            let head = head.split_once("; ").map_or(head, |(head, _)| head);
+            let answered = curios(&root, &["wonder", "--name", name], "");
+            let block = stdout(&answered);
+            assert_eq!(answered.status.code(), Some(0), "{name}: {block}");
+            assert!(block.contains(&format!("satisfy{head}")), "{name}: {block}");
+            // No file holds the standard library's text, so its block closes on the name it was asked by.
+            assert!(
+                block
+                    .trim_end()
+                    .ends_with(&format!("└─ [declaration] {name}")),
+                "{name}: {block}"
+            );
+        }
+    }
+}
+
+/// A program deriving a witness, and the name its listing leads it with.
+const DERIVED: &str = "struct Dot: pub Type {\n    x: /std/Nat,\n}\n\nsatisfy /std/Spell(Dot) { .. }\n\n/std/print(\"\")\n";
+
+/// The name a witness of [`DERIVED`] is listed under.
+const DERIVED_NAME: &str = "/witness~/std/Spell/Spell(/Dot)";
+
+/// A witness asked by its name is answered by what it witnesses as its author wrote it, its source the head alone, and a derived one at `core-elab` by the body its derivation wrote, which its source does not hold.
+#[test]
+fn a_derived_witness_is_answered_with_its_body_at_core_elab() {
+    let root = temporary("derived-witness");
+    fs::create_dir_all(&root).unwrap();
+
+    let listed = stdout(&curios(
+        &root,
+        &["wonder", "--name", "/std/Spell", "--witnesses", "-"],
+        DERIVED,
+    ));
+    assert!(
+        listed.contains(&format!(
+            "├─ {DERIVED_NAME}: satisfy /std/Spell(Dot); <stdin>:5:9\n"
+        )),
+        "{listed}"
+    );
+
+    let named = stdout(&curios(
+        &root,
+        &["wonder", "--name", DERIVED_NAME, "-"],
+        DERIVED,
+    ));
+    assert_eq!(
+        named,
+        "/std/Spell(Dot)\n│  derived\n├─ satisfy /std/Spell(Dot)\n└─ [declaration] <stdin>:5:9\n"
+    );
+
+    let staged = stdout(&curios(
+        &root,
+        &[
+            "wonder",
+            "--name",
+            DERIVED_NAME,
+            "--stage",
+            "core-elab",
+            "-",
+        ],
+        DERIVED,
+    ));
+    let (_, part) = staged
+        .split_once("\n\n")
+        .expect("a blank line parts the block from the part");
+    assert!(part.contains(&format!("let {DERIVED_NAME}:")), "{part}");
+    assert!(part.contains("/std/Spell/record("), "{part}");
+}
+
+/// A witness has no name a program writes, so the word that opens it is where a place answers it, as `--name` answers it; and the word stays the keyword it is.
+#[test]
+fn a_witness_is_answered_at_the_word_that_opens_it() {
+    let root = temporary("witness-word");
+    fs::create_dir_all(&root).unwrap();
+    write(&root, "derived.crs", DERIVED);
+
+    for column in [1, 7] {
+        let place = format!("derived.crs:5:{column}");
+        assert_eq!(
+            stdout(&curios(&root, &["wonder", "--at", &place], "")),
+            "/std/Spell(Dot)\n│  derived\n├─ satisfy /std/Spell(Dot)\n└─ [declaration] derived.crs:5:9\n",
+            "{place}"
+        );
+    }
+    let classes = stdout(&curios(&root, &["wonder", "--classes", "derived.crs"], ""));
+    assert!(
+        classes.contains("derived.crs:5:1\t7\tkeyword\t-\n"),
+        "{classes}"
+    );
+}
+
+/// A witness's name no witness in scope is declared under is refused by kind, pointing to the listing of its concept's witnesses; and a witness, which has no path, is refused at every view that finds a part of the program by one.
+#[test]
+fn a_witness_is_refused_where_nothing_answers_its_name() {
+    let root = temporary("refused-witness");
+    fs::create_dir_all(&root).unwrap();
+    let refused = |arguments: &[&str]| {
+        let output = curios(&root, arguments, DERIVED);
+        assert_eq!(output.status.code(), Some(1), "{arguments:?}");
+
+        String::from_utf8_lossy(&output.stderr).into_owned()
+    };
+
+    assert_eq!(
+        refused(&["wonder", "--name", "/witness~/std/Spell/Spell(/Nope)", "-"]),
+        "unknown witness\n│  no witness in scope is declared under this name\n│  `--name /std/Spell/Spell --witnesses` lists those that are\n└─ [error] /witness~/std/Spell/Spell(/Nope)\n"
+    );
+    for view in [&["--stage", "anf"][..], &["--footprint"][..]] {
+        let mut arguments = vec!["wonder", "--name", DERIVED_NAME];
+        arguments.extend_from_slice(view);
+        arguments.push("-");
+        let said = refused(&arguments);
+        assert!(said.starts_with("no path\n"), "{said}");
+        assert!(
+            said.contains("│  a witness's rungs end at `core-elab`\n"),
+            "{said}"
+        );
+    }
 }
 
 /// A module is answered by a block: whether its `mod` line is written `pub`, how many names and modules it exposes, an entry behind a `├─` for each thing it exposes, and its `mod` line's place as the close. One no documentation page shows, a private one, is answered as one a page shows is, with nothing it keeps.

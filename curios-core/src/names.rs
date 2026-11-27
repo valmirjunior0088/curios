@@ -222,6 +222,11 @@ impl Mints {
                 .iter()
                 .map(|binder| binder.renamed(name, renamed))
                 .collect(),
+            named: self
+                .named
+                .iter()
+                .map(|(at, named)| (*at, if named == name { renamed } else { *named }))
+                .collect(),
             ..self.clone()
         }
     }

@@ -14,7 +14,7 @@ use {
     curios_common::{
         About, Kind, MAX_LINE_WIDTH, OsError, Qualifier, Report, STDIN_NAME, Said, Style,
     },
-    curios_core::Unresolved,
+    curios_core::{Global, Unresolved},
     curios_module::{Brought, LoadError, Overlay},
     curios_package::{Entry, Home, Library, LooseModule, Program, Refused, Selection},
     curios_pipeline::{CompileError, Progress, Put, Stage},
@@ -327,7 +327,7 @@ impl Asked {
         self,
         budget: u64,
         overlay: &Overlay,
-        path: &Qualifier,
+        path: &Global,
         name: &str,
         telling: &mut dyn Telling,
     ) -> Result<Option<(Described, String)>, Refusal> {
@@ -357,7 +357,7 @@ impl Asked {
         self,
         budget: u64,
         overlay: &Overlay,
-        path: &Qualifier,
+        path: &Global,
         telling: &mut dyn Telling,
     ) -> Result<Option<(Described, Vec<Row>)>, Unfooted> {
         let (subject, verdicts) = self.taken(telling);
@@ -447,7 +447,7 @@ impl Asked {
         self,
         budget: u64,
         overlay: &Overlay,
-        path: &Qualifier,
+        path: &Global,
         telling: &mut dyn Telling,
     ) -> Result<Option<Described>, Vec<Diagnosis>> {
         let (subject, verdicts) = self.taken(telling);
@@ -468,7 +468,7 @@ impl Asked {
         self,
         budget: u64,
         overlay: &Overlay,
-        path: &Qualifier,
+        path: &Global,
         telling: &mut dyn Telling,
     ) -> Result<Result<Referent, Option<Unresolved>>, Vec<Diagnosis>> {
         let (subject, verdicts) = self.taken(telling);
@@ -574,7 +574,7 @@ pub fn wonder_stage(
         Err(Refusal::Unit) => Err(refusal.into()),
         Err(Refusal::Diagnostics(diagnostics)) => Err(stopped(diagnostics)),
         Err(Refusal::Lowered) => Err(no_lowering(name)),
-        Err(Refusal::Kept { .. }) => {
+        Err(Refusal::Kept { .. } | Refusal::Witness) => {
             unreachable!("a whole program's rung is asked of no declaration")
         }
     }
@@ -595,7 +595,7 @@ fn no_lowering(name: &str) -> CompileError {
 pub fn wonder_named_stage(
     budget: u64,
     scope: Scope,
-    path: &Qualifier,
+    path: &Global,
     name: &str,
     telling: &mut dyn Telling,
 ) -> Result<(), CompileError> {
@@ -629,17 +629,18 @@ pub fn wonder_named_stage(
         Err(Refusal::Kept { file }) => {
             let refused = Refused::of("not the subject's own")
                 .stating("`core` is the subject's own lowering, and a unit in scope keeps none")
-                .about_named(path.join());
+                .about_named(path.faithful().to_string());
             Err(match file {
                 Some(file) => Box::new(refused.trying(format!(
                     "curios wonder --name {} --stage core {}",
-                    path.join(),
+                    path.faithful(),
                     file.display()
                 ))),
                 None => refused,
             }
             .into())
         }
+        Err(Refusal::Witness) => Err(no_path(path, &format!("`{name}`, a program's rung,"))),
         // Whoever admits a scope at a rung past a unit's admits a program alone.
         Err(Refusal::Unit) => Err(refusal
             .expect("a rung past a unit's is asked of a program")
@@ -724,7 +725,7 @@ fn answered_rung(
         Err(Refusal::Unit) => unreachable!("a unit was admitted at a program's rung"),
         Err(Refusal::Diagnostics(diagnostics)) => Err(stopped(diagnostics)),
         Err(Refusal::Lowered) => Err(no_lowering(name)),
-        Err(Refusal::Kept { .. }) => {
+        Err(Refusal::Kept { .. } | Refusal::Witness) => {
             unreachable!("a whole unit's rung is asked of no declaration")
         }
     }
@@ -914,7 +915,7 @@ pub fn wonder_classes(
 pub fn wonder_name(
     budget: u64,
     scope: Scope,
-    path: &Qualifier,
+    path: &Global,
     subject: Option<&str>,
     telling: &mut dyn Telling,
 ) -> Result<(), CompileError> {
@@ -940,7 +941,7 @@ pub fn wonder_name(
             drawn(
                 described,
                 None,
-                Some(listing(&path.join(), subject)),
+                Some(listing(&path.faithful().to_string(), subject)),
                 &reader
             )
         ));
@@ -948,7 +949,7 @@ pub fn wonder_name(
             answer(format_args!("\n{}\n", declaration.written()));
         }
     }
-    if let Some(module) = &module {
+    if let (Some(module), Some(path)) = (&module, path.qualifier()) {
         // A facade's path names both, and the module stands after the declaration, a blank line between.
         if declaration.is_some() {
             answer("\n");
@@ -970,7 +971,7 @@ pub fn wonder_name(
 pub fn wonder_witnesses(
     budget: u64,
     scope: Scope,
-    path: &Qualifier,
+    path: &Global,
     telling: &mut dyn Telling,
 ) -> Result<(), CompileError> {
     let reader = telling.reader();
@@ -986,7 +987,7 @@ pub fn wonder_witnesses(
                 None => witnessed.module.clone(),
             };
 
-            format!("{}; {place}", witnessed.head())
+            format!("{}: {}; {place}", witnessed.name, witnessed.head())
         })
         .collect::<Vec<_>>();
     answer(format_args!(
@@ -1037,7 +1038,7 @@ fn listing(path: &str, subject: Option<&str>) -> String {
 fn declaration(
     budget: u64,
     scope: Scope,
-    path: &Qualifier,
+    path: &Global,
     telling: &mut dyn Telling,
 ) -> Result<Described, CompileError> {
     let overlay = Overlay::default();
@@ -1062,18 +1063,35 @@ fn nothing_at(place: &Place) -> CompileError {
 }
 
 /// The refusal of a path that names nothing in scope: the resolver's own, `unnamed`, where the subject's lowering says why, the step that failed and the nearest name there, as a program that wrote the path is told; a bare one where it does not.
-fn unknown_declaration(path: &Qualifier, unnamed: Option<Unresolved>) -> CompileError {
-    let refused = match unnamed {
-        Some(unnamed) => {
+fn unknown_declaration(path: &Global, unnamed: Option<Unresolved>) -> CompileError {
+    let refused = match (unnamed, path.witness_key()) {
+        (Some(unnamed), _) => {
             let mut said = Said::default();
             unnamed.say(&mut said);
             Refused::saying(said)
         }
-        None => Refused::of("unknown declaration")
+        (None, Some((concept, _))) => Refused::of("unknown witness")
+            .stating("no witness in scope is declared under this name")
+            .stating(format_args!(
+                "`--name {} --witnesses` lists those that are",
+                concept.faithful()
+            )),
+        (None, None) => Refused::of("unknown declaration")
             .stating("nothing in scope is declared or exported at this path"),
     };
 
-    refused.about_named(path.join()).into()
+    refused.about_named(path.faithful().to_string()).into()
+}
+
+/// The refusal of a view that finds a declaration's part of the program by its path, asked of the witness `path` names, which has none: `what` the view is, and a witness's rungs end at `core-elab`.
+fn no_path(path: &Global, what: &str) -> CompileError {
+    Refused::of("no path")
+        .stating(format_args!(
+            "{what} finds a declaration's part of the program by its path, and a witness has none"
+        ))
+        .stating("a witness's rungs end at `core-elab`")
+        .about_named(path.faithful().to_string())
+        .into()
 }
 
 /// What `wonder --name`, its views and `wonder --at` say of `described` first, a block: the path it is answered by, then each fact stated of it ([`Described::facts`]), a fact of several values laid over as many lines as keep each within a block's width, then `listing`, the command that lists its witnesses, where there are any to list, closed on where its name is written, or where no file holds it on the path it is declared at — and on the path it was asked by where a root no reader names declares it.
@@ -1212,7 +1230,7 @@ fn no_such_stage(asked: &str) -> CompileError {
 pub fn wonder_footprint(
     budget: u64,
     program: Program,
-    path: &Qualifier,
+    path: &Global,
     telling: &mut dyn Telling,
 ) -> Result<(), CompileError> {
     let reader = telling.reader();
@@ -1240,6 +1258,7 @@ pub fn wonder_footprint(
         }
         Ok(None) => Err(unknown_declaration(path, None)),
         Err(Unfooted::Unit) => Err(refusal.into()),
+        Err(Unfooted::Witness) => Err(no_path(path, "a footprint")),
         Err(Unfooted::Diagnostics(diagnostics)) => Err(stopped(diagnostics)),
     }
 }
