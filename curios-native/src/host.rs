@@ -2,11 +2,9 @@
 //!
 //! The wire contract — the [`Handle`](curios_abi::Handle)/[`Failure`]/[`Mode`](curios_abi::Mode) semantic types, the payloads and the [`HostOps`](curios_abi::HostOps) trait — is authored once in `curios-abi`, and every module of the runtime imports it from there. What lives here is only what is genuinely native: mapping an `io::Error` to a [`Failure`], and a serial frame's tags to the termios bits that set it. These are the adapter's job, not the contract's, so they stay free functions in the runtime rather than methods on the shared types.
 
-use curios_abi::{Failure, SerialFlow, SerialParity};
-
 use {
-    rustix::{io::Errno, termios::ControlModes},
-    std::io::{Error, ErrorKind},
+    curios_abi::{Failure, SerialFlow, SerialParity},
+    rustix::termios::ControlModes,
 };
 
 /// The control-mode bits a serial frame sets, or `None` for a setting `serial_open` refuses: 7 or 8 data bits and 1 or 2 stop bits, beside the parity and flow control a closed code has already decided. Both hosts ask it and [`serial_speed`], so a setting the native host refuses before it opens anything is one the scripted host refuses too.
@@ -57,7 +55,8 @@ pub enum Direction {
 /// The `host:port` a lookup asks for, or the failure that refuses it before any lookup starts: a host that is not UTF-8 names nothing a resolver can find, which is `NotFound`, and a port past 65535 is no port, which is `EINVAL`. Both hosts ask it, so a lookup the native host refuses is one the scripted host refuses too.
 pub fn lookup_address(host: &[u8], port: u64) -> Result<String, Failure> {
     let host = str::from_utf8(host).map_err(|_| Failure::NotFound)?;
-    let port = u16::try_from(port).map_err(|_| failure_from_error(Error::from(Errno::INVAL)))?;
+    let port = u16::try_from(port)
+        .map_err(|_| failure_from_error(std::io::Error::from(rustix::io::Errno::INVAL)))?;
 
     Ok(format!("{host}:{port}"))
 }
@@ -68,18 +67,18 @@ pub fn names_a_variable(name: &[u8]) -> bool {
 }
 
 /// Map an `io::Error` to its [`Failure`]. The named kinds map to named failures; anything else with an errno surfaces raw through `Other(errno)`. An errno-less failure (e.g. `write_all`'s synthesized `WriteZero`) is unclassifiable, so it reports the catch-all `Other(0)`; callers that can name it (e.g. a failed `dns_lookup` → `NotFound`) map it at the call site.
-pub fn failure_from_error(error: Error) -> Failure {
+pub fn failure_from_error(error: std::io::Error) -> Failure {
     match error.kind() {
-        ErrorKind::NotFound => Failure::NotFound,
-        ErrorKind::PermissionDenied => Failure::PermissionDenied,
-        ErrorKind::AlreadyExists => Failure::AlreadyExists,
-        ErrorKind::ConnectionRefused => Failure::ConnectionRefused,
-        ErrorKind::WouldBlock => Failure::WouldBlock,
-        ErrorKind::DirectoryNotEmpty => Failure::NotEmpty,
-        ErrorKind::IsADirectory => Failure::IsDirectory,
-        ErrorKind::NotADirectory => Failure::NotDirectory,
-        ErrorKind::ConnectionReset => Failure::ConnectionReset,
-        ErrorKind::BrokenPipe => Failure::BrokenPipe,
+        std::io::ErrorKind::NotFound => Failure::NotFound,
+        std::io::ErrorKind::PermissionDenied => Failure::PermissionDenied,
+        std::io::ErrorKind::AlreadyExists => Failure::AlreadyExists,
+        std::io::ErrorKind::ConnectionRefused => Failure::ConnectionRefused,
+        std::io::ErrorKind::WouldBlock => Failure::WouldBlock,
+        std::io::ErrorKind::DirectoryNotEmpty => Failure::NotEmpty,
+        std::io::ErrorKind::IsADirectory => Failure::IsDirectory,
+        std::io::ErrorKind::NotADirectory => Failure::NotDirectory,
+        std::io::ErrorKind::ConnectionReset => Failure::ConnectionReset,
+        std::io::ErrorKind::BrokenPipe => Failure::BrokenPipe,
         _ => match error.raw_os_error() {
             Some(errno) => Failure::Other(errno as u32),
             None => Failure::Other(0),

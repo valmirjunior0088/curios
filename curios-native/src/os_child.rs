@@ -9,23 +9,14 @@
 use {
     super::failure_from_error,
     curios_abi::{ChildExit, Failure, StdioMode},
-    rustix::{
-        fd::{AsFd, BorrowedFd},
-        fs::{OFlags, fcntl_getfl, fcntl_setfl},
-        io::Errno,
-        process::{Pid, Signal, WaitId, WaitIdOptions, kill_process, waitid},
-    },
+    rustix::fd::{AsFd, BorrowedFd},
     std::{
-        ffi::OsStr,
-        io::{Error, pipe},
         num::NonZeroU32,
         os::{
             fd::OwnedFd,
             unix::{ffi::OsStrExt, process::ExitStatusExt},
         },
-        process::{Child, Command, ExitStatus, Stdio},
         sync::{Arc, Mutex, mpsc},
-        thread,
     },
 };
 
@@ -36,7 +27,7 @@ type End = Option<Result<ChildExit, Failure>>;
 pub struct Running {
     done: OwnedFd,
     end: Arc<Mutex<End>>,
-    pid: Pid,
+    pid: rustix::process::Pid,
 }
 
 impl Running {
@@ -58,7 +49,8 @@ impl Running {
             return Ok(());
         }
 
-        kill_process(self.pid, Signal::KILL).map_err(errno_failure)
+        rustix::process::kill_process(self.pid, rustix::process::Signal::KILL)
+            .map_err(errno_failure)
     }
 }
 
@@ -71,8 +63,8 @@ pub struct Spawned {
 }
 
 /// An OS errno as the failure the row reports.
-fn errno_failure(errno: Errno) -> Failure {
-    failure_from_error(Error::from(errno))
+fn errno_failure(errno: rustix::io::Errno) -> Failure {
+    failure_from_error(std::io::Error::from(errno))
 }
 
 /// Whether `argv`, `cwd` and `env` can name a program at all: an empty `argv` names none, a NUL fits in no C string, and an environment entry needs a name before its `=`.
@@ -88,28 +80,32 @@ fn valid(argv: &[Vec<u8>], cwd: &[u8], env: &[Vec<u8>]) -> bool {
 }
 
 /// One standard stream's wiring, and the parent's end of its pipe when it is piped. The parent's end is non-blocking, since its reader suspends on it and a read that blocked on one pipe while the child filled the other is the deadlock every process library documents; the child's end stays blocking, as a program expects its standard streams to be. Both ends are close-on-exec, so no other child inherits either.
-fn wiring(mode: StdioMode, parent_reads: bool) -> Result<(Stdio, Option<OwnedFd>), Failure> {
+fn wiring(
+    mode: StdioMode,
+    parent_reads: bool,
+) -> Result<(std::process::Stdio, Option<OwnedFd>), Failure> {
     match mode {
-        StdioMode::Inherit => Ok((Stdio::inherit(), None)),
-        StdioMode::Null => Ok((Stdio::null(), None)),
+        StdioMode::Inherit => Ok((std::process::Stdio::inherit(), None)),
+        StdioMode::Null => Ok((std::process::Stdio::null(), None)),
         StdioMode::Pipe => {
-            let (reader, writer) = pipe().map_err(failure_from_error)?;
+            let (reader, writer) = std::io::pipe().map_err(failure_from_error)?;
             let (reader, writer) = (OwnedFd::from(reader), OwnedFd::from(writer));
             let (child, parent) = match parent_reads {
                 true => (writer, reader),
                 false => (reader, writer),
             };
 
-            let flags = fcntl_getfl(&parent).map_err(errno_failure)?;
-            fcntl_setfl(&parent, flags | OFlags::NONBLOCK).map_err(errno_failure)?;
+            let flags = rustix::fs::fcntl_getfl(&parent).map_err(errno_failure)?;
+            rustix::fs::fcntl_setfl(&parent, flags | rustix::fs::OFlags::NONBLOCK)
+                .map_err(errno_failure)?;
 
-            Ok((Stdio::from(child), Some(parent)))
+            Ok((std::process::Stdio::from(child), Some(parent)))
         }
     }
 }
 
 /// How a reaped child ended. A signal that ended a child is never zero, and an exit code is `WEXITSTATUS`, a byte.
-fn child_exit(status: ExitStatus) -> ChildExit {
+fn child_exit(status: std::process::ExitStatus) -> ChildExit {
     match status
         .signal()
         .and_then(|signal| NonZeroU32::new(signal.unsigned_abs()))
@@ -120,17 +116,17 @@ fn child_exit(status: ExitStatus) -> ChildExit {
 }
 
 /// Wait for `child` to exit without reaping it, then reap it and record the end under the state `kill` reads, and only then signal `done`.
-fn reap(mut child: Child, end: &Mutex<End>) {
-    let pid = Pid::from_child(&child);
+fn reap(mut child: std::process::Child, end: &Mutex<End>) {
+    let pid = rustix::process::Pid::from_child(&child);
 
     // An interruption is not an exit, so the wait resumes; any other failure means the child cannot be waited on — something else reaped it — and is recorded as the end, which also keeps `kill` from a pid that may no longer be the child's.
     let exited = loop {
-        match waitid(
-            WaitId::Pid(pid),
-            WaitIdOptions::EXITED | WaitIdOptions::NOWAIT,
+        match rustix::process::waitid(
+            rustix::process::WaitId::Pid(pid),
+            rustix::process::WaitIdOptions::EXITED | rustix::process::WaitIdOptions::NOWAIT,
         ) {
             Ok(_) => break Ok(()),
-            Err(Errno::INTR) => continue,
+            Err(rustix::io::Errno::INTR) => continue,
             Err(errno) => break Err(errno_failure(errno)),
         }
     };
@@ -149,16 +145,16 @@ pub fn spawn(
     (stdin, stdout, stderr): (StdioMode, StdioMode, StdioMode),
 ) -> Result<Spawned, Failure> {
     if !valid(argv, cwd, env) {
-        return Err(errno_failure(Errno::INVAL));
+        return Err(errno_failure(rustix::io::Errno::INVAL));
     }
 
     let (program, args) = argv.split_first().expect("a valid argv names a program");
-    let mut command = Command::new(OsStr::from_bytes(program));
+    let mut command = std::process::Command::new(std::ffi::OsStr::from_bytes(program));
 
-    command.args(args.iter().map(|arg| OsStr::from_bytes(arg)));
+    command.args(args.iter().map(|arg| std::ffi::OsStr::from_bytes(arg)));
 
     if !cwd.is_empty() {
-        command.current_dir(OsStr::from_bytes(cwd));
+        command.current_dir(std::ffi::OsStr::from_bytes(cwd));
     }
 
     for entry in env {
@@ -168,7 +164,10 @@ pub fn spawn(
             None => (entry.as_slice(), &[][..]),
         };
 
-        command.env(OsStr::from_bytes(name), OsStr::from_bytes(value));
+        command.env(
+            std::ffi::OsStr::from_bytes(name),
+            std::ffi::OsStr::from_bytes(value),
+        );
     }
 
     let (stdin_wiring, stdin) = wiring(stdin, false)?;
@@ -180,13 +179,13 @@ pub fn spawn(
         .stdout(stdout_wiring)
         .stderr(stderr_wiring);
 
-    let (done, signal) = pipe().map_err(failure_from_error)?;
+    let (done, signal) = std::io::pipe().map_err(failure_from_error)?;
     let end = Arc::new(Mutex::new(None));
-    let (hand_off, handed) = mpsc::channel::<Child>();
+    let (hand_off, handed) = mpsc::channel::<std::process::Child>();
 
     // The reaper is started before the child, waiting to be handed it, so starting it is a failure that leaves nothing behind. A child that does not start drops the sender, and the reaper ends without one.
     let recorded = end.clone();
-    thread::Builder::new()
+    std::thread::Builder::new()
         .name("curios-reaper".to_string())
         .spawn(move || {
             if let Ok(child) = handed.recv() {
@@ -198,7 +197,7 @@ pub fn spawn(
         .map_err(failure_from_error)?;
 
     let child = command.spawn().map_err(failure_from_error)?;
-    let pid = Pid::from_child(&child);
+    let pid = rustix::process::Pid::from_child(&child);
 
     hand_off
         .send(child)

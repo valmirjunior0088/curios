@@ -40,7 +40,9 @@ fn a_listener_at_a_held_address_is_refused() {
 
     assert_eq!(
         host.socket_listen(blob),
-        Err(Failure::Other(Errno::ADDRINUSE.raw_os_error() as u32))
+        Err(Failure::Other(
+            rustix::io::Errno::ADDRINUSE.raw_os_error() as u32
+        ))
     );
 
     host.handle_close(listener);
@@ -163,7 +165,9 @@ fn a_refused_connect_reports_and_drops_the_socket() {
     let holder = Socket::new(Domain::IPV4, Type::STREAM, None).expect("a socket");
     holder
         .bind(&SockAddr::from(
-            "127.0.0.1:0".parse::<SocketAddr>().expect("an address"),
+            "127.0.0.1:0"
+                .parse::<std::net::SocketAddr>()
+                .expect("an address"),
         ))
         .expect("a loopback port");
     let port = holder

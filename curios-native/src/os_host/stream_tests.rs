@@ -6,8 +6,6 @@ use {
     crate::*,
     curios_abi::{ErrnoCodes, EventCodes},
     curios_common::test_support::*,
-    rustix::fs::OFlags,
-    std::{path::Path, thread, time::Duration},
 };
 
 /// The stdin gate, exercised on a pipe of its own: an empty pipe is not readable, a written byte makes it readable, and so does the writer's close, since a read then answers the end of the stream at once.
@@ -29,7 +27,7 @@ fn readable_now_follows_a_pipe_end_as_its_writer_fills_and_closes_it() {
         let readable = readable_now(reader.as_fd());
 
         if !readable {
-            thread::sleep(Duration::from_millis(10));
+            std::thread::sleep(std::time::Duration::from_millis(10));
         }
 
         readable
@@ -40,8 +38,8 @@ fn readable_now_follows_a_pipe_end_as_its_writer_fills_and_closes_it() {
 /// The gates tell a descriptor of every kind ready as it is, the null device included, which macOS's poll cannot watch, so its gates wait on it with `select`: the null device reads its end and takes a write at once, so it is ready both ways.
 #[test]
 fn the_null_device_is_ready_to_read_and_to_write() {
-    let reader = File::open("/dev/null").expect("the null device opens to read");
-    let writer = OpenOptions::new()
+    let reader = std::fs::File::open("/dev/null").expect("the null device opens to read");
+    let writer = std::fs::OpenOptions::new()
         .write(true)
         .open("/dev/null")
         .expect("the null device opens to write");
@@ -64,7 +62,7 @@ fn a_select_finds_a_pipe_ready_as_a_poll_does() {
             asked: PollFlags::OUT,
         },
     ];
-    let now = || Some(Instant::now());
+    let now = || Some(std::time::Instant::now());
 
     assert_eq!(selected(&watched, now()), Ok(vec![1]));
     assert_eq!(ready(&watched, now()), Ok(vec![1]));
@@ -85,7 +83,7 @@ fn writable_now_follows_a_pipe_end_as_its_reader_drains_it() {
     assert!(!pipe_or_socket(device.as_fd()));
 
     // Filled through a write end switched non-blocking, so the fill stops where the pipe is full instead of waiting there.
-    rustix::fs::fcntl_setfl(&writer, OFlags::NONBLOCK).expect("the write end switched");
+    rustix::fs::fcntl_setfl(&writer, rustix::fs::OFlags::NONBLOCK).expect("the write end switched");
     let chunk = [0u8; 4096];
     while rustix::io::write(&writer, &chunk).is_ok() {}
     assert!(!writable_now(writer.as_fd()));
@@ -195,9 +193,9 @@ fn a_request_for_nothing_checks_the_handle_and_moves_nothing() {
 fn a_read_takes_at_most_its_cap() {
     let host = OsHost::with_args(vec![]);
     let dir = Temporary::new("runtime-read", "cap");
-    fs::create_dir(&dir).expect("a fresh temporary directory");
+    std::fs::create_dir(&dir).expect("a fresh temporary directory");
     let path = dir.join("large");
-    fs::write(&path, vec![b'x'; 100 * 1024]).expect("a file past the cap");
+    std::fs::write(&path, vec![b'x'; 100 * 1024]).expect("a file past the cap");
 
     let file = host
         .file_open(path.into_os_string().into_vec(), Mode::Read)
@@ -235,7 +233,7 @@ fn a_watch_is_ready_for_what_it_asks() {
 fn a_write_takes_the_whole_of_its_message() {
     let host = OsHost::with_args(vec![]);
     let dir = Temporary::new("runtime-write", "accepted");
-    fs::create_dir(&dir).expect("a fresh temporary directory");
+    std::fs::create_dir(&dir).expect("a fresh temporary directory");
     let path = dir.join("out");
 
     let file = host
@@ -243,7 +241,7 @@ fn a_write_takes_the_whole_of_its_message() {
         .unwrap();
 
     assert_eq!(host.handle_write(file.clone(), vec![b'x'; 4096]), Ok(()));
-    assert_eq!(fs::read(&path).expect("the file written").len(), 4096);
+    assert_eq!(std::fs::read(&path).expect("the file written").len(), 4096);
     host.handle_close(file);
 }
 
@@ -267,7 +265,7 @@ fn a_look_answers_each_handle_in_its_order() {
 }
 
 /// A FIFO at a fresh path under `dir`, made by the system's own tool, which every platform the host runs on has.
-fn fifo(dir: &Path) -> Vec<u8> {
+fn fifo(dir: &std::path::Path) -> Vec<u8> {
     let path = dir.join("fifo");
     let made = std::process::Command::new("mkfifo")
         .arg(&path)
@@ -283,7 +281,7 @@ fn fifo(dir: &Path) -> Vec<u8> {
 fn a_fifo_opened_to_read_waits_for_a_writer() {
     let host = OsHost::with_args(vec![]);
     let dir = Temporary::new("runtime-fifo", "read");
-    fs::create_dir(&dir).expect("a fresh temporary directory");
+    std::fs::create_dir(&dir).expect("a fresh temporary directory");
     let path = fifo(&dir);
 
     let reader = host.file_open(path.clone(), Mode::Read).unwrap();
@@ -293,9 +291,9 @@ fn a_fifo_opened_to_read_waits_for_a_writer() {
     );
     assert!(!watched(&host, &reader, true, false));
 
-    let mut writer = fs::OpenOptions::new()
+    let mut writer = std::fs::OpenOptions::new()
         .write(true)
-        .open(OsStr::from_bytes(&path))
+        .open(std::ffi::OsStr::from_bytes(&path))
         .expect("the reader holds the FIFO open");
     writer.write_all(b"ok").expect("the FIFO takes two bytes");
     assert!(awaited(&host, &reader, true, false));
@@ -318,7 +316,7 @@ fn a_fifo_opened_to_write_with_no_reader_is_refused() {
 
     let host = OsHost::with_args(vec![]);
     let dir = Temporary::new("runtime-fifo", "write");
-    fs::create_dir(&dir).expect("a fresh temporary directory");
+    std::fs::create_dir(&dir).expect("a fresh temporary directory");
 
     assert_eq!(
         host.file_open(fifo(&dir), Mode::Write),

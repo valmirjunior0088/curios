@@ -10,22 +10,15 @@ use {
     super::failure_from_error,
     curios_abi::{Failure, SerialOp},
     rustix::{
-        fs::OFlags,
-        io::{Errno, retry_on_intr},
         ioctl::{Opcode, Setter, ioctl},
         termios::{
             ControlModes, InputModes, OptionalActions, QueueSelector, Termios, tcdrain, tcflush,
             tcgetattr, tcsetattr,
         },
     },
-    std::{
-        ffi::c_int,
-        fs,
-        os::{
-            fd::{AsFd, BorrowedFd, OwnedFd},
-            unix::ffi::OsStringExt,
-        },
-        path::Path,
+    std::os::{
+        fd::{AsFd, BorrowedFd, OwnedFd},
+        unix::ffi::OsStringExt,
     },
 };
 
@@ -40,11 +33,11 @@ const TIOCMBIS: Opcode = 0x5416;
 #[cfg(target_os = "linux")]
 const TIOCMBIC: Opcode = 0x5417;
 #[cfg(not(target_os = "linux"))]
-const TIOCMBIS: Opcode = rustix::ioctl::opcode::write::<c_int>(b't', 108);
+const TIOCMBIS: Opcode = rustix::ioctl::opcode::write::<std::ffi::c_int>(b't', 108);
 #[cfg(not(target_os = "linux"))]
-const TIOCMBIC: Opcode = rustix::ioctl::opcode::write::<c_int>(b't', 107);
-const TIOCM_DTR: c_int = 0x002;
-const TIOCM_RTS: c_int = 0x004;
+const TIOCMBIC: Opcode = rustix::ioctl::opcode::write::<std::ffi::c_int>(b't', 107);
+const TIOCM_DTR: std::ffi::c_int = 0x002;
+const TIOCM_RTS: std::ffi::c_int = 0x004;
 
 /// The control modes a frame is written in: what an open clears before setting its own, and what it reads back.
 const FRAME: ControlModes = ControlModes::CSIZE
@@ -69,7 +62,7 @@ fn apply(fd: &OwnedFd, termios: &mut Termios, speed: u32) -> rustix::io::Result<
     termios.set_speed(speed)?;
 
     match tcsetattr(fd, OptionalActions::Now, termios) {
-        Err(Errno::INVAL) => {
+        Err(rustix::io::Errno::INVAL) => {
             termios.set_speed(9600)?;
             tcsetattr(fd, OptionalActions::Now, termios)?;
 
@@ -91,7 +84,7 @@ fn apply(fd: &OwnedFd, termios: &mut Termios, speed: u32) -> rustix::io::Result<
 #[cfg(target_os = "linux")]
 pub fn serial_devices() -> std::io::Result<Vec<Vec<u8>>> {
     // Filed last to first, so the name left under a node is the first in byte order.
-    let mut links = fs::read_dir("/dev/serial/by-id")
+    let mut links = std::fs::read_dir("/dev/serial/by-id")
         .map(|links| links.flatten().map(|link| link.path()).collect::<Vec<_>>())
         .unwrap_or_default();
     links.sort();
@@ -99,12 +92,12 @@ pub fn serial_devices() -> std::io::Result<Vec<Vec<u8>>> {
     let mut named: HashMap<PathBuf, PathBuf> = HashMap::new();
 
     for link in links.into_iter().rev() {
-        if let Ok(node) = fs::canonicalize(&link) {
+        if let Ok(node) = std::fs::canonicalize(&link) {
             named.insert(node, link);
         }
     }
 
-    let classes = match fs::read_dir("/sys/class/tty") {
+    let classes = match std::fs::read_dir("/sys/class/tty") {
         Ok(classes) => classes,
         Err(error) if error.kind() == ErrorKind::NotFound => return Ok(Vec::new()),
         Err(error) => return Err(error),
@@ -115,8 +108,9 @@ pub fn serial_devices() -> std::io::Result<Vec<Vec<u8>>> {
     for class in classes {
         let class = class?;
         let entry = class.path();
-        let node = Path::new("/dev").join(class.file_name());
-        let unanswered = fs::read(entry.join("type")).is_ok_and(|kind| kind.trim_ascii() == b"0");
+        let node = std::path::Path::new("/dev").join(class.file_name());
+        let unanswered =
+            std::fs::read(entry.join("type")).is_ok_and(|kind| kind.trim_ascii() == b"0");
 
         if entry.join("device").exists() && !unanswered && node.exists() {
             let name = named.remove(&node).unwrap_or(node);
@@ -135,11 +129,16 @@ pub fn serial_devices() -> std::io::Result<Vec<Vec<u8>>> {
 pub fn serial_devices() -> std::io::Result<Vec<Vec<u8>>> {
     let mut devices = Vec::new();
 
-    for entry in fs::read_dir("/dev")? {
+    for entry in std::fs::read_dir("/dev")? {
         let name = entry?.file_name();
 
         if name.as_bytes().starts_with(b"cu.") {
-            devices.push(Path::new("/dev").join(name).into_os_string().into_vec());
+            devices.push(
+                std::path::Path::new("/dev")
+                    .join(name)
+                    .into_os_string()
+                    .into_vec(),
+            );
         }
     }
 
@@ -157,7 +156,10 @@ impl SerialPort {
         // Non-blocking from the open rather than switched after it, because opening a port whose carrier line is down waits for carrier until `CLOCAL` is set, and `CLOCAL` is set on a descriptor already open. `NOCTTY` keeps the port from becoming this process's controlling terminal, and `CLOEXEC` keeps a spawned child from holding it past the program's own close. No exclusive hold is taken: whether `TIOCEXCL` refuses a second open differs by kernel, by device and by privilege, so the row promises only what every kernel does.
         let fd = rustix::fs::open(
             path,
-            OFlags::RDWR | OFlags::NOCTTY | OFlags::NONBLOCK | OFlags::CLOEXEC,
+            rustix::fs::OFlags::RDWR
+                | rustix::fs::OFlags::NOCTTY
+                | rustix::fs::OFlags::NONBLOCK
+                | rustix::fs::OFlags::CLOEXEC,
             rustix::fs::Mode::empty(),
         )?;
 
@@ -173,7 +175,7 @@ impl SerialPort {
         let applied = tcgetattr(&fd)?;
 
         if applied.control_modes & FRAME != frame || applied.output_speed() != speed {
-            return Err(Errno::INVAL);
+            return Err(rustix::io::Errno::INVAL);
         }
 
         Ok(Self(fd))
@@ -194,17 +196,17 @@ impl SerialPort {
 
         // The wait's own outcome is not reported: a port that can no longer send says so to the write or the control that meets it next, and the wait's end means only that there is nothing left to wait for.
         Ok(move || {
-            let _ = retry_on_intr(|| tcdrain(&port));
+            let _ = rustix::io::retry_on_intr(|| tcdrain(&port));
         })
     }
 
     /// Raise (`on`) or lower the modem lines `mask` names. `TIOCMBIS` and `TIOCMBIC` touch only those lines, where a `TIOCMGET` read back and a `TIOCMSET` of the lot would race whatever else drives the port between the two.
-    fn set_modem_lines(&self, mask: c_int, on: bool) -> rustix::io::Result<()> {
+    fn set_modem_lines(&self, mask: std::ffi::c_int, on: bool) -> rustix::io::Result<()> {
         // SAFETY: both opcodes take a pointer to an `int` holding the line mask and write nothing back, which is the opcode and input type `Setter` is built for.
         unsafe {
             match on {
-                true => ioctl(&self.0, Setter::<TIOCMBIS, c_int>::new(mask)),
-                false => ioctl(&self.0, Setter::<TIOCMBIC, c_int>::new(mask)),
+                true => ioctl(&self.0, Setter::<TIOCMBIS, std::ffi::c_int>::new(mask)),
+                false => ioctl(&self.0, Setter::<TIOCMBIC, std::ffi::c_int>::new(mask)),
             }
         }
     }

@@ -4,11 +4,8 @@ use {
     super::{test_support::*, *},
     curios_abi::ErrnoCodes,
     curios_common::test_support::*,
-    rustix::{
-        fs::OFlags,
-        termios::{ControlModes, InputModes, LocalModes},
-    },
-    std::{io::Read, path::Path, thread, time::Duration},
+    rustix::termios::{ControlModes, InputModes, LocalModes},
+    std::io::Read,
 };
 
 /// A descriptor that is not a terminal refuses a take and a size through the errno lane, which is how a program learns it has none, and one never taken has nothing to give back. Which errno is the platform's own — Linux answers `ENOTTY`, macOS `ENODEV` — so what is under test is the lane rather than the code. `/dev/null` rather than a standard stream, because under an interactive `cargo test` stdin *is* a terminal and a passing `tty_take` would leave it in raw mode.
@@ -77,7 +74,7 @@ const SIGNALLED_TERMINAL: &str = "CURIOS_TEST_SIGNALLED_TERMINAL";
 
 /// Bytes the near end of a pseudo-terminal reads within ten seconds, until they end with `marker`; a child that never writes it, or a far end that ends first, fails the test rather than holding it.
 fn read_until(near: &OwnedFd, marker: &[u8]) -> Vec<u8> {
-    let deadline = Instant::now() + Duration::from_secs(10);
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
     let mut seen = Vec::new();
 
     while !seen.ends_with(marker) {
@@ -96,24 +93,27 @@ fn read_until(near: &OwnedFd, marker: &[u8]) -> Vec<u8> {
 }
 
 /// The far end of the pseudo-terminal named `name`, opened apart from any host. On macOS a terminal's last close discards what its near end has not read, so a test holds one, as a shell holds a program's terminal, to read what a host leaves.
-fn far_end(name: &[u8]) -> fs::File {
-    fs::OpenOptions::new()
+fn far_end(name: &[u8]) -> std::fs::File {
+    std::fs::OpenOptions::new()
         .read(true)
         .write(true)
-        .custom_flags(OFlags::NOCTTY.bits().cast_signed())
-        .open(OsStr::from_bytes(name))
+        .custom_flags(rustix::fs::OFlags::NOCTTY.bits().cast_signed())
+        .open(std::ffi::OsStr::from_bytes(name))
         .expect("the far end opens")
 }
 
 /// How `child` ended within `wait`; a child still running then is killed, and fails the test rather than holding it.
-fn ended_within(child: &mut std::process::Child, wait: Duration) -> std::process::ExitStatus {
-    let deadline = Instant::now() + wait;
+fn ended_within(
+    child: &mut std::process::Child,
+    wait: std::time::Duration,
+) -> std::process::ExitStatus {
+    let deadline = std::time::Instant::now() + wait;
 
-    while Instant::now() < deadline {
+    while std::time::Instant::now() < deadline {
         if let Some(status) = child.try_wait().expect("the child is waited on") {
             return status;
         }
-        thread::sleep(Duration::from_millis(10));
+        std::thread::sleep(std::time::Duration::from_millis(10));
     }
     let _ = child.kill();
     let _ = child.wait();
@@ -131,7 +131,7 @@ fn a_terminating_signal_gives_back_every_terminal_taken() {
         let far = host.file_open(name.into_vec(), Mode::ReadWrite).unwrap();
         host.tty_take(far.clone(), b"\x1b[?1049l".to_vec()).unwrap();
         host.handle_write(far, b"taken".to_vec()).unwrap();
-        thread::sleep(Duration::from_secs(30));
+        std::thread::sleep(std::time::Duration::from_secs(30));
 
         return;
     }
@@ -144,7 +144,7 @@ fn a_terminating_signal_gives_back_every_terminal_taken() {
             "os_host::device_tests::a_terminating_signal_gives_back_every_terminal_taken",
             "--nocapture",
         ])
-        .env(SIGNALLED_TERMINAL, OsStr::from_bytes(&name))
+        .env(SIGNALLED_TERMINAL, std::ffi::OsStr::from_bytes(&name))
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
@@ -152,13 +152,13 @@ fn a_terminating_signal_gives_back_every_terminal_taken() {
         .expect("the test runs again as a child");
 
     read_until(&near, b"taken");
-    thread::sleep(Duration::from_millis(100));
+    std::thread::sleep(std::time::Duration::from_millis(100));
     rustix::process::kill_process(
         rustix::process::Pid::from_child(&child),
         rustix::process::Signal::TERM,
     )
     .expect("the child is signalled");
-    let status = ended_within(&mut child, Duration::from_secs(10));
+    let status = ended_within(&mut child, std::time::Duration::from_secs(10));
 
     assert_eq!(
         std::os::unix::process::ExitStatusExt::signal(&status),
@@ -176,7 +176,7 @@ const SIGNALLED_FAREWELL: &str = "CURIOS_TEST_SIGNALLED_FAREWELL";
 fn a_terminating_signal_writes_what_was_left_for_standard_error() {
     if env::var_os(SIGNALLED_FAREWELL).is_some() {
         standard_error_leaving(b"shown\n", b"farewell\n".to_vec());
-        thread::sleep(Duration::from_secs(30));
+        std::thread::sleep(std::time::Duration::from_secs(30));
 
         return;
     }
@@ -204,13 +204,13 @@ fn a_terminating_signal_writes_what_was_left_for_standard_error() {
         assert!(read > 0, "the child ended before it wrote: {written:?}");
         written.extend_from_slice(&chunk[..read]);
     }
-    thread::sleep(Duration::from_millis(100));
+    std::thread::sleep(std::time::Duration::from_millis(100));
     rustix::process::kill_process(
         rustix::process::Pid::from_child(&child),
         rustix::process::Signal::TERM,
     )
     .expect("the child is signalled");
-    let status = ended_within(&mut child, Duration::from_secs(10));
+    let status = ended_within(&mut child, std::time::Duration::from_secs(10));
     stderr
         .read_to_end(&mut written)
         .expect("what the child wrote last");
@@ -237,7 +237,7 @@ fn a_farewell_written_before_a_signal_leaves_nothing_for_it() {
         standard_error_farewell();
         rustix::process::kill_process(rustix::process::getpid(), rustix::process::Signal::TERM)
             .expect("the child signals itself");
-        thread::sleep(Duration::from_secs(30));
+        std::thread::sleep(std::time::Duration::from_secs(30));
 
         return;
     }
@@ -295,7 +295,7 @@ fn a_terminal_a_session_leader_opens_is_not_its_controlling_terminal() {
         let session = host
             .with_fd(&far, |fd| rustix::termios::tcgetsid(fd))
             .expect("a filed descriptor");
-        assert_eq!(session, Err(Errno::NOTTY));
+        assert_eq!(session, Err(rustix::io::Errno::NOTTY));
 
         return;
     }
@@ -306,14 +306,14 @@ fn a_terminal_a_session_leader_opens_is_not_its_controlling_terminal() {
             "--exact",
             "os_host::device_tests::a_terminal_a_session_leader_opens_is_not_its_controlling_terminal",
         ])
-        .env(LEADING_TERMINAL, OsStr::from_bytes(&name))
+        .env(LEADING_TERMINAL, std::ffi::OsStr::from_bytes(&name))
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
         .spawn()
         .expect("the test runs again as a child");
 
-    assert!(ended_within(&mut child, Duration::from_secs(10)).success());
+    assert!(ended_within(&mut child, std::time::Duration::from_secs(10)).success());
 }
 
 /// A path is the bytes the host holds, never decoded on the way: the name `dir_list` hands back opens as the file it names, exactly as `file_stat` finds it. The file is made with the standard library on the raw bytes, so the row under test is the only one asked to read them back. The name is the hardest one the filesystem takes — bytes that are not UTF-8 at all where they are allowed, and a non-ASCII name where they are not, since APFS refuses an undecodable one with `EILSEQ`.
@@ -326,14 +326,15 @@ fn open_takes_a_listed_name_back_as_the_bytes_it_was_given() {
 
     let host = OsHost::with_args(vec![]);
     let dir = Temporary::new("runtime-open", "listed-name");
-    fs::create_dir(&dir).expect("a fresh temporary directory");
+    std::fs::create_dir(&dir).expect("a fresh temporary directory");
     let name = NAME;
-    fs::write(dir.join(OsStr::from_bytes(name)), b"x").expect("a file under the raw name");
+    std::fs::write(dir.join(std::ffi::OsStr::from_bytes(name)), b"x")
+        .expect("a file under the raw name");
 
     let names = host.dir_list(dir.as_os_str().as_bytes().to_vec()).unwrap();
     assert_eq!(names, vec![name.to_vec()]);
 
-    let path = dir.join(OsStr::from_bytes(&names[0]));
+    let path = dir.join(std::ffi::OsStr::from_bytes(&names[0]));
     let handle = host
         .file_open(path.into_os_string().into_vec(), Mode::Read)
         .unwrap();
@@ -411,7 +412,7 @@ fn the_serial_devices_listed_are_sorted_paths_that_exist() {
     assert!(devices.is_sorted());
 
     for device in devices {
-        let path = Path::new(OsStr::from_bytes(&device));
+        let path = std::path::Path::new(std::ffi::OsStr::from_bytes(&device));
 
         assert!(path.exists(), "{} is listed and absent", path.display());
     }
@@ -444,7 +445,7 @@ fn a_serial_open_clears_the_input_modes_it_finds() {
     let (_near, name) = pseudo_terminal();
     let far = rustix::fs::open(
         name.as_slice(),
-        OFlags::RDWR | OFlags::NOCTTY,
+        rustix::fs::OFlags::RDWR | rustix::fs::OFlags::NOCTTY,
         rustix::fs::Mode::empty(),
     )
     .expect("the far end");

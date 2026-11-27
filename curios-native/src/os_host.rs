@@ -14,8 +14,6 @@ use {
             FdSetElement, FdSetIter, PollFd, PollFlags, Timespec, fd_set_insert,
             fd_set_num_elements, poll, select,
         },
-        fs::{OFlags, fcntl_getfl, fcntl_setfl, open},
-        io::Errno,
         pipe::PIPE_BUF,
         stdio::{dup2_stderr, dup2_stdin, dup2_stdout},
         termios::{OptionalActions, Termios, tcgetattr, tcgetwinsize, tcsetattr},
@@ -31,13 +29,10 @@ use {
     socket2::{Domain, SockAddr, Socket, Type},
     std::{
         collections::{HashMap, VecDeque},
-        env,
-        ffi::OsStr,
-        fs::{self, File, OpenOptions},
-        future,
-        io::{self, Error, ErrorKind, Read, Write, stderr, stdin, stdout},
+        env, future,
+        io::{Read, Write},
         mem,
-        net::{Shutdown, SocketAddr, ToSocketAddrs},
+        net::ToSocketAddrs,
         ops::{Deref, DerefMut},
         os::{
             fd::{AsFd, AsRawFd, BorrowedFd, OwnedFd},
@@ -51,14 +46,12 @@ use {
             atomic::{AtomicBool, Ordering},
         },
         task::{Context, Poll, Wake, Waker},
-        thread,
-        time::{Duration, Instant, SystemTime, UNIX_EPOCH},
     },
     webpki_roots::TLS_SERVER_ROOTS,
 };
 
 /// The kind `file_type` is: a link where it is one, which only what is read off the link itself, `symlink_metadata`, can be.
-fn kind_of(file_type: fs::FileType) -> FileKind {
+fn kind_of(file_type: std::fs::FileType) -> FileKind {
     match () {
         () if file_type.is_symlink() => FileKind::Symlink,
         () if file_type.is_dir() => FileKind::Directory,
@@ -68,7 +61,7 @@ fn kind_of(file_type: fs::FileType) -> FileKind {
 }
 
 /// What `file_stat` answers of `metadata`, read as `kind`: its size and its modification time as the wall clock reads it. A platform that keeps no modification time fails as it reports, and one a signed 64-bit count of seconds cannot carry fails as `stat(2)` does, with `EOVERFLOW`.
-fn stat(kind: FileKind, metadata: &fs::Metadata) -> Result<FileStat, Failure> {
+fn stat(kind: FileKind, metadata: &std::fs::Metadata) -> Result<FileStat, Failure> {
     let modified = metadata.modified().map_err(failure_from_error)?;
     let mtime = since_epoch(modified)
         .ok_or_else(|| Failure::Other(rustix::io::Errno::OVERFLOW.raw_os_error() as u32))?;
@@ -82,8 +75,8 @@ fn stat(kind: FileKind, metadata: &fs::Metadata) -> Result<FileStat, Failure> {
 }
 
 /// `t` as a reading of the clock whose origin is the Unix epoch: a moment before it is its seconds below zero and its nanoseconds counting forward, as a reading crosses the wire. None past what a signed 64-bit count of seconds holds, which no platform's `SystemTime` reaches.
-fn since_epoch(t: SystemTime) -> Option<ClockReading> {
-    match t.duration_since(UNIX_EPOCH) {
+fn since_epoch(t: std::time::SystemTime) -> Option<ClockReading> {
+    match t.duration_since(std::time::UNIX_EPOCH) {
         Ok(after) => reading_after(after),
         Err(before) => {
             let before = before.duration();
@@ -102,7 +95,7 @@ fn since_epoch(t: SystemTime) -> Option<ClockReading> {
 }
 
 /// `after` as a reading so long past its clock's origin; none past a signed 64-bit count of seconds.
-fn reading_after(after: Duration) -> Option<ClockReading> {
+fn reading_after(after: std::time::Duration) -> Option<ClockReading> {
     Some(ClockReading {
         secs: i64::try_from(after.as_secs()).ok()?,
         nanos: u64::from(after.subsec_nanos()),
@@ -141,7 +134,7 @@ static CLIENT_CONFIG: LazyLock<Arc<ClientConfig>> = LazyLock::new(|| {
 ///
 /// Every kind on which a peer decides — a socket in any state, an accepted stream, a pipe to a child, a FIFO or a device opened by path, a serial port — is filed non-blocking at the moment it is minted, so no row waits on a peer: a `handle_read`, `handle_write`, `socket_connect` or `socket_accept` that cannot progress answers `WouldBlock` and the host's wait between turns is the one place it sleeps. A regular file is synchronous, since the disk rather than a peer answers it.
 enum OsResource {
-    File(File),
+    File(std::fs::File),
     /// A reply that comes later, filed by `later` with the [`Nudge`] its future wakes: polled again once woken, and filed as `Settled` once it has come.
     Later {
         answer: Answer,
@@ -179,11 +172,15 @@ enum OsResource {
         asked: PollFlags,
     },
     /// A deadline minted by `clock_deadline`: the instant it is ready at on the clock `clock_mono` reads, or none for one past what an `Instant` holds, which never comes.
-    Deadline(Option<Instant>),
+    Deadline(Option<std::time::Instant>),
 }
 
 /// The standard streams' owners, kept alive while a poll borrows their descriptors: none for one the program closed.
-type Streams = (Option<io::Stdin>, Option<io::Stdout>, Option<io::Stderr>);
+type Streams = (
+    Option<std::io::Stdin>,
+    Option<std::io::Stdout>,
+    Option<std::io::Stderr>,
+);
 
 /// A standard stream's place among input, output and error, or none for any other handle.
 fn standard(handle: &Handle) -> Option<usize> {
@@ -294,16 +291,19 @@ struct WakePipe {
 }
 
 impl WakePipe {
-    fn open() -> Result<Self, Errno> {
+    fn open() -> Result<Self, rustix::io::Errno> {
         let (read, write) = std::io::pipe().map_err(|error| {
             error
                 .raw_os_error()
-                .map_or(Errno::IO, Errno::from_raw_os_error)
+                .map_or(rustix::io::Errno::IO, rustix::io::Errno::from_raw_os_error)
         })?;
         let (read, write) = (OwnedFd::from(read), OwnedFd::from(write));
 
         for end in [&read, &write] {
-            fcntl_setfl(end, fcntl_getfl(end)? | OFlags::NONBLOCK)?;
+            rustix::fs::fcntl_setfl(
+                end,
+                rustix::fs::fcntl_getfl(end)? | rustix::fs::OFlags::NONBLOCK,
+            )?;
         }
 
         Ok(Self {
@@ -329,7 +329,10 @@ struct Watched<'a> {
 /// Wait until a descriptor of `watched` is ready for what it asks, has failed or has hung up, or until `deadline` passes — at once where `deadline` is now — and say which by their places among `watched`.
 ///
 /// The wait is a `poll(2)`. Where the poll answers that it cannot watch a descriptor the wait holds open, as macOS's does a character device that is no terminal, the wait is made again with `select(2)`, which watches every kind of descriptor, so the poll's own answer decides and no platform is named. A wait on a FIFO, named or a pipe, is a `select(2)` from the start: macOS's poll never reports a FIFO's last writer closing, where its select reports the end it leaves as readable, and on Linux the two read the same state. An interruption is not readiness, so either resumes for what is left of the wait; any other failure is the system refusing it, which the caller decides how to answer.
-fn ready(watched: &[Watched<'_>], deadline: Option<Instant>) -> Result<Vec<usize>, Errno> {
+fn ready(
+    watched: &[Watched<'_>],
+    deadline: Option<std::time::Instant>,
+) -> Result<Vec<usize>, rustix::io::Errno> {
     if watched.iter().any(|watched| fifo(watched.fd)) {
         return selected(watched, deadline);
     }
@@ -358,12 +361,12 @@ fn ready(watched: &[Watched<'_>], deadline: Option<Instant>) -> Result<Vec<usize
 
 /// Run `wait` for what is left until `deadline`, and again after each interruption.
 fn retried(
-    deadline: Option<Instant>,
-    mut wait: impl FnMut(Option<&Timespec>) -> Result<(), Errno>,
-) -> Result<(), Errno> {
+    deadline: Option<std::time::Instant>,
+    mut wait: impl FnMut(Option<&Timespec>) -> Result<(), rustix::io::Errno>,
+) -> Result<(), rustix::io::Errno> {
     loop {
         let timeout = deadline.map(|deadline| {
-            let left = deadline.saturating_duration_since(Instant::now());
+            let left = deadline.saturating_duration_since(std::time::Instant::now());
 
             Timespec {
                 tv_sec: left.as_secs() as _,
@@ -372,14 +375,17 @@ fn retried(
         });
 
         match wait(timeout.as_ref()) {
-            Err(Errno::INTR) => {}
+            Err(rustix::io::Errno::INTR) => {}
             outcome => return outcome,
         }
     }
 }
 
 /// [`ready`]'s wait made with `select(2)`, for descriptors a poll cannot watch or does not report the end of. A descriptor that has failed or hung up is ready for what it was asked, as a poll reports it, since the call that follows says why.
-fn selected(watched: &[Watched<'_>], deadline: Option<Instant>) -> Result<Vec<usize>, Errno> {
+fn selected(
+    watched: &[Watched<'_>],
+    deadline: Option<std::time::Instant>,
+) -> Result<Vec<usize>, rustix::io::Errno> {
     let bound = watched
         .iter()
         .map(|watched| watched.fd.as_raw_fd() + 1)
@@ -425,7 +431,7 @@ fn selected(watched: &[Watched<'_>], deadline: Option<Instant>) -> Result<Vec<us
 struct Waits<'a> {
     watched: Vec<Watched<'a>>,
     places: Vec<usize>,
-    deadline: Option<Instant>,
+    deadline: Option<std::time::Instant>,
     /// Whether a reply to come is waited on with no wake pipe to hear it come by, which no wait could end.
     stranded: bool,
 }
@@ -436,7 +442,7 @@ impl<'a> Waits<'a> {
         table: &'a Table<OsResource>,
         streams: &'a Streams,
         on: &[Handle],
-        now: Instant,
+        now: std::time::Instant,
         wake: Option<BorrowedFd<'a>>,
     ) -> (Self, Vec<u8>) {
         let mut waits = Self {
@@ -485,7 +491,7 @@ impl<'a> Waits<'a> {
     }
 
     /// Wait on the watches until one is ready, the wake pipe is written or the deadline passes — at once where `deadline` is `now` — and say which watches are ready by their handles' places, as [`ready`] waits: none where only the pipe was written or the deadline passed.
-    fn poll(&self, deadline: Option<Instant>) -> Result<Vec<usize>, Errno> {
+    fn poll(&self, deadline: Option<std::time::Instant>) -> Result<Vec<usize>, rustix::io::Errno> {
         Ok(ready(&self.watched, deadline)?
             .into_iter()
             .filter_map(|index| self.places.get(index).copied())
@@ -498,11 +504,11 @@ pub struct OsHost {
     /// One [`Table`] for every non-stdio handle, keyed by token bytes. Files, unconnected sockets, connected streams, and listeners share it so the BSD lifecycle can transition a handle in place and `handle_close` releases any kind uniformly.
     table: Mutex<Table<OsResource>>,
     /// Monotonic origin: `clock_mono` reports elapsed time since this.
-    start: Instant,
+    start: std::time::Instant,
     /// The process arguments served by `proc_args` (argv\[0\] is the program name).
     args: Vec<Vec<u8>>,
     /// The pipe the replies it holds for later wake it through, opened by the first `later` that files one, so a program that never waits on a reply holds none; or what the system refused it with.
-    wake: OnceLock<Result<WakePipe, Errno>>,
+    wake: OnceLock<Result<WakePipe, rustix::io::Errno>>,
     /// Every terminal `tty_take` took and nothing has given back, so `tty_give` and [`Drop`] undo exactly what the program set and restore what it found. Host state with an exit obligation: a terminal left raw, or on the alternate screen, outlives the process that switched it.
     taken: Arc<Mutex<Vec<Taken>>>,
     /// Whether the thread that gives every terminal back at a terminating signal is running, started by the first take.
@@ -524,7 +530,7 @@ impl OsHost {
     pub fn with_args(args: Vec<Vec<u8>>) -> Self {
         Self {
             table: Mutex::new(Table::new()),
-            start: Instant::now(),
+            start: std::time::Instant::now(),
             args,
             wake: OnceLock::new(),
             taken: Arc::new(Mutex::new(Vec::new())),
@@ -549,9 +555,9 @@ impl OsHost {
         let open = |place: usize| !self.closed[place].load(Ordering::Acquire);
 
         (
-            open(0).then(stdin),
-            open(1).then(stdout),
-            open(2).then(stderr),
+            open(0).then(std::io::stdin),
+            open(1).then(std::io::stdout),
+            open(2).then(std::io::stderr),
         )
     }
 
@@ -569,12 +575,12 @@ impl OsHost {
         drop(records);
 
         let access = match place {
-            0 => OFlags::RDONLY,
-            _ => OFlags::WRONLY,
+            0 => rustix::fs::OFlags::RDONLY,
+            _ => rustix::fs::OFlags::WRONLY,
         };
-        if let Ok(null) = open(
+        if let Ok(null) = rustix::fs::open(
             "/dev/null",
-            access | OFlags::CLOEXEC,
+            access | rustix::fs::OFlags::CLOEXEC,
             rustix::fs::Mode::empty(),
         ) {
             let _ = match place {
@@ -603,8 +609,8 @@ impl OsHost {
     /// Hand on `held`, what the host holds of `io`'s writes, as far as `io` takes it now: `Ok` once nothing is held, `WouldBlock` while the handle takes no more, and the stream's failure otherwise. A TLS stream's records are pushed behind its plaintext, so `Ok` there means `rustls` holds none of them either. The standard output streams are written through their raw descriptors, never `std`'s own buffer, which would hold what the guest wrote where neither the other stream's writes nor a flush can reach it.
     fn hand_on(&self, io: &Handle, held: &mut VecDeque<u8>) -> Result<(), Failure> {
         match io {
-            Handle::Stdout => return self.hand_on_standard(0, stdout().as_fd(), held),
-            Handle::Stderr => return self.hand_on_standard(1, stderr().as_fd(), held),
+            Handle::Stdout => return self.hand_on_standard(0, std::io::stdout().as_fd(), held),
+            Handle::Stderr => return self.hand_on_standard(1, std::io::stderr().as_fd(), held),
             Handle::Stdin => return Ok(()),
             Handle::Other(_) => {}
         }
@@ -615,10 +621,10 @@ impl OsHost {
             Some(OsResource::ClientTls(tls)) => tls_drained(held, tls),
             Some(OsResource::ServerTls(tls)) => tls_drained(held, tls),
             Some(OsResource::Descriptor(fd) | OsResource::Fifo(fd)) => drained(held, |bytes| {
-                rustix::io::write(&*fd, bytes).map_err(Error::from)
+                rustix::io::write(&*fd, bytes).map_err(std::io::Error::from)
             }),
             Some(OsResource::Serial(port)) => drained(held, |bytes| {
-                rustix::io::write(&*port, bytes).map_err(Error::from)
+                rustix::io::write(&*port, bytes).map_err(std::io::Error::from)
             }),
             // Nothing is held of a kind no write reaches.
             Some(_) => Ok(()),
@@ -646,7 +652,7 @@ impl OsHost {
                 true => &front[..front.len().min(PIPE_BUF)],
                 false => front,
             };
-            let wrote = write_once(|| rustix::io::write(fd, taken).map_err(Error::from))?;
+            let wrote = write_once(|| rustix::io::write(fd, taken).map_err(std::io::Error::from))?;
             held.drain(..wrote);
         }
 
@@ -657,8 +663,8 @@ impl OsHost {
     fn hand_on_standard_at_end(&self) {
         let mut outbound = self.outbound.lock().unwrap();
         for (io, stream, fd) in [
-            (Handle::Stdout, 0, stdout().as_fd()),
-            (Handle::Stderr, 1, stderr().as_fd()),
+            (Handle::Stdout, 0, std::io::stdout().as_fd()),
+            (Handle::Stderr, 1, std::io::stderr().as_fd()),
         ] {
             let Some(mut held) = outbound.remove(&io.bytes()) else {
                 continue;
@@ -694,9 +700,9 @@ impl OsHost {
         }
 
         match handle {
-            Handle::Stdin => Some(apply(stdin().as_fd())),
-            Handle::Stdout => Some(apply(stdout().as_fd())),
-            Handle::Stderr => Some(apply(stderr().as_fd())),
+            Handle::Stdin => Some(apply(std::io::stdin().as_fd())),
+            Handle::Stdout => Some(apply(std::io::stdout().as_fd())),
+            Handle::Stderr => Some(apply(std::io::stderr().as_fd())),
             Handle::Other(_) => match self.table.lock().unwrap().get(handle)? {
                 OsResource::File(file) => Some(apply(file.as_fd())),
                 OsResource::Descriptor(fd) | OsResource::Fifo(fd) => Some(apply(fd.as_fd())),
@@ -775,7 +781,7 @@ impl Default for OsHost {
 
 /// The columns and rows of the terminal this process's standard error is, where it is one: what a drawing redrawn on it is cut to and capped by, read again whenever it draws, since a terminal is resized under it.
 pub fn standard_error_size() -> Option<(u16, u16)> {
-    tcgetwinsize(stderr().as_fd())
+    tcgetwinsize(std::io::stderr().as_fd())
         .ok()
         .map(|size| (size.ws_col, size.ws_row))
 }
@@ -814,14 +820,14 @@ static ENDINGS: Mutex<Endings> = Mutex::new(Endings {
 pub fn standard_error_leaving(shown: &[u8], farewell: Vec<u8>) {
     watch_endings();
     let mut endings = ENDINGS.lock().unwrap_or_else(PoisonError::into_inner);
-    let _ = stderr().write_all(shown);
+    let _ = std::io::stderr().write_all(shown);
     endings.farewell = farewell;
 }
 
 /// Write on standard error, now, what the last write through [`standard_error_leaving`] left there, and leave nothing for a terminating signal after it: what an ending that is no signal, a panic, writes in its place.
 pub fn standard_error_farewell() {
     let mut endings = ENDINGS.lock().unwrap_or_else(PoisonError::into_inner);
-    let _ = stderr().write_all(&mem::take(&mut endings.farewell));
+    let _ = std::io::stderr().write_all(&mem::take(&mut endings.farewell));
 }
 
 /// Start, once in the process, the thread that meets a terminating signal: it gives back every terminal a host still holds, writes the farewell, and lets the signal end the process, so its parent sees it end by that signal.
@@ -832,14 +838,14 @@ fn watch_endings() {
     WATCHING.get_or_init(|| {
         let Ok(pipes) = ENDING
             .iter()
-            .map(|_| io::pipe())
+            .map(|_| std::io::pipe())
             .collect::<Result<Vec<_>, _>>()
         else {
             return;
         };
         let (reads, writes): (Vec<_>, Vec<_>) = pipes.into_iter().unzip();
 
-        let waiting = thread::Builder::new().spawn(move || {
+        let waiting = std::thread::Builder::new().spawn(move || {
             let watched = reads
                 .iter()
                 .map(|read| Watched {
@@ -855,7 +861,7 @@ fn watch_endings() {
                 for taken in endings.taken.iter().filter_map(Weak::upgrade) {
                     give_back_all(&taken);
                 }
-                let _ = stderr().write_all(&endings.farewell);
+                let _ = std::io::stderr().write_all(&endings.farewell);
                 let _ = emulate_default_handler(ENDING[*place]);
             }
         });
@@ -870,7 +876,7 @@ fn watch_endings() {
 
 /// Give back every terminal `taken` holds, emptying it.
 fn give_back_all(taken: &Mutex<Vec<Taken>>) {
-    let records = std::mem::take(&mut *taken.lock().unwrap());
+    let records = mem::take(&mut *taken.lock().unwrap());
 
     for record in records {
         let _ = give_back(&record);
@@ -878,10 +884,10 @@ fn give_back_all(taken: &Mutex<Vec<Taken>>) {
 }
 
 /// How long a give waits for a terminal to take its leave bytes: a give runs where nothing may suspend, at a scope's release or as the process ends.
-const LEAVE_WAIT: Duration = Duration::from_millis(100);
+const LEAVE_WAIT: std::time::Duration = std::time::Duration::from_millis(100);
 
 /// Write `taken`'s leave bytes to its terminal, then restore the termios it recorded: the bytes go out while output processing is still off, so they reach the terminal as written. A terminal that will not take them within [`LEAVE_WAIT`] keeps what it took, and its settings are restored all the same.
-fn give_back(taken: &Taken) -> Result<(), Errno> {
+fn give_back(taken: &Taken) -> Result<(), rustix::io::Errno> {
     let fd = taken.fd.as_fd();
     let mut leave = taken.leave.as_slice();
 
@@ -889,8 +895,8 @@ fn give_back(taken: &Taken) -> Result<(), Errno> {
         match rustix::io::write(fd, leave) {
             Ok(0) => break,
             Ok(written) => leave = &leave[written..],
-            Err(Errno::INTR) => {}
-            Err(Errno::AGAIN) if writable_within(fd, LEAVE_WAIT) => {}
+            Err(rustix::io::Errno::INTR) => {}
+            Err(rustix::io::Errno::AGAIN) if writable_within(fd, LEAVE_WAIT) => {}
             Err(_) => break,
         }
     }
@@ -899,20 +905,20 @@ fn give_back(taken: &Taken) -> Result<(), Errno> {
 }
 
 /// Whether `fd` takes a write within `wait`.
-fn writable_within(fd: BorrowedFd<'_>, wait: Duration) -> bool {
+fn writable_within(fd: BorrowedFd<'_>, wait: std::time::Duration) -> bool {
     let watched = [Watched {
         fd,
         asked: PollFlags::OUT,
     }];
 
-    ready(&watched, Some(Instant::now() + wait)).is_ok_and(|ready| !ready.is_empty())
+    ready(&watched, Some(std::time::Instant::now() + wait)).is_ok_and(|ready| !ready.is_empty())
 }
 
 impl HostOps for OsHost {
     fn file_open(&self, path: Vec<u8>, mode: Mode) -> Result<Handle, Failure> {
-        let path = OsStr::from_bytes(&path);
+        let path = std::ffi::OsStr::from_bytes(&path);
 
-        let mut options = OpenOptions::new();
+        let mut options = std::fs::OpenOptions::new();
 
         match mode {
             Mode::Read => options.read(true),
@@ -925,18 +931,22 @@ impl HostOps for OsHost {
 
         // Opened without blocking, so the open waits on no peer: a FIFO's other end, a device's carrier. Never as the controlling terminal, which a terminal a process leading its session opens would otherwise become, its hangup then ending the process. What the path turns out to name decides how it is filed.
         let file = options
-            .custom_flags((OFlags::NONBLOCK | OFlags::NOCTTY).bits().cast_signed())
+            .custom_flags(
+                (rustix::fs::OFlags::NONBLOCK | rustix::fs::OFlags::NOCTTY)
+                    .bits()
+                    .cast_signed(),
+            )
             .open(path)
             .map_err(failure_from_error)?;
         let kind = file.metadata().map_err(failure_from_error)?.file_type();
 
         // A regular file or a directory is answered by the disk, which no peer decides on, so it is read and written synchronously.
         if kind.is_file() || kind.is_dir() {
-            let flags = fcntl_getfl(&file)
-                .map_err(Error::from)
+            let flags = rustix::fs::fcntl_getfl(&file)
+                .map_err(std::io::Error::from)
                 .map_err(failure_from_error)?;
-            fcntl_setfl(&file, flags - OFlags::NONBLOCK)
-                .map_err(Error::from)
+            rustix::fs::fcntl_setfl(&file, flags - rustix::fs::OFlags::NONBLOCK)
+                .map_err(std::io::Error::from)
                 .map_err(failure_from_error)?;
 
             return Ok(self.mint(OsResource::File(file)));
@@ -958,7 +968,7 @@ impl HostOps for OsHost {
 
     fn socket_open(&self, addr: Vec<u8>) -> Result<Handle, Failure> {
         // The address blob is the canonical "ip:port" string `dns_lookup` answered.
-        let address = match String::from_utf8_lossy(&addr).parse::<SocketAddr>() {
+        let address = match String::from_utf8_lossy(&addr).parse::<std::net::SocketAddr>() {
             Ok(address) => address,
             Err(_) => return Err(Failure::NotFound),
         };
@@ -974,7 +984,7 @@ impl HostOps for OsHost {
 
     fn socket_connect(&self, io: Handle, addr: Vec<u8>) -> Result<(), Failure> {
         // The address blob is the canonical "ip:port" string `dns_lookup` answered.
-        let address = match String::from_utf8_lossy(&addr).parse::<SocketAddr>() {
+        let address = match String::from_utf8_lossy(&addr).parse::<std::net::SocketAddr>() {
             Ok(address) => address,
             Err(_) => return Err(Failure::NotFound),
         };
@@ -994,7 +1004,7 @@ impl HostOps for OsHost {
 
                 Ok(())
             }
-            Err(error) if is_errno(&error, Errno::ISCONN) => {
+            Err(error) if is_errno(&error, rustix::io::Errno::ISCONN) => {
                 self.table
                     .lock()
                     .unwrap()
@@ -1003,9 +1013,9 @@ impl HostOps for OsHost {
                 Ok(())
             }
             Err(error)
-                if is_errno(&error, Errno::INPROGRESS)
-                    || is_errno(&error, Errno::ALREADY)
-                    || error.kind() == ErrorKind::Interrupted =>
+                if is_errno(&error, rustix::io::Errno::INPROGRESS)
+                    || is_errno(&error, rustix::io::Errno::ALREADY)
+                    || error.kind() == std::io::ErrorKind::Interrupted =>
             {
                 self.table
                     .lock()
@@ -1043,7 +1053,7 @@ impl HostOps for OsHost {
 
                     Ok(())
                 }
-                Err(error) if is_errno(&error, Errno::NOTCONN) => {
+                Err(error) if is_errno(&error, rustix::io::Errno::NOTCONN) => {
                     table.insert(&io, OsResource::Connecting(socket));
 
                     Err(Failure::WouldBlock)
@@ -1136,7 +1146,7 @@ impl HostOps for OsHost {
 
     fn socket_listen(&self, addr: Vec<u8>) -> Result<Handle, Failure> {
         // The address blob is the canonical "ip:port" string `dns_lookup` answered.
-        let address = match String::from_utf8_lossy(&addr).parse::<SocketAddr>() {
+        let address = match String::from_utf8_lossy(&addr).parse::<std::net::SocketAddr>() {
             Ok(address) => address,
             Err(_) => return Err(Failure::NotFound),
         };
@@ -1188,13 +1198,13 @@ impl HostOps for OsHost {
             &table,
             &streams,
             &on,
-            Instant::now(),
+            std::time::Instant::now(),
             wake.map(|wake| wake.read.as_fd()),
         );
 
         // A poll the system refuses says nothing of any watch, so each reports ready, and its waiter wakes into the call that says why.
         let fired = waits
-            .poll(Some(Instant::now()))
+            .poll(Some(std::time::Instant::now()))
             .unwrap_or_else(|_| waits.places.clone());
         for place in fired {
             reports[place] = EventCodes::READY;
@@ -1215,7 +1225,7 @@ impl HostOps for OsHost {
                 &table,
                 &streams,
                 &on,
-                Instant::now(),
+                std::time::Instant::now(),
                 wake.map(|wake| wake.read.as_fd()),
             );
             if reports.contains(&EventCodes::READY) {
@@ -1223,7 +1233,7 @@ impl HostOps for OsHost {
             }
             if waits.stranded {
                 let why = match self.wake.get() {
-                    Some(Err(errno)) => Error::from(*errno).to_string(),
+                    Some(Err(errno)) => std::io::Error::from(*errno).to_string(),
                     _ => "it was never opened".to_string(),
                 };
 
@@ -1236,7 +1246,7 @@ impl HostOps for OsHost {
             let fired = waits.poll(deadline).map_err(|errno| {
                 Refusal(format!(
                     "the system refused the wait: {}",
-                    Error::from(errno)
+                    std::io::Error::from(errno)
                 ))
             })?;
             if !fired.is_empty() {
@@ -1317,13 +1327,13 @@ impl HostOps for OsHost {
         let result = match &io {
             // Standard input is the process's, shared with the terminal or the pipe that feeds it, so its descriptor's flags are never touched; the read is gated by a zero-timeout poll instead, answering `WouldBlock` when nothing is there, which is how a shared descriptor keeps the rule that no row waits on a peer. On the raw descriptor, as the write below is, rather than through `std::io::Stdin`'s buffered reader: a request smaller than what arrived would leave the remainder in a buffer no watch can see, and a description waiting on fd 0 would stall with input already inside the process.
             Handle::Stdin => {
-                let input = stdin();
+                let input = std::io::stdin();
 
                 if !readable_now(input.as_fd()) {
                     return Err(Failure::WouldBlock);
                 }
 
-                rustix::io::read(&input, &mut buffer[..]).map_err(Error::from)
+                rustix::io::read(&input, &mut buffer[..]).map_err(std::io::Error::from)
             }
             // The output streams are open to write only, as a descriptor opened to write is.
             Handle::Stdout | Handle::Stderr => return Err(bad_descriptor()),
@@ -1346,7 +1356,7 @@ impl HostOps for OsHost {
                     Some(OsResource::Descriptor(fd)) => {
                         let result = rustix::io::read(&*fd, &mut buffer[..]);
 
-                        return read_outcome(result.map_err(Error::from), buffer);
+                        return read_outcome(result.map_err(std::io::Error::from), buffer);
                     }
                     // A FIFO no writer has opened reads as its end, so it is read only once a wait finds a writer's bytes or its close there.
                     Some(OsResource::Fifo(fd)) => {
@@ -1356,12 +1366,12 @@ impl HostOps for OsHost {
 
                         let result = rustix::io::read(&*fd, &mut buffer[..]);
 
-                        return read_outcome(result.map_err(Error::from), buffer);
+                        return read_outcome(result.map_err(std::io::Error::from), buffer);
                     }
                     Some(OsResource::Serial(port)) => {
                         let result = rustix::io::read(&*port, &mut buffer[..]);
 
-                        return read_outcome(result.map_err(Error::from), buffer);
+                        return read_outcome(result.map_err(std::io::Error::from), buffer);
                     }
                     // A missing or non-stream handle is a fault, not an exhausted stream — mirror write's `NotFound` so use-after-close stays loud.
                     _ => return Err(Failure::NotFound),
@@ -1384,7 +1394,9 @@ impl HostOps for OsHost {
             // The message is held whole or not at all: where the host cannot hold it beside what it holds already, the write fails having taken none of it.
             Some(held) => {
                 if held.try_reserve(bytes.len()).is_err() {
-                    return Err(Failure::Other(Errno::NOMEM.raw_os_error() as u32));
+                    return Err(Failure::Other(
+                        rustix::io::Errno::NOMEM.raw_os_error() as u32
+                    ));
                 }
                 held.extend(bytes);
             }
@@ -1429,7 +1441,7 @@ impl HostOps for OsHost {
     }
 
     fn clock_wall(&self) -> Result<ClockReading, Refusal> {
-        since_epoch(SystemTime::now()).ok_or_else(|| past_the_wire("the wall clock"))
+        since_epoch(std::time::SystemTime::now()).ok_or_else(|| past_the_wire("the wall clock"))
     }
 
     fn clock_mono(&self) -> Result<ClockReading, Refusal> {
@@ -1439,8 +1451,8 @@ impl HostOps for OsHost {
     fn clock_deadline(&self, secs: i64, nanos: u64) -> Handle {
         // A deadline before the clock's origin has passed already; one past what an `Instant` holds never comes.
         let at = match u64::try_from(secs) {
-            Ok(secs) => Duration::from_secs(secs)
-                .checked_add(Duration::from_nanos(nanos))
+            Ok(secs) => std::time::Duration::from_secs(secs)
+                .checked_add(std::time::Duration::from_nanos(nanos))
                 .and_then(|after| self.start.checked_add(after)),
             Err(_) => Some(self.start),
         };
@@ -1471,7 +1483,7 @@ impl HostOps for OsHost {
             return None;
         }
 
-        env::var_os(OsStr::from_bytes(&name)).map(|value| value.into_encoded_bytes())
+        env::var_os(std::ffi::OsStr::from_bytes(&name)).map(|value| value.into_encoded_bytes())
     }
 
     // The code leaves as the guest-exit trap; the terminals `Drop` gives back are what the process leaves behind.
@@ -1510,7 +1522,7 @@ impl HostOps for OsHost {
 
                 Ok(())
             }
-            Some(Err(errno)) => Err(failure_from_error(Error::from(errno))),
+            Some(Err(errno)) => Err(failure_from_error(std::io::Error::from(errno))),
         }
     }
 
@@ -1530,7 +1542,7 @@ impl HostOps for OsHost {
         match outcome {
             None => Err(Failure::NotFound),
             Some(Ok(())) => Ok(()),
-            Some(Err(errno)) => Err(failure_from_error(Error::from(errno))),
+            Some(Err(errno)) => Err(failure_from_error(std::io::Error::from(errno))),
         }
     }
 
@@ -1541,7 +1553,7 @@ impl HostOps for OsHost {
                 cols: size.ws_col.into(),
                 rows: size.ws_row.into(),
             }),
-            Some(Err(errno)) => Err(failure_from_error(Error::from(errno))),
+            Some(Err(errno)) => Err(failure_from_error(std::io::Error::from(errno))),
         }
     }
 
@@ -1559,12 +1571,14 @@ impl HostOps for OsHost {
             serial_frame(data_bits, parity, stop_bits, flow),
             serial_speed(baud),
         ) else {
-            return Err(failure_from_error(Error::from(Errno::INVAL)));
+            return Err(failure_from_error(std::io::Error::from(
+                rustix::io::Errno::INVAL,
+            )));
         };
 
         SerialPort::open(&path, speed, frame)
             .map(|port| self.mint(OsResource::Serial(port)))
-            .map_err(|errno| failure_from_error(Error::from(errno)))
+            .map_err(|errno| failure_from_error(std::io::Error::from(errno)))
     }
 
     fn serial_control(&self, io: Handle, op: SerialOp, on: bool) -> Result<(), Failure> {
@@ -1572,7 +1586,7 @@ impl HostOps for OsHost {
         match self.table.lock().unwrap().get(&io) {
             Some(OsResource::Serial(port)) => port
                 .control(op, on)
-                .map_err(|errno| failure_from_error(Error::from(errno))),
+                .map_err(|errno| failure_from_error(std::io::Error::from(errno))),
             _ => Err(Failure::NotFound),
         }
     }
@@ -1599,13 +1613,13 @@ impl HostOps for OsHost {
     }
 
     fn file_stat(&self, path: Vec<u8>) -> Result<FileStat, Failure> {
-        let path = OsStr::from_bytes(&path);
+        let path = std::ffi::OsStr::from_bytes(&path);
 
-        let metadata = match fs::metadata(path) {
+        let metadata = match std::fs::metadata(path) {
             Ok(metadata) => metadata,
             // Following the link found nothing. `symlink_metadata` tells a dangling link from a path with nothing at all, and it is the one case the `symlink` kind is reported.
-            Err(error) if error.kind() == ErrorKind::NotFound => {
-                return match fs::symlink_metadata(path) {
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                return match std::fs::symlink_metadata(path) {
                     Ok(link) if link.file_type().is_symlink() => stat(FileKind::Symlink, &link),
                     _ => Err(failure_from_error(error)),
                 };
@@ -1617,22 +1631,27 @@ impl HostOps for OsHost {
     }
 
     fn file_link_stat(&self, path: Vec<u8>) -> Result<FileStat, Failure> {
-        let metadata =
-            fs::symlink_metadata(OsStr::from_bytes(&path)).map_err(failure_from_error)?;
+        let metadata = std::fs::symlink_metadata(std::ffi::OsStr::from_bytes(&path))
+            .map_err(failure_from_error)?;
 
         stat(kind_of(metadata.file_type()), &metadata)
     }
 
     fn file_remove(&self, path: Vec<u8>) -> Result<(), Failure> {
-        fs::remove_file(OsStr::from_bytes(&path)).map_err(failure_from_error)
+        std::fs::remove_file(std::ffi::OsStr::from_bytes(&path)).map_err(failure_from_error)
     }
 
     fn file_rename(&self, from: Vec<u8>, to: Vec<u8>) -> Result<(), Failure> {
-        fs::rename(OsStr::from_bytes(&from), OsStr::from_bytes(&to)).map_err(failure_from_error)
+        std::fs::rename(
+            std::ffi::OsStr::from_bytes(&from),
+            std::ffi::OsStr::from_bytes(&to),
+        )
+        .map_err(failure_from_error)
     }
 
     fn dir_list(&self, path: Vec<u8>) -> Result<Vec<Vec<u8>>, Failure> {
-        let entries = fs::read_dir(OsStr::from_bytes(&path)).map_err(failure_from_error)?;
+        let entries =
+            std::fs::read_dir(std::ffi::OsStr::from_bytes(&path)).map_err(failure_from_error)?;
 
         let mut names = Vec::new();
 
@@ -1652,14 +1671,14 @@ impl HostOps for OsHost {
             true => 0o700,
             false => 0o777,
         };
-        fs::DirBuilder::new()
+        std::fs::DirBuilder::new()
             .mode(permissions)
-            .create(OsStr::from_bytes(&path))
+            .create(std::ffi::OsStr::from_bytes(&path))
             .map_err(failure_from_error)
     }
 
     fn dir_remove(&self, path: Vec<u8>) -> Result<(), Failure> {
-        fs::remove_dir(OsStr::from_bytes(&path)).map_err(failure_from_error)
+        std::fs::remove_dir(std::ffi::OsStr::from_bytes(&path)).map_err(failure_from_error)
     }
 
     fn proc_cwd(&self) -> Result<Vec<u8>, Failure> {
@@ -1729,7 +1748,7 @@ fn writable_now(fd: BorrowedFd<'_>) -> bool {
         asked: PollFlags::OUT,
     }];
 
-    ready(&watched, Some(Instant::now())).map_or(true, |ready| !ready.is_empty())
+    ready(&watched, Some(std::time::Instant::now())).map_or(true, |ready| !ready.is_empty())
 }
 
 /// Whether `fd` is a FIFO, named or a pipe: the descriptors [`ready`] waits on with `select(2)`. One whose kind cannot be read is taken to be none, and is polled.
@@ -1756,16 +1775,16 @@ fn readable_now(fd: BorrowedFd<'_>) -> bool {
         asked: PollFlags::IN,
     }];
 
-    ready(&watched, Some(Instant::now())).map_or(true, |ready| !ready.is_empty())
+    ready(&watched, Some(std::time::Instant::now())).map_or(true, |ready| !ready.is_empty())
 }
 
 /// Whether `error` carries the OS errno `errno` — the read for the connect statuses that have no `ErrorKind`.
-fn is_errno(error: &Error, errno: Errno) -> bool {
+fn is_errno(error: &std::io::Error, errno: rustix::io::Errno) -> bool {
     error.raw_os_error() == Some(errno.raw_os_error())
 }
 
 /// The failure a TLS stream's read or write reports: `rustls`'s own errors — a failed verification, a protocol violation, a plaintext peer — arrive wrapped in an `InvalidData` error and collapse to `TlsError`, and everything else is the socket's, mapped as every other stream maps it.
-fn tls_failure(error: Error) -> Failure {
+fn tls_failure(error: std::io::Error) -> Failure {
     if error
         .get_ref()
         .is_some_and(|inner| inner.is::<rustls::Error>())
@@ -1778,11 +1797,11 @@ fn tls_failure(error: Error) -> Failure {
 
 /// A TLS read's outcome as the row's reply: a peer that closed without `close_notify`, inside the handshake or after it, is `TlsError` and not the end of the stream, since only the alert says the stream ended where its sender meant it to and a reader that ends with the stream would take what arrived for the whole (RFC 9112 §9.8); the rest as [`tls_failure`] maps it.
 fn tls_read_outcome(
-    result: io::Result<usize>,
+    result: std::io::Result<usize>,
     buffer: Vec<u8>,
 ) -> Result<Option<Vec<u8>>, Failure> {
     match result {
-        Err(error) if error.kind() == ErrorKind::UnexpectedEof => Err(Failure::TlsError),
+        Err(error) if error.kind() == std::io::ErrorKind::UnexpectedEof => Err(Failure::TlsError),
         Err(error) => Err(tls_failure(error)),
         Ok(_) => read_outcome(result, buffer),
     }
@@ -1790,16 +1809,16 @@ fn tls_read_outcome(
 
 /// `EBADF`: a stream used in a direction it is not open for.
 fn bad_descriptor() -> Failure {
-    failure_from_error(Error::from(Errno::BADF))
+    failure_from_error(std::io::Error::from(rustix::io::Errno::BADF))
 }
 
 /// One write attempt's reply, how many bytes it took, retried while an interruption stops it before any progress. A descriptor that takes nothing of a nonempty buffer and reports nothing has no failure to name, so it is the errno-less `Other(0)` — never a success its caller would offer the same bytes again forever.
-fn write_once(mut write: impl FnMut() -> io::Result<usize>) -> Result<usize, Failure> {
+fn write_once(mut write: impl FnMut() -> std::io::Result<usize>) -> Result<usize, Failure> {
     loop {
         match write() {
             Ok(0) => return Err(Failure::Other(0)),
             Ok(accepted) => return Ok(accepted),
-            Err(error) if error.kind() == ErrorKind::Interrupted => {}
+            Err(error) if error.kind() == std::io::ErrorKind::Interrupted => {}
             Err(error) => return Err(failure_from_error(error)),
         }
     }
@@ -1808,7 +1827,7 @@ fn write_once(mut write: impl FnMut() -> io::Result<usize>) -> Result<usize, Fai
 /// `held` written through `write`, a write attempt at a time, until nothing is held: `WouldBlock` where a descriptor takes no more now, and the failure of an attempt as [`write_once`] answers it.
 fn drained(
     held: &mut VecDeque<u8>,
-    mut write: impl FnMut(&[u8]) -> io::Result<usize>,
+    mut write: impl FnMut(&[u8]) -> std::io::Result<usize>,
 ) -> Result<(), Failure> {
     while !held.is_empty() {
         let (front, _) = held.as_slices();
@@ -1838,8 +1857,8 @@ where
                 Ok(taken) => {
                     held.drain(..taken);
                 }
-                Err(error) if error.kind() == ErrorKind::Interrupted => {}
-                Err(error) if error.kind() == ErrorKind::WouldBlock => break,
+                Err(error) if error.kind() == std::io::ErrorKind::Interrupted => {}
+                Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => break,
                 Err(error) => return Err(tls_failure(error)),
             }
         }
@@ -1859,8 +1878,10 @@ fn flush_tls<Data>(conn: &mut ConnectionCommon<Data>, sock: &mut Socket) -> Resu
     while conn.wants_write() {
         match conn.write_tls(sock) {
             Ok(_) => {}
-            Err(error) if error.kind() == ErrorKind::Interrupted => {}
-            Err(error) if error.kind() == ErrorKind::WouldBlock => return Err(Failure::WouldBlock),
+            Err(error) if error.kind() == std::io::ErrorKind::Interrupted => {}
+            Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                return Err(Failure::WouldBlock);
+            }
             Err(error) => return Err(tls_failure(error)),
         }
     }
@@ -1870,7 +1891,9 @@ fn flush_tls<Data>(conn: &mut ConnectionCommon<Data>, sock: &mut Socket) -> Resu
 
 /// End `socket`'s sending half, leaving it to read what its peer still sends.
 fn finish(socket: &Socket) -> Result<(), Failure> {
-    socket.shutdown(Shutdown::Write).map_err(failure_from_error)
+    socket
+        .shutdown(std::net::Shutdown::Write)
+        .map_err(failure_from_error)
 }
 
 /// End a TLS stream's sending half: its closure alert, drained as [`flush_tls`] drains, and then the socket's own. `rustls` queues the alert once however often it is asked, so a call retried after `WouldBlock` drains what the first one left.
@@ -1900,7 +1923,7 @@ fn tls_watch(conn: &rustls::CommonState, asked: PollFlags) -> PollFlags {
 
 /// The reply of one `handle_read`: a zero count is end of stream, a positive one the prefix it filled, an error its failure. Shared by every descriptor `handle_read` serves, the raw ones included.
 fn read_outcome(
-    result: io::Result<usize>,
+    result: std::io::Result<usize>,
     mut buffer: Vec<u8>,
 ) -> Result<Option<Vec<u8>>, Failure> {
     match result {

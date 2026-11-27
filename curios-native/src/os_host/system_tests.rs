@@ -40,9 +40,9 @@ fn a_clock_answers_the_nanoseconds_within_a_second() {
 fn a_modification_time_before_the_epoch_crosses_as_itself() {
     let host = OsHost::with_args(vec![]);
     let dir = Temporary::new("runtime-stat", "before-the-epoch");
-    fs::create_dir(&dir).expect("a fresh temporary directory");
+    std::fs::create_dir(&dir).expect("a fresh temporary directory");
     let path = dir.join("old");
-    let file = fs::File::create(&path).expect("a fresh file");
+    let file = std::fs::File::create(&path).expect("a fresh file");
     let before = std::time::UNIX_EPOCH - std::time::Duration::from_millis(1_500);
     file.set_modified(before)
         .expect("a modification time before 1970");
@@ -57,7 +57,7 @@ fn a_modification_time_before_the_epoch_crosses_as_itself() {
 fn an_open_to_create_is_refused_where_the_file_exists() {
     let host = OsHost::with_args(vec![]);
     let dir = Temporary::new("runtime-open", "create");
-    fs::create_dir(&dir).expect("a fresh temporary directory");
+    std::fs::create_dir(&dir).expect("a fresh temporary directory");
     let path = dir.join("lock").into_os_string().into_vec();
 
     assert!(host.file_open(path.clone(), Mode::Create).is_ok());
@@ -72,10 +72,10 @@ fn an_open_to_create_is_refused_where_the_file_exists() {
 fn a_private_file_and_directory_are_their_owners_alone() {
     let host = OsHost::with_args(vec![]);
     let dir = Temporary::new("runtime-open", "private");
-    fs::create_dir(&dir).expect("a fresh temporary directory");
+    std::fs::create_dir(&dir).expect("a fresh temporary directory");
     let bytes = |name: &str| dir.join(name).into_os_string().into_vec();
     let permissions = |name: &str| {
-        fs::metadata(dir.join(name))
+        std::fs::metadata(dir.join(name))
             .expect("what the host created")
             .permissions()
             .mode()
@@ -109,7 +109,7 @@ fn a_private_file_and_directory_are_their_owners_alone() {
 fn a_link_is_read_as_itself_where_stat_follows_it() {
     let host = OsHost::with_args(vec![]);
     let dir = Temporary::new("runtime-stat", "link");
-    fs::create_dir_all(dir.join("target")).expect("a fresh temporary directory");
+    std::fs::create_dir_all(dir.join("target")).expect("a fresh temporary directory");
     unix::fs::symlink(dir.join("target"), dir.join("link")).expect("a link");
     let bytes = |name: &str| dir.join(name).into_os_string().into_vec();
     let kind = |stat: Result<FileStat, Failure>| stat.map(|stat| stat.kind);
