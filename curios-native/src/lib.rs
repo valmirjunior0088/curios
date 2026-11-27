@@ -34,7 +34,7 @@ mod blocking;
 pub use blocking::{Blocking, blocking};
 
 mod os_host;
-pub use os_host::{OsHost, standard_error_size};
+pub use os_host::{OsHost, standard_error_farewell, standard_error_leaving, standard_error_size};
 
 mod os_child;
 use os_child::*;

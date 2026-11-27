@@ -36,6 +36,7 @@ use {
         fs::{self, File, OpenOptions},
         future,
         io::{self, Error, ErrorKind, Read, Write, stderr, stdin, stdout},
+        mem,
         net::{Shutdown, SocketAddr, ToSocketAddrs},
         ops::{Deref, DerefMut},
         os::{
@@ -46,7 +47,7 @@ use {
             },
         },
         sync::{
-            Arc, LazyLock, Mutex, OnceLock,
+            Arc, LazyLock, Mutex, OnceLock, PoisonError, Weak,
             atomic::{AtomicBool, Ordering},
         },
         task::{Context, Poll, Wake, Waker},
@@ -674,43 +675,15 @@ impl OsHost {
         }
     }
 
-    /// Start the thread that gives back every terminal still taken when a terminating signal arrives and then lets the signal end the process, so its parent sees it end by that signal; once, at the first take. A host whose handlers the system refuses still takes its terminal, and only a signal then leaves it as the program set it.
-    ///
-    /// Each signal wakes the thread through a pipe of its own, which its handler writes with `write(2)`. A socket pair would be woken with `send(2)`, which a sandbox that forbids sending on sockets refuses, and the signal would be caught and never acted on. The thread is waiting before any handler is registered, and a signal whose registration fails keeps its default action, so no signal is caught that nothing reads.
+    /// Hand the terminals this host takes to the thread that meets a terminating signal ([`watch_endings`]); once, at the first take.
     fn give_back_on_signals(&self) {
         self.signals.get_or_init(|| {
-            let Ok(pipes) = ENDING
-                .iter()
-                .map(|_| io::pipe())
-                .collect::<Result<Vec<_>, _>>()
-            else {
-                return;
-            };
-            let (reads, writes): (Vec<_>, Vec<_>) = pipes.into_iter().unzip();
-            let taken = Arc::clone(&self.taken);
-
-            let waiting = thread::Builder::new().spawn(move || {
-                let watched = reads
-                    .iter()
-                    .map(|read| Watched {
-                        fd: read.as_fd(),
-                        asked: PollFlags::IN,
-                    })
-                    .collect::<Vec<_>>();
-
-                if let Ok(arrived) = ready(&watched, None)
-                    && let Some(place) = arrived.first()
-                {
-                    give_back_all(&taken);
-                    let _ = emulate_default_handler(ENDING[*place]);
-                }
-            });
-
-            if waiting.is_ok() {
-                for (signal, write) in ENDING.into_iter().zip(writes) {
-                    let _ = pipe::register(signal, write);
-                }
-            }
+            watch_endings();
+            ENDINGS
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .taken
+                .push(Arc::downgrade(&self.taken));
         });
     }
 
@@ -825,6 +798,75 @@ struct Taken {
 
 /// The signals whose default action ends the process, and which a terminal it took would outlive as the program left it.
 const ENDING: [i32; 4] = [SIGTERM, SIGHUP, SIGQUIT, SIGINT];
+
+/// What a terminating signal is met with before it ends the process: the terminals every host still holds, then what the last write through [`standard_error_leaving`] left for standard error.
+struct Endings {
+    taken: Vec<Weak<Mutex<Vec<Taken>>>>,
+    farewell: Vec<u8>,
+}
+
+static ENDINGS: Mutex<Endings> = Mutex::new(Endings {
+    taken: Vec::new(),
+    farewell: Vec::new(),
+});
+
+/// Write `shown` on standard error and leave `farewell` as what a terminating signal arriving after it writes there, under the lock that signal's thread takes, so its bytes never land inside a write.
+pub fn standard_error_leaving(shown: &[u8], farewell: Vec<u8>) {
+    watch_endings();
+    let mut endings = ENDINGS.lock().unwrap_or_else(PoisonError::into_inner);
+    let _ = stderr().write_all(shown);
+    endings.farewell = farewell;
+}
+
+/// Write on standard error, now, what the last write through [`standard_error_leaving`] left there, and leave nothing for a terminating signal after it: what an ending that is no signal, a panic, writes in its place.
+pub fn standard_error_farewell() {
+    let mut endings = ENDINGS.lock().unwrap_or_else(PoisonError::into_inner);
+    let _ = stderr().write_all(&mem::take(&mut endings.farewell));
+}
+
+/// Start, once in the process, the thread that meets a terminating signal: it gives back every terminal a host still holds, writes the farewell, and lets the signal end the process, so its parent sees it end by that signal.
+///
+/// Each signal wakes the thread through a pipe of its own, which its handler writes with `write(2)`. A socket pair would be woken with `send(2)`, which a sandbox that forbids sending on sockets refuses, and the signal would be caught and never acted on. The thread is waiting before any handler is registered, and a signal whose registration fails keeps its default action, so no signal is caught that nothing reads.
+fn watch_endings() {
+    static WATCHING: OnceLock<()> = OnceLock::new();
+    WATCHING.get_or_init(|| {
+        let Ok(pipes) = ENDING
+            .iter()
+            .map(|_| io::pipe())
+            .collect::<Result<Vec<_>, _>>()
+        else {
+            return;
+        };
+        let (reads, writes): (Vec<_>, Vec<_>) = pipes.into_iter().unzip();
+
+        let waiting = thread::Builder::new().spawn(move || {
+            let watched = reads
+                .iter()
+                .map(|read| Watched {
+                    fd: read.as_fd(),
+                    asked: PollFlags::IN,
+                })
+                .collect::<Vec<_>>();
+
+            if let Ok(arrived) = ready(&watched, None)
+                && let Some(place) = arrived.first()
+            {
+                let endings = ENDINGS.lock().unwrap_or_else(PoisonError::into_inner);
+                for taken in endings.taken.iter().filter_map(Weak::upgrade) {
+                    give_back_all(&taken);
+                }
+                let _ = stderr().write_all(&endings.farewell);
+                let _ = emulate_default_handler(ENDING[*place]);
+            }
+        });
+
+        if waiting.is_ok() {
+            for (signal, write) in ENDING.into_iter().zip(writes) {
+                let _ = pipe::register(signal, write);
+            }
+        }
+    });
+}
 
 /// Give back every terminal `taken` holds, emptying it.
 fn give_back_all(taken: &Mutex<Vec<Taken>>) {

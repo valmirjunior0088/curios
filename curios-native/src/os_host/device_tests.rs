@@ -8,7 +8,7 @@ use {
         fs::OFlags,
         termios::{ControlModes, InputModes, LocalModes},
     },
-    std::{path::Path, thread, time::Duration},
+    std::{io::Read, path::Path, thread, time::Duration},
 };
 
 /// A descriptor that is not a terminal refuses a take and a size through the errno lane, which is how a program learns it has none, and one never taken has nothing to give back. Which errno is the platform's own — Linux answers `ENOTTY`, macOS `ENODEV` — so what is under test is the lane rather than the code. `/dev/null` rather than a standard stream, because under an interactive `cargo test` stdin *is* a terminal and a passing `tty_take` would leave it in raw mode.
@@ -166,6 +166,105 @@ fn a_terminating_signal_gives_back_every_terminal_taken() {
     );
     assert_eq!(read_until(&near, b"\x1b[?1049l"), b"\x1b[?1049l");
     assert!(cooked(held.as_fd()));
+}
+
+/// What the child half of [`a_terminating_signal_writes_what_was_left_for_standard_error`] leaves for standard error, named by the variable its parent sets.
+const SIGNALLED_FAREWELL: &str = "CURIOS_TEST_SIGNALLED_FAREWELL";
+
+/// A process ended by a terminating signal writes on standard error what the last write through [`standard_error_leaving`] left for it, after that write and before the signal ends it: what a live drawing's finish would write, so a status redrawn at the screen's foot is written for good however the command ends. Its child runs as [`a_terminating_signal_gives_back_every_terminal_taken`]'s does.
+#[test]
+fn a_terminating_signal_writes_what_was_left_for_standard_error() {
+    if env::var_os(SIGNALLED_FAREWELL).is_some() {
+        standard_error_leaving(b"shown\n", b"farewell\n".to_vec());
+        thread::sleep(Duration::from_secs(30));
+
+        return;
+    }
+
+    let mut child = std::process::Command::new(env::current_exe().unwrap())
+        .args([
+            "--exact",
+            "os_host::device_tests::a_terminating_signal_writes_what_was_left_for_standard_error",
+            "--nocapture",
+        ])
+        .env(SIGNALLED_FAREWELL, "1")
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .expect("the test runs again as a child");
+    let mut stderr = child
+        .stderr
+        .take()
+        .expect("the child's standard error is piped");
+    let mut written = Vec::new();
+    let mut chunk = [0; 256];
+    while !written.ends_with(b"shown\n") {
+        let read = stderr.read(&mut chunk).expect("the child writes");
+        assert!(read > 0, "the child ended before it wrote: {written:?}");
+        written.extend_from_slice(&chunk[..read]);
+    }
+    thread::sleep(Duration::from_millis(100));
+    rustix::process::kill_process(
+        rustix::process::Pid::from_child(&child),
+        rustix::process::Signal::TERM,
+    )
+    .expect("the child is signalled");
+    let status = ended_within(&mut child, Duration::from_secs(10));
+    stderr
+        .read_to_end(&mut written)
+        .expect("what the child wrote last");
+
+    assert_eq!(
+        std::os::unix::process::ExitStatusExt::signal(&status),
+        Some(SIGTERM)
+    );
+    assert!(
+        written.ends_with(b"shown\nfarewell\n"),
+        "{}",
+        String::from_utf8_lossy(&written)
+    );
+}
+
+/// What the child half of [`a_farewell_written_before_a_signal_leaves_nothing_for_it`] runs under, named by the variable its parent sets.
+const FAREWELL_FIRST: &str = "CURIOS_TEST_FAREWELL_FIRST";
+
+/// A farewell written by the command itself, as a panic writes it, is written once: the signal that ends the process after it writes nothing more. Its child signals itself, so nothing waits on its parent.
+#[test]
+fn a_farewell_written_before_a_signal_leaves_nothing_for_it() {
+    if env::var_os(FAREWELL_FIRST).is_some() {
+        standard_error_leaving(b"shown\n", b"farewell\n".to_vec());
+        standard_error_farewell();
+        rustix::process::kill_process(rustix::process::getpid(), rustix::process::Signal::TERM)
+            .expect("the child signals itself");
+        thread::sleep(Duration::from_secs(30));
+
+        return;
+    }
+
+    let child = std::process::Command::new(env::current_exe().unwrap())
+        .args([
+            "--exact",
+            "os_host::device_tests::a_farewell_written_before_a_signal_leaves_nothing_for_it",
+            "--nocapture",
+        ])
+        .env(FAREWELL_FIRST, "1")
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .expect("the test runs again as a child");
+    let ended = child.wait_with_output().expect("the child ends");
+
+    assert_eq!(
+        std::os::unix::process::ExitStatusExt::signal(&ended.status),
+        Some(SIGTERM)
+    );
+    assert!(
+        ended.stderr.ends_with(b"shown\nfarewell\n"),
+        "{}",
+        String::from_utf8_lossy(&ended.stderr)
+    );
 }
 
 /// A host dropped with a terminal still taken gives it back, as a trap or an `exit` drops it: the leave bytes reach the terminal and its settings are the ones it had.
