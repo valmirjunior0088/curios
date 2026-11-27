@@ -91,9 +91,10 @@ impl<'s> Reader<'_, 's> {
         self.certifier.bind(name, type_, value, false);
     }
 
-    /// `term` reduced to its head as a judgment that takes it apart reads it ([`Reducer::reduce_forced`]): a recursive call unfolded where it is productive, as typing reads a scrutinee's type or a function's.
+    /// `term` reduced to its head as a judgment that takes it apart reads it ([`Reducer::reduce_forced`]): a recursive call unfolded where it is productive, as typing reads a scrutinee's type or a function's, and a call reduction keeps as written read as the stuck `match` its unfolding is ([`Reducer::unfold_kept`]), since a reader takes a value apart and never a spelling.
     pub fn head(&mut self, term: &Term) -> Result<Term, ReduceError> {
-        self.certifier.reduce_forced(term.clone())
+        let head = self.certifier.reduce_forced(term.clone())?;
+        self.certifier.unfold_kept(head)
     }
 
     /// The type of `term` ([`infer`]), a type former's being its sort.
