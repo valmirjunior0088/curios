@@ -56,7 +56,7 @@ A contestant is measured in **five groups of five executions**, one untimed roun
 
 - Within a group is iteration noise. Between the group medians is the **span**.
 - A contestant's figure is the median of its group medians; its span is the least and greatest of them.
-- Across two records, what is compared of times is **Curios over Rust (Native), group by group**: each group's Curios median over its native Rust median, read as a figure is.
+- Across two records, what is compared of times is **Curios over each Rust, group by group**: each group's Curios median over its Rust (Native) median, and over its Rust (WebAssembly) median, each read as a figure is.
 - A difference is **proven only where two spans are disjoint**. Overlapping spans could have produced each other, so the report says `no difference proven`.
 - Every figure is stated to the place of the first significant digit of its half-span, so no number claims a precision its span does not support.
 
@@ -116,13 +116,13 @@ A measurement beside its code has figures in other measures, each refused the sa
 
 **Rejected.** A threshold written by hand, "ignore moves under two percent": a number someone believed, where the machine can measure the real one. Student's t over the samples, as `ministat` does: the samples are not independent and not normal, and the assumption buys a confidence level to argue about rather than an answer. Two groups rather than five: the span would be a single difference between two numbers instead of an estimate of one.
 
-### A movement is read against Rust (Native)
+### A movement is read against each Rust
 
-**Decision.** Across two records the report compares Curios's time over native Rust's, taken group by group — each group's Curios median over that group's native Rust median — and a movement is proven where the two records' spans of that ratio are disjoint.
+**Decision.** Across two records the report compares Curios's time over each Rust's, taken group by group — each group's Curios median over that group's Rust (Native) median, and over its Rust (WebAssembly) median, a table each — and a movement is proven where the two records' spans of that ratio are disjoint. A record's own tables read every contestant against both.
 
-**Rationale.** The contestants run interleaved inside a group, so what moves the machine during a group or between two sittings — a kernel update, a thermal state, something else running — reaches both and cancels in the ratio, where Curios's time alone would carry it as a movement of the compiler. The bench this one replaces asked of every sitting, by hand in prose, whether the controls held still; the ratio answers that in the figure itself, on every workload, with nothing left for a person to remember to apply.
+**Rationale.** The contestants run interleaved inside a group, so what moves the machine during a group or between two sittings — a kernel update, a thermal state, something else running — reaches both and cancels in the ratio, where Curios's time alone would carry it as a movement of the compiler. The bench this one replaces asked of every sitting, by hand in prose, whether the controls held still; the ratio answers that in the figure itself, on every workload, with nothing left for a person to remember to apply. The two ratios read two things: against Rust (Native), how far Curios stands from the ceiling, and against Rust (WebAssembly), on the engine Curios runs on, how far the code Curios emits stands from a WebAssembly compiler's, which a change of the engine moves for both alike and so leaves still.
 
-**Rejected.** Curios's time alone, which reports a movement of the machine as one of the compiler. Drawing no figure for a workload whose Rust moved past its span: it leaves the workload without a verdict, and a Rust span wide enough to hold still hides a shift that moved Curios with it. Reporting the movement with a caveat beside it: a caveat is read after the number, and the number is what gets quoted.
+**Rejected.** Curios's time alone, which reports a movement of the machine as one of the compiler. Rust (Native) alone, which reads a change of the engine as one of Curios's code. Drawing no figure for a workload whose Rust moved past its span: it leaves the workload without a verdict, and a Rust span wide enough to hold still hides a shift that moved Curios with it. Reporting the movement with a caveat beside it: a caveat is read after the number, and the number is what gets quoted.
 
 ### The contestants are Curios and Rust, compiled two ways
 

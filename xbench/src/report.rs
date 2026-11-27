@@ -14,8 +14,8 @@ use {
     std::fmt::Write,
 };
 
-/// The anchor every other contestant is read against, within a record and across two.
-const CONTROL: &str = "rust";
+/// The anchors every other contestant is read against, within a record and across two: Rust native, the ceiling, and Rust to WebAssembly on the engine Curios runs on, so the second ratio is what the code Curios emits costs beside a WebAssembly compiler's, apart from what the engine costs against native.
+const CONTROLS: [&str; 2] = ["rust", "rust-wasm"];
 
 /// The subject, whose movement the bench exists to report.
 const SUBJECT: &str = "curios";
@@ -176,10 +176,14 @@ pub fn table(
         .iter()
         .filter_map(|(contestant, groups)| Some((*contestant, figure(groups)?)))
         .collect::<Vec<_>>();
-    let control = figures
-        .iter()
-        .find(|(contestant, _)| *contestant == titled(CONTROL))
-        .map(|(_, figure)| *figure);
+    let controls = CONTROLS.map(|control| {
+        let figure = figures
+            .iter()
+            .find(|(contestant, _)| *contestant == titled(control))
+            .map(|(_, figure)| *figure);
+
+        (titled(control), figure)
+    });
     figures.sort_by(|(_, left), (_, right)| left.middle.total_cmp(&right.middle));
 
     let mut rows = Vec::new();
@@ -191,12 +195,7 @@ pub fn table(
         } else {
             ""
         };
-        let against = match control {
-            Some(control) if contestant != titled(CONTROL) => times(&figure, &control),
-            _ => "—".to_string(),
-        };
-
-        rows.push(vec![
+        let mut cells = vec![
             format!("{mark}{contestant}{mark}"),
             format!(
                 "{mark}{} {}{mark}",
@@ -208,8 +207,15 @@ pub fn table(
                 stated(figure.least, half),
                 stated(figure.most, half)
             ),
-            format!("{mark}{against}{mark}"),
-        ]);
+        ];
+        for (title, control) in controls {
+            let against = match control {
+                Some(control) if contestant != title => times(&figure, &control),
+                _ => "—".to_string(),
+            };
+            cells.push(format!("{mark}{against}{mark}"));
+        }
+        rows.push(cells);
     }
 
     let counted = match measure {
@@ -217,9 +223,13 @@ pub fn table(
         other => format!(", {}", other.name()),
     };
 
+    let against = CONTROLS.map(|control| format!("× {}", titled(control)));
+    let mut headers = vec!["Contestant", "Median", "Span"];
+    headers.extend(against.iter().map(String::as_str));
+
     format!(
         "### `{title}` ({letter} = {size}){counted}\n\n{}",
-        tabulated(&["Contestant", "Median", "Span", "× Rust (Native)"], &rows)
+        tabulated(&headers, &rows)
     )
 }
 
@@ -367,12 +377,30 @@ fn verdict(workload: &str, before: &Record, after: &Record, was: &Spanned, is: &
     }
 }
 
-/// The two records' times, read as Curios over Rust (Native) group by group, where they compare at all.
+/// The two records' times, read as Curios over each control group by group, a table a control, where they compare at all: Rust (Native)'s always, and Rust (WebAssembly)'s where both records time it.
 fn times_compared(before: &Record, after: &Record) -> String {
     if let Some(why) = incomparable(before, after, Measure::Microseconds) {
         return format!("Not comparable.\n\n```\n{why}\n```\n");
     }
 
+    CONTROLS
+        .iter()
+        .enumerate()
+        .filter_map(|(index, control)| {
+            let rows = rows_against(before, after, control);
+            (index == 0 || !rows.is_empty()).then(|| {
+                let title = titled(control);
+                let was = format!("Was, × {title}");
+                let is = format!("Is, × {title}");
+                tabulated(&["Workload", was.as_str(), is.as_str(), ""], &rows)
+            })
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+/// A row for each workload both records read Curios over `control` on: the ratio each holds, group by group, and whether it moved.
+fn rows_against(before: &Record, after: &Record, control: &str) -> Vec<Vec<String>> {
     let mut rows = Vec::new();
     for workload in WORKLOADS {
         let read = |record: &Record| {
@@ -383,7 +411,7 @@ fn times_compared(before: &Record, after: &Record) -> String {
                         .stated(),
                 )
             };
-            relative(&groups(SUBJECT)?, &groups(CONTROL)?)
+            relative(&groups(SUBJECT)?, &groups(control)?)
         };
         let (Some(was), Some(is)) = (read(before), read(after)) else {
             continue;
@@ -398,15 +426,7 @@ fn times_compared(before: &Record, after: &Record) -> String {
         ]);
     }
 
-    tabulated(
-        &[
-            "Workload",
-            "Was, × Rust (Native)",
-            "Is, × Rust (Native)",
-            "",
-        ],
-        &rows,
-    )
+    rows
 }
 
 /// What changed between two records, where anything can be said of it at all: their times.

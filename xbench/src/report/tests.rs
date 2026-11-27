@@ -237,6 +237,58 @@ fn disjoint_spans_are_reported_as_a_movement() {
     assert!(rendered.contains("moved, -8.4%"), "{rendered}");
 }
 
+/// A table reads each contestant against both Rusts, a column each, a control's own cell empty in its column. Mutation-checked: with Rust (WebAssembly) no control, its column is gone.
+#[test]
+fn a_table_reads_each_contestant_against_both_rusts() {
+    let rendered = table(
+        "LCG",
+        "N",
+        100_000_000,
+        Measure::Microseconds,
+        &[
+            ("Curios", grouped(&[&[438.0, 438.4], &[439.0, 439.2]])),
+            ("Rust (Native)", grouped(STEADY)),
+            (
+                "Rust (WebAssembly)",
+                grouped(&[&[292.0, 292.4], &[292.4, 292.6]]),
+            ),
+        ],
+    );
+    let curios = rendered
+        .lines()
+        .find(|line| line.contains("Curios"))
+        .expect("Curios has a row");
+
+    assert!(rendered.contains("× Rust (WebAssembly)"), "{rendered}");
+    assert!(
+        curios.contains("2.0") && curios.contains("1.5"),
+        "{rendered}"
+    );
+}
+
+/// Two records read Curios against each Rust, a table each: an engine that got faster for Curios and Rust (WebAssembly) alike moves Curios against native Rust and leaves it where it was against the WebAssembly one, so the second table tells the engine's movement from the code's. Mutation-checked: with Rust (WebAssembly) no control, its table is gone.
+#[test]
+fn a_comparison_reads_curios_against_each_rust() {
+    let webassembly = |groups| took("lcg", "rust-wasm", groups);
+    let mut earlier = was();
+    earlier.push(webassembly(&[&[292.0, 292.4], &[292.4, 292.6]]));
+    let later = vec![
+        took("lcg", "curios", &[&[394.2, 394.6], &[395.1, 395.3]]),
+        took("lcg", "rust", STEADY),
+        webassembly(&[&[262.8, 263.2], &[263.2, 263.4]]),
+    ];
+    let rendered = compare(1, &record(1, here(), earlier), &record(2, here(), later));
+    let (native, against_webassembly) = rendered
+        .split_once("Was, × Rust (WebAssembly)")
+        .unwrap_or_else(|| panic!("a table against Rust (WebAssembly): {rendered}"));
+
+    assert!(native.contains("moved,"), "{rendered}");
+    assert!(
+        against_webassembly.contains("no difference proven"),
+        "{rendered}"
+    );
+}
+
 /// Curios's own time moved past its span, and so did Rust's, alike: the ratio a comparison reads cancels what moved the machine.
 #[test]
 fn a_shift_that_reaches_both_contestants_alike_proves_no_difference() {
