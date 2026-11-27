@@ -304,7 +304,7 @@ test("a row that states no browser table is refused for a browser, naming the ro
   assert.ok(!existsSync(join(root, "page")));
 });
 
-/** `curios test --target browser` started in `directory` on a port of loopback's own: the port read off the line that says its address, its streams kept, and the command's end awaited. */
+/** `curios test --target browser` started in `directory` on a port of loopback's own: the port read off the line that says its address, refused with what the command wrote where it ends before saying one, its streams kept, and the command's end awaited. */
 const serving = (t, directory) => {
   const child = spawn(
     compiler,
@@ -319,7 +319,7 @@ const serving = (t, directory) => {
   child.stderr.on("data", (chunk) => err.push(chunk));
   t.after(() => child.kill());
 
-  const port = new Promise((resolve) => {
+  const port = new Promise((resolve, reject) => {
     child.stderr.on("data", (chunk) => {
       const match = /http:\/\/127\.0\.0\.1:(\d+)\//.exec(String(chunk));
 
@@ -327,6 +327,14 @@ const serving = (t, directory) => {
         resolve(Number(match[1]));
       }
     });
+    // A command that ends before it says where it serves never will, so the test waiting on the port fails on what it wrote rather than waiting forever; past the port, this settles nothing.
+    child.on("close", (code) =>
+      reject(
+        new Error(
+          `the command ended with ${code} before it said where it serves:\n${Buffer.concat(err).toString()}`,
+        ),
+      ),
+    );
   });
   const ended = new Promise((resolve) => {
     child.on("close", (code) =>
@@ -340,6 +348,22 @@ const serving = (t, directory) => {
 
   return { port, ended };
 };
+
+test("a command that ends before it says where it serves fails the test waiting on its port, with what it wrote", {
+  timeout: 60_000,
+}, async (t) => {
+  const root = tree(t, {
+    "app/curios.toml": `compiler = "${version}"\nname = "app"\n`,
+    "app/lib.crs": "test broken = Test/assert(true);\n",
+  });
+  const { port, ended } = serving(t, join(root, "app"));
+
+  await assert.rejects(
+    port,
+    /before it said where it serves[\s\S]*syntax error/,
+  );
+  assert.notEqual((await ended).code, 0);
+});
 
 test("a test page served by the command answers its word through its gateway, posts what its test reported with its outcome, and the run ends on the last", async (t) => {
   const gateway = "export const twice = (n) => n * 2n;\n";

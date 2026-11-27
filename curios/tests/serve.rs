@@ -44,9 +44,22 @@ fn port_of(line: &str) -> Option<u16> {
     after.split('/').next()?.parse().ok()
 }
 
+/// A served command's process, stopped and reaped when its handle goes, however the test holding it ends: a command that serves until stopped outlives a test that panics before stopping it, since a `Child` dropped leaves its process running.
+struct Served {
+    child: Child,
+}
+
+impl Drop for Served {
+    fn drop(&mut self) {
+        // A command already stopped or ended, as `Serving::stopped` and `Serving::ended` leave it, answers both without effect.
+        let _ = self.child.kill();
+        let _ = self.child.wait();
+    }
+}
+
 /// The compiler started in `root` on `arguments` and `--port 0`, serving on a port of loopback's own: the port read off the line that says its address, and both of its streams drained to their ends on threads of their own, so a line it writes while serving never blocks it.
 struct Serving {
-    child: Child,
+    served: Served,
     port: u16,
     stdout: JoinHandle<Vec<u8>>,
     stderr: JoinHandle<Vec<u8>>,
@@ -90,7 +103,7 @@ impl Serving {
         let port = port.recv().expect("the command prints where it serves");
 
         Self {
-            child,
+            served: Served { child },
             port,
             stdout,
             stderr,
@@ -159,15 +172,15 @@ impl Serving {
 
     /// Stop a command that serves until stopped, and take what it wrote.
     fn stopped(mut self) -> (Vec<u8>, Vec<u8>) {
-        self.child.kill().unwrap();
-        self.child.wait().unwrap();
+        self.served.child.kill().unwrap();
+        self.served.child.wait().unwrap();
 
         (self.stdout.join().unwrap(), self.stderr.join().unwrap())
     }
 
     /// Wait for a command that serves until its run is complete, and take its exit code and what it wrote.
     fn ended(mut self) -> (Option<i32>, Vec<u8>, Vec<u8>) {
-        let status = self.child.wait().unwrap();
+        let status = self.served.child.wait().unwrap();
 
         (
             status.code(),
@@ -175,6 +188,26 @@ impl Serving {
             self.stderr.join().unwrap(),
         )
     }
+}
+
+/// A test that panics before it stops what it serves leaves nothing serving: the command is stopped as its handle goes, so its port refuses a connection once the test has ended. Mutation-checked: with the handle dropped bare, the port still answers.
+#[test]
+fn a_test_that_panics_leaves_nothing_serving() {
+    let root = Temporary::new("cli-serve", "panicked");
+    package(&root);
+    let (told, port) = mpsc::channel();
+    let ended = thread::spawn(move || {
+        let serving = Serving::start(&root, &["run", "--target", "browser"]);
+        told.send(serving.port).unwrap();
+        panic!("the test fails while it serves");
+    })
+    .join();
+    let port = port
+        .recv()
+        .expect("the command served before the test failed");
+
+    assert!(ended.is_err());
+    assert!(TcpStream::connect((Ipv4Addr::LOCALHOST, port)).is_err());
 }
 
 /// `run --target browser` serves the page at the root — `/` and `/index.html` one resource, its program and its gateway at their page paths — answers `GET` alone, and serves until it is stopped.
