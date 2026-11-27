@@ -428,7 +428,7 @@ pub fn contest_sitting(filed: usize) -> Result<(), String> {
     let platform = capture();
 
     fs::create_dir_all(root.join(ARTIFACTS)).map_err(|error| error.to_string())?;
-    run("cargo", &["xtask", "compiler", "build"], &root)?;
+    run("cargo", &["xtask", "distribution", "build"], &root)?;
     run(
         "cargo",
         &["build", "--release", "--package", "xbench", "--bin", "twin"],
