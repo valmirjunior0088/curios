@@ -123,6 +123,13 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      # The pinned toolchain the installer's `cargo xtask` runs under, installed as every job installs it rather than by rustup on the first `cargo`.
+      - uses: ./.github/actions/setup
+        with:
+          key: release
+          cache-directories: |
+            xtask/.artifacts
+
       - uses: actions/download-artifact@v8
         with:
           path: .artifacts/downloads
