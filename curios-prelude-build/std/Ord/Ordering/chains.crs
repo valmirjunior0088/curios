@@ -29,14 +29,12 @@ pub let then(
         | lt() =>
             match pz
             | lt() => True/qed()
-            | eq() => match prefix end
-            | gt() => match prefix end
+            | eq() | gt() => match prefix end
             end
         | eq() =>
             match pz
             | lt() => True/qed()
-            | eq() => match prefix end
-            | gt() => match prefix end
+            | eq() | gt() => match prefix end
             end
         | gt() => True/qed()
         end
@@ -45,8 +43,7 @@ pub let then(
         | lt() =>
             match pz
             | lt() => match x | lt() | eq() | gt() => True/qed() end
-            | eq() => match prefix end
-            | gt() => match prefix end
+            | eq() | gt() => match prefix end
             end
         | eq() =>
             match pz
@@ -79,14 +76,12 @@ pub let le(
         | lt() =>
             match z
             | lt() => True/qed()
-            | eq() => match chained end
-            | gt() => match chained end
+            | eq() | gt() => match chained end
             end
         | eq() =>
             match z
             | lt() => True/qed()
-            | eq() => match chained end
-            | gt() => match chained end
+            | eq() | gt() => match chained end
             end
         | gt() => match above end
         end
@@ -95,8 +90,7 @@ pub let le(
         | lt() =>
             match z
             | lt() => True/qed()
-            | eq() => match chained end
-            | gt() => match chained end
+            | eq() | gt() => match chained end
             end
         | eq() =>
             match z

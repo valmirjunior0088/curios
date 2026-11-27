@@ -33,8 +33,7 @@ let apart(
         end
     | 0x[h, ..t] =>
         match y
-        | 0x[] => match under end
-        | 0x[0, .._] => match under end
+        | 0x[] | 0x[0, .._] => match under end
         | 0x[k, ..r] =>
             match Nat/ord(Byte/to_nat(h), Byte/to_nat(k))
             | lt() =>

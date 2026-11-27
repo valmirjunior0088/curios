@@ -30,7 +30,7 @@ let eq(a: Nat, b: Nat, h: Eq()(ord(a, b), Ordering/eq())) -> Eq()(a, b) =
 let flips: Ord/Flips(ord) =
     (a, b) =>
         match a
-        | 0 => match b | 0 => Eq/refl() | _ + 1 => Eq/refl() end
+        | 0 => match b | 0 | _ + 1 => Eq/refl() end
         | ap + 1 => match b | 0 => Eq/refl() | bp + 1 => flips(ap, bp) end
         end;
 
@@ -39,7 +39,7 @@ let flips: Ord/Flips(ord) =
 let trans: Ord/Trans(Ord/le_by(ord)) =
     (a, b, c, p, q) =>
         match a
-        | 0 => match c | 0 => True/qed() | _ + 1 => True/qed() end
+        | 0 => match c | 0 | _ + 1 => True/qed() end
         | ap + 1 =>
             match b
             | 0 => match p end
@@ -55,14 +55,14 @@ let trans: Ord/Trans(Ord/le_by(ord)) =
 --- `a < b` is `ord` answering `lt`.
 let is_lt(a: Nat, b: Nat) -> Eq()(Nat/lt(a, b), Ordering/is_lt(ord(a, b))) =
     match a
-    | 0 => match b | 0 => Eq/refl() | _ + 1 => Eq/refl() end
+    | 0 => match b | 0 | _ + 1 => Eq/refl() end
     | ap + 1 => match b | 0 => Eq/refl() | bp + 1 => is_lt(ap, bp) end
     end;
 
 --- `a <= b` is `ord` answering `lt` or `eq`.
 let is_le(a: Nat, b: Nat) -> Eq()(Nat/le(a, b), Ordering/is_le(ord(a, b))) =
     match a
-    | 0 => match b | 0 => Eq/refl() | _ + 1 => Eq/refl() end
+    | 0 => match b | 0 | _ + 1 => Eq/refl() end
     | ap + 1 => match b | 0 => Eq/refl() | bp + 1 => is_le(ap, bp) end
     end;
 

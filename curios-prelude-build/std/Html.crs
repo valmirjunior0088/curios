@@ -153,7 +153,7 @@ pub let attribute(h: Html, name: Str) -> Option(Str) =
 
 --- The children of an element or a fragment; nothing for any other tree.
 pub let children(h: Html) -> List(Html) =
-    match h | element(_, _, cs) => cs | fragment(cs) => cs | _ => [] end;
+    match h | element(_, _, cs) | fragment(cs) => cs | _ => [] end;
 
 --- `h` and every tree beneath it, in document order, that `pred` accepts.
 pub let all(h: Html, pred: (Html) -> Bool) -> List(Html) =

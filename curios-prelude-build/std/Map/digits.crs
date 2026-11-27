@@ -36,8 +36,7 @@ end
 let parts(a: Bytes, b: Bytes, g: Nat) -> Parted =
     match (a, b)
     | (0x[], 0x[]) => Parted/same()
-    | (0x[], 0x[_, .._]) => Parted/at(4 * g)
-    | (0x[_, .._], 0x[]) => Parted/at(4 * g)
+    | (0x[], 0x[_, .._]) | (0x[_, .._], 0x[]) => Parted/at(4 * g)
     | (0x[h, ..t], 0x[k, ..r]) =>
         match h == k
         | true => parts(t, r, g + 1)
@@ -62,8 +61,7 @@ pub let small(k: Bytes, p: Nat) -> Holds(digit(k, p) < 16) =
     | true =>
         match p % 4
         | 0 => True/qed()
-        | 1 => proved()
-        | 2 => proved()
+        | 1 | 2 => proved()
         | _ + 3 => True/qed()
         end
     end;

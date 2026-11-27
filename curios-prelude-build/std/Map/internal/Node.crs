@@ -65,8 +65,7 @@ pub struct Branched(Held: Prop, many: Bool): pub Prop {
 --- A trie is sound where every branch of it is.
 pub let Sound(@K: Type, use Hash/Key(K), @V: Type, t: Node(K, V)) -> Prop =
     match t
-    | empty() => True
-    | leaf(_, _) => True
+    | empty() | leaf(_, _) => True
     | branch(at, tw) => Branched(Twigs(tw.list, at, 0, first_in(tw.list)), 1 < count(tw.list))
     end
 --- The twigs of a branch at `at`, the first at the digit `d`, each where it stands under the branch whose first key is `a`.
@@ -95,8 +94,7 @@ pub and Twig(
 ) -> Prop =
     match h
     | empty() => True
-    | leaf(_, _) => Placed(Sound(h), first(h), a, at, d, deeper(h, at))
-    | branch(_, _) => Placed(Sound(h), first(h), a, at, d, deeper(h, at))
+    | leaf(_, _) | branch(_, _) => Placed(Sound(h), first(h), a, at, d, deeper(h, at))
     end;
 
 --- The twig at `i`, empty past the end: what `List/get` reads, total, so a proof may name it at any index.
@@ -154,8 +152,7 @@ pub let deeper_down(
     le: Holds(d <= c),
 ) -> Holds(deeper(t, d)) =
     match t
-    | empty() => True/qed()
-    | leaf(_, _) => True/qed()
+    | empty() | leaf(_, _) => True/qed()
     | branch(_, _) => proved()
     end;
 
@@ -423,7 +420,7 @@ pub let pick_set(
     | [] => match ok end
     | [_, ..r] =>
         match i
-        | 0 => match j | 0 => Eq/refl() | _ + 1 => Eq/refl() end
+        | 0 => match j | 0 | _ + 1 => Eq/refl() end
         | i2 + 1 =>
             match j
             | 0 => Eq/refl()
@@ -458,8 +455,7 @@ pub let count_set(
             let inner = count_set(r, j, @proved(), n);
             match h
             | empty() => inner
-            | leaf(_, _) => Eq/cong((m: Nat) => 1 + m, inner)
-            | branch(_, _) => Eq/cong((m: Nat) => 1 + m, inner)
+            | leaf(_, _) | branch(_, _) => Eq/cong((m: Nat) => 1 + m, inner)
             end
         end
     end;
@@ -525,8 +521,7 @@ pub let vacant(
     | [h, ..r] =>
         match h
         | empty() => (True/qed(), vacant(r, at, d + 1, a, none))
-        | leaf(_, _) => match none end
-        | branch(_, _) => match none end
+        | leaf(_, _) | branch(_, _) => match none end
         end
     end;
 
@@ -597,8 +592,7 @@ pub let first_agrees(
     | [h, ..r] =>
         match h
         | empty() => first_agrees(r, at, d + 1, a, twigs.1, some, j, under)
-        | leaf(_, _) => twigs.0.agree(j, under)
-        | branch(_, _) => twigs.0.agree(j, under)
+        | leaf(_, _) | branch(_, _) => twigs.0.agree(j, under)
         end
     end;
 
@@ -615,8 +609,7 @@ pub let twig_sound(
 ) -> Sound(h) =
     match h
     | empty() => True/qed()
-    | leaf(_, _) => twig.sound
-    | branch(_, _) => twig.sound
+    | leaf(_, _) | branch(_, _) => twig.sound
     end;
 
 --- That `n` answers `x` at the encoding `k`, and at every other what `t` answers: what a node that may stand where `t` did says once the key encoding to `k` is set to `x`.
@@ -679,8 +672,7 @@ pub let pick_vacant(
     | [h, ..r] =>
         match h
         | empty() => match i | 0 => Eq/refl() | j + 1 => pick_vacant(r, none, j) end
-        | leaf(_, _) => match none end
-        | branch(_, _) => match none end
+        | leaf(_, _) | branch(_, _) => match none end
         end
     end;
 
@@ -698,8 +690,7 @@ pub let placing(
 ) -> Twig(h, at, d, a) =
     match h
     | empty() => match full end
-    | leaf(_, _) => placed
-    | branch(_, _) => placed
+    | leaf(_, _) | branch(_, _) => placed
     end;
 
 --- A twig holding something is [`Placed`].
@@ -716,8 +707,7 @@ pub let placed_of(
 ) -> Placed(Sound(h), first(h), a, at, d, deeper(h, at)) =
     match h
     | empty() => match full end
-    | leaf(_, _) => twig
-    | branch(_, _) => twig
+    | leaf(_, _) | branch(_, _) => twig
     end;
 
 --- A node that may stand where a twig stood stands where the twig did.
@@ -1045,8 +1035,7 @@ let wedge_count(
             before);
     match h
     | empty() => match full end
-    | leaf(_, _) => proved()
-    | branch(_, _) => proved()
+    | leaf(_, _) | branch(_, _) => proved()
     end;
 
 --- A wedge's first key agrees with the wedged key below the position it was wedged at.
@@ -1677,7 +1666,7 @@ let leaf_absent(
 pub let lone(@K: Type, @V: Type, l: List(Node(K, V))) -> Node(K, V) =
     match l
     | [] => Node/empty()
-    | [h, ..r] => match h | empty() => lone(r) | leaf(_, _) => h | branch(_, _) => h end
+    | [h, ..r] => match h | empty() => lone(r) | leaf(_, _) | branch(_, _) => h end
     end;
 
 --- The first twig that holds anything is the one the first key's digit picks, and holds something.
@@ -2159,8 +2148,7 @@ pub let eq_of_same(
     | empty() =>
         match b
         | empty() => Eq/refl()
-        | leaf(_, _) => match h end
-        | branch(_, _) => match h end
+        | leaf(_, _) | branch(_, _) => match h end
         end
     | leaf(k1, v1) =>
         match b
@@ -2175,8 +2163,7 @@ pub let eq_of_same(
         end
     | branch(at1, t1) =>
         match b
-        | empty() => match h end
-        | leaf(_, _) => match h end
+        | empty() | leaf(_, _) => match h end
         | branch(at2, t2) =>
             let refl() = Eql/eq(at1, at2, Bool/and/first(at1 == at2, same_in(t1.list, t2.list), h));
             let refl() =
@@ -2269,8 +2256,7 @@ pub let collected(
     acc: List(K),
 ) -> Eq()(collect(t, acc), [..acc, ..keys(t)]) =
     match t
-    | empty() => Eq/refl()
-    | leaf(_, _) => Eq/refl()
+    | empty() | leaf(_, _) => Eq/refl()
     | branch(_, tw) => collected_in(tw.list, acc)
     end
 pub and collected_in(
@@ -2305,8 +2291,7 @@ pub let listed(
     acc: List({K, V}),
 ) -> Eq()(fold(t, acc, (k: K, v: V, a: List({K, V})) => [..a, (k, v)]), [..acc, ..entries(t)]) =
     match t
-    | empty() => Eq/refl()
-    | leaf(_, _) => Eq/refl()
+    | empty() | leaf(_, _) => Eq/refl()
     | branch(_, tw) => listed_in(tw.list, acc)
     end
 pub and listed_in(
@@ -2354,8 +2339,7 @@ pub let map_first(
     f: (V) -> W,
 ) -> Eq()(first(map(t, f)), first(t)) =
     match t
-    | empty() => Eq/refl()
-    | leaf(_, _) => Eq/refl()
+    | empty() | leaf(_, _) => Eq/refl()
     | branch(_, tw) => map_first_in(tw.list, f)
     end;
 
@@ -2372,8 +2356,7 @@ let map_count(
     | [h, ..r] =>
         match h
         | empty() => map_count(r, f)
-        | leaf(_, _) => Eq/cong((m: Nat) => 1 + m, map_count(r, f))
-        | branch(_, _) => Eq/cong((m: Nat) => 1 + m, map_count(r, f))
+        | leaf(_, _) | branch(_, _) => Eq/cong((m: Nat) => 1 + m, map_count(r, f))
         end
     end;
 
@@ -2388,8 +2371,7 @@ pub let mapped(
     sound: Sound(t),
 ) -> Sound(map(t, f)) =
     match t
-    | empty() => True/qed()
-    | leaf(_, _) => True/qed()
+    | empty() | leaf(_, _) => True/qed()
     | branch(at, tw) =>
         let l = tw.list;
         Branched {

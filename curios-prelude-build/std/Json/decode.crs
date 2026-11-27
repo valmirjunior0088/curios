@@ -72,11 +72,7 @@ let number() -> Parse(Str, Json) =
 
 --- Whether `c` may stand in a string as written: any but the quote, the backslash and the control characters below `U+0020`, which the grammar has escaped.
 let is_unescaped(c: Char) -> Bool =
-    match c
-    | '"' => false
-    | '\\' => false
-    | _ => Char/to_nat(c) >= 0x20
-    end;
+    match c | '"' | '\\' => false | _ => Char/to_nat(c) >= 0x20 end;
 
 let hex_digit() -> Parse(Str, Nat) =
     let c = Parse/str/char()!;

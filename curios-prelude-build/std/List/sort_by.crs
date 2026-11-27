@@ -101,8 +101,7 @@ let merge_accumulates(
     acc: List(T),
 ) -> Eq()(merge(ord, a, b, acc), [..acc, ..merge(ord, a, b, [])]) =
     match (a, b)
-    | ([], _) => Eq/refl()
-    | ([_, .._], []) => Eq/refl()
+    | ([], _) | ([_, .._], []) => Eq/refl()
     | ([x, ..xs], [y, ..ys]) =>
         match ord(x, y)
         | gt() =>

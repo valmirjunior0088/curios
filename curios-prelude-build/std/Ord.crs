@@ -120,8 +120,7 @@ pub let of_eq(@T: Type, use Ord(T), a: T, b: T, e: Eq()(a, b)) -> Eq()(ord(a, b)
 pub let of_lt(@T: Type, use Ord(T), a: T, b: T, p: Holds(a < b)) -> Eq()(ord(a, b), Ordering/lt()) =
     match ord(a, b)
     | lt() => Eq/refl()
-    | eq() => match Eq/subst((x: Bool) => Holds(x), is_lt(a, b), p) end
-    | gt() => match Eq/subst((x: Bool) => Holds(x), is_lt(a, b), p) end
+    | eq() | gt() => match Eq/subst((x: Bool) => Holds(x), is_lt(a, b), p) end
     end;
 
 --- `ord` answers `gt` where the second is below the first.

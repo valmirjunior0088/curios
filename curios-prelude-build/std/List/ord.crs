@@ -24,7 +24,7 @@ let flips(
     b: List(T),
 ) -> Eq()(ord(b, a), Ordering/flip(ord(a, b))) =
     match a
-    | [] => match b | [] => Eq/refl() | [_, .._] => Eq/refl() end
+    | [] => match b | [] | [_, .._] => Eq/refl() end
     | [x, ..xs] =>
         match b
         | [] => Eq/refl()
@@ -45,7 +45,7 @@ let chains(
     | [] =>
         match b
         | [] => Ordering/chains/tied(ord(b, c))
-        | [_, .._] => match c | [] => True/qed() | [_, .._] => True/qed() end
+        | [_, .._] => match c | [] | [_, .._] => True/qed() end
         end
     | [x, ..xs] =>
         match b

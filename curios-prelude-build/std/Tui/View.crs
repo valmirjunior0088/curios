@@ -39,8 +39,7 @@ pub let width(v: View) -> Nat =
     | sized(_, w, _) => w
     | crop(inner, x, _) => width(inner) - x
     | over(base, _, _, _) => width(base)
-    | styled(_, inner) => width(inner)
-    | with_cursor(inner, _) => width(inner)
+    | styled(_, inner) | with_cursor(inner, _) => width(inner)
     end;
 
 --- How many rows `v` takes.
@@ -53,8 +52,7 @@ pub let height(v: View) -> Nat =
     | sized(_, _, h) => h
     | crop(inner, _, y) => height(inner) - y
     | over(base, _, _, _) => height(base)
-    | styled(_, inner) => height(inner)
-    | with_cursor(inner, _) => height(inner)
+    | styled(_, inner) | with_cursor(inner, _) => height(inner)
     end;
 
 --- `w` by `h` of blanks.

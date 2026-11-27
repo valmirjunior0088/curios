@@ -36,7 +36,7 @@ pub let cong_flip(@s: Ordering, @t: Ordering, p: Eq()(s, t)) -> Eq()(flip(s), fl
 
 --- Whether the answer is `lt`.
 pub let is_lt(r: Ordering) -> Bool =
-    match r | lt() => true | eq() => false | gt() => false end;
+    match r | lt() => true | eq() | gt() => false end;
 
 --- Whether the answer is `eq`.
 pub let is_eq(r: Ordering) -> Bool =
@@ -44,15 +44,15 @@ pub let is_eq(r: Ordering) -> Bool =
 
 --- Whether the answer is `gt`.
 pub let is_gt(r: Ordering) -> Bool =
-    match r | lt() => false | eq() => false | gt() => true end;
+    match r | lt() | eq() => false | gt() => true end;
 
 --- Whether the answer is `lt` or `eq`.
 pub let is_le(r: Ordering) -> Bool =
-    match r | lt() => true | eq() => true | gt() => false end;
+    match r | lt() | eq() => true | gt() => false end;
 
 --- Whether the answer is `gt` or `eq`.
 pub let is_ge(r: Ordering) -> Bool =
-    match r | lt() => false | eq() => true | gt() => true end;
+    match r | lt() => false | eq() | gt() => true end;
 
 pub let lt_neq_eq(p: Eq()(Ordering/lt(), Ordering/eq())) -> False =
     Bool/false_neq_true(Eq/cong(is_eq, p));

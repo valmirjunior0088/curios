@@ -74,7 +74,7 @@ let flips: Ord/Flips(ord) =
 let is_lt(a: Int, b: Int) -> Eq()(Int/lt(a, b), Ordering/is_lt(ord(a, b))) =
     match Int/lt(a, b)
     | true => Eq/refl()
-    | false => match Int/eql(a, b) | true => Eq/refl() | false => Eq/refl() end
+    | false => match Int/eql(a, b) | true | false => Eq/refl() end
     end;
 
 --- `a <= b` is `ord` answering `lt` or `eq`.

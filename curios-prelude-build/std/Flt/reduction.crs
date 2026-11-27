@@ -140,12 +140,7 @@ let negative_product(factors: List(Term)) -> Bool =
     List/fold(
         factors,
         false,
-        (t, acc) =>
-            match t
-            | infinite(n) => acc != n
-            | number(_, n) => acc != n
-            | _ => acc
-            end);
+        (t, acc) => match t | infinite(n) | number(_, n) => acc != n | _ => acc end);
 
 --- The power of two a nonzero `d`'s leading bit stands at.
 pub let scale_of(d: Dyadic) -> Int =
