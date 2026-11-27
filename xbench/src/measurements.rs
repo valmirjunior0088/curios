@@ -324,6 +324,11 @@ const MEASUREMENTS: &[Measurement] = &[
         spread: Spread::Moves,
         take: reopen_measurements,
     },
+    Measurement {
+        name: "keystroke_measurements",
+        spread: Spread::Moves,
+        take: keystroke_measurements,
+    },
 ];
 
 /// The measurement named `name`, refused where none is.

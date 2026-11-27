@@ -1,9 +1,10 @@
-//! What asking again about a document costs the language server, through the protocol an editor speaks: the reopen protocol of `curios-wonder`'s README, a fresh server a run over a case laid out afresh.
+//! What asking about a document costs the language server, through the protocol an editor speaks: the reopen protocol of `curios-wonder`'s README, a fresh server a run over a case laid out afresh, and its keystroke scenario, read inside the server off the stream it files.
 
 use {
     crate::{phase, read_span, turn},
     curios::CABINET,
     curios_common::{fill, test_support::Temporary},
+    curios_profile::fold_at,
     curios_wonder::SETTLE,
     std::{
         cell::Cell,
@@ -22,6 +23,21 @@ const QUIET: Duration = SETTLE.saturating_mul(4);
 /// The declaration a change adds to a module, a keystroke's worth of a definition.
 const PROBE: &str = "\npub let _probe(a: Nat) -> Nat =>\n    a;\n";
 
+/// How many keystrokes a session of [`keystroke_measurements`] makes after its open.
+const KEYSTROKES: u32 = 10;
+
+/// The spans of a check [`keystroke_measurements`] reads off the server's stream: what states the check's answers, and what reads off the lowering the texts a file writes, part by part, with the check's spelling of a source's file.
+const CHECK_SPANS: [&str; 8] = [
+    "placed",
+    "texts",
+    "texts::anchors",
+    "texts::restored",
+    "texts::bodies",
+    "texts::declarations",
+    "texts::labels",
+    "lies",
+];
+
 /// The editor's side of the wire: a server of its own, framed JSON-RPC written to it and read back.
 struct Editor {
     child: Child,
@@ -29,12 +45,16 @@ struct Editor {
 }
 
 impl Editor {
-    /// A server over `root`: the release `curios` the runner built beside this bench, which ships, with no cabinet but the project's own.
-    fn launch(root: &Path) -> Self {
+    /// A server over `root`: the release `curios` the runner built beside this bench, which ships, with no cabinet but the project's own, filing its stream at `stream` where one is given.
+    fn launch(root: &Path, stream: Option<&Path>) -> Self {
         let curios = env::current_exe()
             .expect("the bench names its own executable")
             .with_file_name("curios");
-        let mut child = Command::new(curios)
+        let mut command = Command::new(curios);
+        if let Some(stream) = stream {
+            command.arg("--profile").arg(stream);
+        }
+        let mut child = command
             .env_remove(CABINET)
             .current_dir(root)
             .args(["wonder", "--server"])
@@ -81,12 +101,15 @@ impl Editor {
 
     /// Send `notification` as a phase, read on to the diagnostics published for `uri` behind it, and read the phase's time as the figure `name`: from the notification's write to the publish.
     fn answered(&mut self, notification: &str, uri: &str, name: &str) {
-        let published = format!(r#""uri":"{uri}""#);
-        let step = phase(&[], || {
-            self.send(notification);
-            while !self.receive().contains(&published) {}
-        });
+        let step = phase(&[], || self.awaited(notification, uri));
         read_span(name, step.span(), None);
+    }
+
+    /// Send `notification` and read on to the diagnostics published for `uri` behind it.
+    fn awaited(&mut self, notification: &str, uri: &str) {
+        let published = format!(r#""uri":"{uri}""#);
+        self.send(notification);
+        while !self.receive().contains(&published) {}
     }
 
     /// Close the server's input and wait for it to end.
@@ -255,7 +278,7 @@ fn reopened(case: Case, run: usize) {
     let uri = format!("file://{}", document.display());
     let name = case.name();
 
-    let mut editor = Editor::launch(&root);
+    let mut editor = Editor::launch(&root, None);
     editor.send(r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"capabilities":{}}}"#);
     editor.receive();
     editor.send(r#"{"jsonrpc":"2.0","method":"initialized","params":{}}"#);
@@ -305,4 +328,58 @@ pub fn reopen_measurements() {
     );
 
     turn(7, &mut [&mut loose, &mut package, &mut library]);
+}
+
+/// One session of the keystroke scenario, the `run`th: a fresh server filing its stream at `xbench/.artifacts/keystroke.pftrace`, each session's over the last's and the last kept past the run for a question its figures do not answer, over a copy of the standard library's package, `Nat.crs` opened and [`KEYSTROKES`] keystrokes made, each a declaration more and each waited for until its diagnostics are published; then each of [`CHECK_SPANS`] read off the server's stream as the figure `library/<span>`, what every check of the session spent in it.
+fn keystrokes(run: u32) {
+    let root = Temporary::new("keystroke", &format!("library-{run}"));
+    let artifacts = Path::new(env!("CARGO_MANIFEST_DIR")).join(".artifacts");
+    fs::create_dir_all(&artifacts).expect("the bench's artifacts directory is made");
+    let stream = artifacts.join("keystroke.pftrace");
+    let Laid { document, text, .. } = Case::Library.laid(&root);
+    let uri = format!("file://{}", document.display());
+
+    let mut editor = Editor::launch(&root, Some(&stream));
+    editor.send(r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"capabilities":{}}}"#);
+    editor.receive();
+    editor.send(r#"{"jsonrpc":"2.0","method":"initialized","params":{}}"#);
+
+    thread::sleep(QUIET);
+    editor.awaited(&opening(&uri, &text, 1), &uri);
+    let mut written = text;
+    for keystroke in 0..KEYSTROKES {
+        written.push_str(&format!(
+            "\npub let _probe_{keystroke}(a: Nat) -> Nat =>\n    a;\n"
+        ));
+        editor.awaited(&changing(&uri, &written, keystroke + 2), &uri);
+    }
+
+    let output = editor.finish();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let profile = fold_at(&stream).expect("the server's stream folds");
+    for name in CHECK_SPANS {
+        let summary = profile
+            .summaries
+            .iter()
+            .find(|summary| summary.name == name && summary.group.is_none())
+            .unwrap_or_else(|| panic!("every check of the session enters `{name}`"));
+        read_span(&format!("library/{name}"), summary, None);
+    }
+}
+
+/// What a check spends reading what a file writes off its subject's lowering, part by part, which the tooling findings ask of the keystroke scenario of [`curios-wonder`'s README](../../../curios-wonder/README.md): the spans inside `texts` and the check's `lies`, beside `placed`, which states the check's answers.
+///
+/// `cargo xbench measure keystroke_measurements` takes it: five sessions after an untimed one, each a fresh server over a copy of the standard library's package filing its stream, `Nat.crs` opened and ten keystrokes made ([`keystrokes`]). These are wall-clock timings of a server recording every span, with the recorder's overhead included.
+pub fn keystroke_measurements() {
+    let runs = Cell::new(0);
+    let mut session = || {
+        keystrokes(runs.get());
+        runs.set(runs.get() + 1);
+    };
+
+    turn(5, &mut [&mut session]);
 }
