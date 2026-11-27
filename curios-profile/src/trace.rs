@@ -474,7 +474,7 @@ impl Sink {
         self.out.put(packet);
     }
 
-    /// An event: an instant on the thread's track, its fields as annotations. One carrying a `value` is a magnitude, `curios_common::sample!`'s.
+    /// An event: an instant on the thread's track, its fields as annotations. One carrying a `value` is a magnitude, `curios_tracing::sample!`'s.
     fn event(&mut self, callsite: &'static Metadata<'static>, fields: Vec<Value>) {
         let now = self.now();
         let sequence = self.sequence(now);

@@ -28,5 +28,6 @@ curios-surface = { workspace = true, optional = true }
 curios-archive = { workspace = true }
 curios-analysis = { workspace = true }
 curios-common = { workspace = true }
+curios-tracing = { workspace = true }
 curios-core = { workspace = true }
 curios-num = { workspace = true }

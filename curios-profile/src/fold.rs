@@ -38,7 +38,7 @@ use {
 pub struct Profile {
     /// Timings ordered from greatest to least total duration.
     pub summaries: Vec<Summary>,
-    /// Sampled magnitudes ordered from greatest to least total, one entry per `curios_common::sample!` site that fired.
+    /// Sampled magnitudes ordered from greatest to least total, one entry per `curios_tracing::sample!` site that fired.
     pub samples: Vec<SampleSummary>,
     /// The greatest peak any slice carried: the high-water mark of what the process held while counting, up to the last packet the file holds; `None` where the allocator did not count.
     pub peak: Option<usize>,
@@ -65,7 +65,7 @@ pub struct OpenSpan {
     pub entered: u128,
 }
 
-/// The distribution of one `curios_common::sample!` site's observations.
+/// The distribution of one `curios_tracing::sample!` site's observations.
 ///
 /// Time and memory say an operation is expensive; these say *what it was given*. The pair is what distinguishes an operation that is individually wasteful from one that is being handed inputs it should never have seen — a distinction neither duration nor byte count can make alone.
 #[derive(Debug)]

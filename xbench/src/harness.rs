@@ -76,7 +76,7 @@ pub fn phase<T>(tallies: &'static [Tally], work: impl FnOnce() -> T) -> Phase<T>
     let answer = trace(
         Destination::Stream(Box::new(stream.clone())),
         tallies,
-        || curios_common::profile!("phase" => work()),
+        || curios_tracing::profile!("phase" => work()),
     )
     .expect("a stream kept in memory opens");
     let instructions = counted.as_ref().map(Instructions::read);

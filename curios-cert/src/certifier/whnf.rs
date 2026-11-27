@@ -90,7 +90,7 @@ impl Reducer for ByValue<'_, '_> {
     }
 
     fn reduce(&mut self, term: Term) -> Result<Term, ReduceError> {
-        curios_common::profile!("reduce");
+        curios_tracing::profile!("reduce");
         self.whnf(term)
     }
 
@@ -103,7 +103,7 @@ impl Reducer for ByValue<'_, '_> {
             return Ok(remembered);
         }
         // Past the memo, so the span times reductions the table did not answer: a hit costs a lookup, and a span per hit would cost the profile more rows than any other site and bill each its own row-writing.
-        curios_common::profile!("reduce_forced");
+        curios_tracing::profile!("reduce_forced");
 
         let reduced = self.whnf(term.clone())?;
         let reduct = force(self, reduced)?;
@@ -352,7 +352,7 @@ fn refined_reduct(certifier: &mut ByValue, value: &Term) -> Result<Option<Term>,
         let Some((index, key)) = certifier.unasked_refinement(&admitted) else {
             // What a lookup that asked conversion would have been put to: the equations this stuck form could be the term of, each settled and none answering.
             if let asked @ 1.. = admitted.len() {
-                curios_common::sample!("whnf::missed_lookup", asked);
+                curios_tracing::sample!("whnf::missed_lookup", asked);
             }
             return Ok(None);
         };
@@ -431,7 +431,7 @@ fn refolded(certifier: &mut ByValue, value: &Term) -> Result<Option<Term>, Reduc
     match within.classable() {
         true => {
             // What a stuck fold puts to conversion: the atoms it pairs, where some two may be one.
-            curios_common::sample!("whnf::classable_fold", within.atoms());
+            curios_tracing::sample!("whnf::classable_fold", within.atoms());
             asked_within(certifier, &mut within)?;
         }
         // Nothing is put to conversion, and the readers still class the operation's nodes.

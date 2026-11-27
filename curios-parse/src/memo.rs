@@ -57,7 +57,7 @@ pub fn run_parser<'a, A>(
     MEMO.with(|memo| memo.borrow_mut().clear());
 
     // One span per parse, named by what is being parsed: a test that parses several sources otherwise reads as one undifferentiated stream of choices.
-    curios_common::profile!("run_parser", group = %source.name().map_or_else(|| source.file().unwrap_or(Path::new("<text>")).display().to_string(), ToString::to_string));
+    curios_tracing::profile!("run_parser", group = %source.name().map_or_else(|| source.file().unwrap_or(Path::new("<text>")).display().to_string(), ToString::to_string));
 
     // On a segment of its own, as every other stage enters: the grammar's nonterminals recurse per nesting, beneath `recurse`.
     let result = grown(|| parser.parse(ParserState::new(source)).map(|(item, _)| item));

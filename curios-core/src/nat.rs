@@ -186,7 +186,7 @@ impl Nat {
 
     /// The summands of a reduced `Nat`'s symbolic inner, flattening the neutral `add` spine, in the order they are written. `NatAdd` hoists every literal floor outward, so no summand reached here is successor-headed. The order matters: [`Nat::sum_over_floor`] folds the list back left-to-right, so reading it left-to-right is what makes read-then-rebuild the identity on a sum already in normal form — a rebuild that reordered would hand the reducer a new term every pass, and that oscillation once overflowed the stack building the prelude.
     pub(crate) fn summands(inner: &Term) -> Vec<Term> {
-        curios_common::profile!("nat::summands");
+        curios_tracing::profile!("nat::summands");
         let mut summands = Vec::new();
         let mut pending = vec![inner.clone()];
 
@@ -247,7 +247,7 @@ impl Nat {
 
     /// The product of two reduced `Nat` terms, in the sum normal form: every summand of one — its floor counted as a constant summand — times every summand of the other, each product a monomial in canonical factor order, and the results summed through [`Nat::sum_over_floor`] so like monomials merge. This is distribution in full — `x · (y + z) = x · y + x · z` for a symbolic `x` — of which the literal-factor floor law, the unit and annihilation laws and the nested-factor fold are the special cases, each of which the value grid still states on its own.
     pub(crate) fn multiply(left: &Term, right: &Term) -> Term {
-        curios_common::profile!("nat::multiply");
+        curios_tracing::profile!("nat::multiply");
         let mut atoms = Atoms::default();
         let left_terms = Self::distributable(&mut atoms, left);
         let right_terms = Self::distributable(&mut atoms, right);
@@ -273,9 +273,9 @@ impl Nat {
             })
             .collect::<Vec<_>>();
         // The two magnitudes that say what distribution in full costs: monomials built against summands kept, the first growing as the square of the second, which is what an eager cross product is.
-        curios_common::sample!("multiply::products", summands.len() as u64);
+        curios_tracing::sample!("multiply::products", summands.len() as u64);
         let merged = Self::sum_over_floor(summands, floor);
-        curios_common::sample!(
+        curios_tracing::sample!(
             "multiply::merged",
             Self::summands(&Self::decompose(&merged).1).len() as u64
         );
@@ -374,7 +374,7 @@ impl Nat {
 
     /// `summands` as a linear combination: like factors merged by adding their coefficients, in first-appearance order, each factor's product spine a monomial of atoms under the carrier's identity (`crate::atoms`). This is the sum normal form — `x + x` is `2 · x`, and `2 · x + 3 · x` is `5 · x` — and it is what makes a sum's like terms definitionally equal rather than merely cancellable against each other. The collection is `curios-algebra`'s; what is read here is which term each summand's factor is, and the factor a merged summand keeps is its first appearance's.
     pub(crate) fn linear(summands: impl IntoIterator<Item = Term>) -> Vec<(Natural, Term)> {
-        curios_common::profile!("nat::linear");
+        curios_tracing::profile!("nat::linear");
         let mut atoms = Atoms::default();
         let read = summands
             .into_iter()
@@ -497,7 +497,7 @@ impl Nat {
 
     /// The sum of `summands` over a literal `floor`, landing in the same normal form [`Nat::decompose`], [`Nat::summands`] and [`Nat::linear`] read back: like terms merged, a remainder beside its multiple recombined by [`Nat::recombine`], each spelled by [`Nat::scaled`] or as it was read, folded left-to-right.
     pub(crate) fn sum_over_floor(summands: Vec<Term>, floor: Natural) -> Term {
-        curios_common::profile!("nat::sum_over_floor");
+        curios_tracing::profile!("nat::sum_over_floor");
         let (floor, written) = Self::written(&summands, floor);
         Self::rebuild(floor, Self::chained(None, &written))
     }
@@ -614,7 +614,7 @@ impl Nat {
 
     /// [`Nat::sum_over_floor`] from a combination already merged.
     pub(crate) fn from_linear(combination: Vec<(Natural, Term)>, floor: Natural) -> Term {
-        curios_common::profile!("nat::from_linear");
+        curios_tracing::profile!("nat::from_linear");
         let summands = combination
             .into_iter()
             .map(|(coefficient, factor)| Self::scaled(coefficient, factor))
@@ -726,7 +726,7 @@ impl Nat {
     ///
     /// **A sum is written over the chain it extends.** Where the merged summands begin with the left operand's own, unchanged and in their order, the rest are folded onto the left operand's chain itself, as a rebuild that changes nothing hands back the node it was given; the term is the one [`Nat::sum_over_floor`] writes. So a stuck sum one summand longer holds the sum it extends, and a reduction of a long sum builds its graph a summand at a time where a copy of the chain at each level would build its square, which every walk and table over the reduct would then pay again (`documentation/design/compilation/every-stage-but-reduction-costs-the-graph-it-is-handed.md`).
     pub(crate) fn sum(left: &Term, right: &Term) -> Term {
-        curios_common::profile!("nat::sum");
+        curios_tracing::profile!("nat::sum");
         let (floor_left, inner_left) = Nat::decompose(left);
         let (floor_right, inner_right) = Nat::decompose(right);
 
@@ -780,7 +780,7 @@ impl Nat {
 
     /// `left` against `right` read over one table of atoms, with what they share taken off both.
     pub(crate) fn cancellation(left: &Term, right: &Term) -> Cancelled<Natural, NatOrigin> {
-        curios_common::profile!("nat::cancel_common");
+        curios_tracing::profile!("nat::cancel_common");
         let mut atoms = Atoms::default();
         let left = Self::combination(&mut atoms, left);
         let right = Self::combination(&mut atoms, right);

@@ -216,7 +216,7 @@ pub fn audit_public_exposures(
     refused: &dyn Fn(&Qualifier, &Unseen) -> Error,
     reexports: Option<&BTreeSet<(Qualifier, String)>>,
 ) -> Result<(), Error> {
-    curios_common::profile!("audit_public_exposures");
+    curios_tracing::profile!("audit_public_exposures");
     let at = |error: Error, place: Option<Span>| match place {
         Some(span) => error.at(span),
         None => error,

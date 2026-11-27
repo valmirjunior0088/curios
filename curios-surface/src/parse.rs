@@ -142,7 +142,7 @@ pub fn take_comments() -> Vec<Span> {
 
 /// The term `source` holds, whole, in the dialect `D`.
 pub fn parse_whole_term<D: Grammar>(source: &Arc<Source>) -> Result<Term<D>, ParserError> {
-    curios_common::profile!("parse", group = "term");
+    curios_tracing::profile!("parse", group = "term");
     run_parser(
         parse_whitespace
             .and_keep(parse_body::<D>)

@@ -115,7 +115,7 @@ pub fn document(
     records: &[&Documentation],
     checked: &Checked<'_>,
 ) -> Documentation {
-    curios_common::profile!("document");
+    curios_tracing::profile!("document");
     // The unit's own tables as the nearest base, where the lowering held them as the layer it wrote: every read answers alike, since mount sets are disjoint.
     let tables = predecessors
         .iter()
@@ -808,7 +808,7 @@ impl Reader<'_> {
         source: Option<&Arc<Source>>,
         mut head: Printer,
     ) -> Signed {
-        curios_common::profile!("document::signature");
+        curios_tracing::profile!("document::signature");
         let mut referents = Vec::new();
         each_named(&mut head, |text, written| {
             let referent = match written {

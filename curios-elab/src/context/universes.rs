@@ -95,7 +95,7 @@ impl<'s> Context<'s> {
             .as_ref()
             .is_none_or(|context| context.parameter_count != universes.levels.len())
         {
-            curios_common::note!(
+            curios_tracing::note!(
                 target: "curios_elab::universe",
                 name = %name.faithful(),
                 registered = found.is_some(),
@@ -288,7 +288,7 @@ impl<'s> Context<'s> {
         internal: BTreeSet<UniverseMetaId>,
         compared: BTreeSet<UniverseMetaId>,
     ) -> Result<UniverseContext, Error> {
-        curios_common::profile!("ctx::finalize_universe_metas");
+        curios_tracing::profile!("ctx::finalize_universe_metas");
         let mut universe_context = self
             .closing_universes(|solver| solver.finalize(interface, internal, compared))
             .map_err(|error| universe_conflict(error, owned))?;

@@ -423,12 +423,12 @@ pub fn link(
     own: &ErasedUnit,
     entry: &ErasedItem,
 ) -> Result<ErasedProgram, Error> {
-    curios_common::profile!("link_program");
+    curios_tracing::profile!("link_program");
     let reached = reached(
         scope.units(),
         own.items().flat_map(|item| item.forms()).chain([entry]),
     );
-    curios_common::sample!(
+    curios_tracing::sample!(
         "link::reached",
         reached.items.iter().map(BTreeSet::len).sum::<usize>()
     );

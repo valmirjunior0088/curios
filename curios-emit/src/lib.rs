@@ -95,7 +95,7 @@ fn into_wasm_within(
     module: &curios_cps::Module,
     turns: Option<curios_cps::RowId>,
 ) -> (curios_wasm::Module, ForeignStore) {
-    curios_common::profile!("into_wasm");
+    curios_tracing::profile!("into_wasm");
     let representation = curios_cps::representation(module);
     let mut raw = raw_locals(&representation);
     let closures = closure_locals(&representation);

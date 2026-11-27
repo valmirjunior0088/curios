@@ -478,7 +478,7 @@ impl Module {
 
     fn parse_reading(source: &Arc<Source>, strict: bool) -> Result<(Self, Vec<Span>), ParserError> {
         clear_comments();
-        curios_common::profile!("parse", group = "module");
+        curios_tracing::profile!("parse", group = "module");
         let module = run_parser(
             parse_file_head
                 .and_keep(parse_items(strict))
@@ -545,7 +545,7 @@ impl Entrypoint {
 
     fn parse_reading(source: &Arc<Source>, strict: bool) -> Result<(Self, Vec<Span>), ParserError> {
         clear_comments();
-        curios_common::profile!("parse", group = "entrypoint");
+        curios_tracing::profile!("parse", group = "entrypoint");
         let entrypoint = run_parser(
             parse_file_head
                 .and_keep(parse_items(strict))
@@ -583,7 +583,7 @@ pub struct FormatInput {
 
 pub fn parse_for_format(source: &Arc<Source>) -> Result<FormatInput, ParserError> {
     clear_comments();
-    curios_common::profile!("parse", group = "format");
+    curios_tracing::profile!("parse", group = "format");
     let (module, item_spans, tail) = run_parser(
         parse_file_head
             .and_keep(many0(|| spanned(parse_top_item)))

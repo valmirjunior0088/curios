@@ -11,7 +11,7 @@ use std::{ptr, slice, sync::Mutex};
 ///
 /// A name section in `bytes` is kept, as far as the optimizer keeps what it names, and none is written where `bytes` has none: which names an artifact carries is decided where it is written (`curios_wasm::Names`).
 pub fn optimize(mut bytes: Vec<u8>) -> Vec<u8> {
-    curios_common::profile!("binaryen_optimize");
+    curios_tracing::profile!("binaryen_optimize");
     let names = has_name_section(&bytes);
     static LOCK: Mutex<()> = Mutex::new(());
     let _guard = LOCK.lock().unwrap_or_else(|poisoned| poisoned.into_inner());

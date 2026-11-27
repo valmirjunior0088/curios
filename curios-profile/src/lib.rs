@@ -1,4 +1,4 @@
-//! Programmatic profiling for the Curios workspace: the recorder of what `curios-common`'s `profile!`, `sample!` and `note!` instrument, written as Perfetto's trace.
+//! Programmatic profiling for the Curios workspace: the recorder of what `curios-tracing`'s `profile!`, `sample!` and `note!` instrument, written as Perfetto's trace.
 //!
 //! Every build carries the instrumentation, and nothing records unless a caller installs a recorder: a measurement point no recorder listens to costs one relaxed load. This crate names `tracing` for the subscriber it implements, and is what reads its stream back:
 //!

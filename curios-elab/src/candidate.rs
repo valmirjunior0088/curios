@@ -75,7 +75,7 @@ impl<'a> Candidating<'a> {
 
     /// Complete the record of each declaration that no filing has: what the declaration made and read, or nothing for one no record can be completed of — a witness, or one that read a part that will not digest, or of another unit that the unit records nothing of.
     pub fn complete(&self) -> Result<(), String> {
-        curios_common::profile!("elaborations::complete");
+        curios_tracing::profile!("elaborations::complete");
         for declaration in self.declarations.each() {
             // Asked of what each place declares, which a stored module knows without its item: a filing over a cabinet completes what its edit made and restores nothing else.
             let Some(first) = self.lowered.items.names(declaration).first().copied() else {

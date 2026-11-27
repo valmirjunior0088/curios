@@ -60,7 +60,7 @@ fn edges(asked: &Asked) -> Vec<(curios_core::Global, Parts)> {
 impl AskedBy {
     /// Who read what, of `items`.
     pub fn of(items: &AskedItems) -> Self {
-        curios_common::profile!("asked_by::of");
+        curios_tracing::profile!("asked_by::of");
         // Gathered whole first, so each name's list is built once and not copied at every reader a persistent insert would add.
         let mut gathered =
             BTreeMap::<curios_core::Global, Vec<(curios_core::Global, Parts)>>::new();

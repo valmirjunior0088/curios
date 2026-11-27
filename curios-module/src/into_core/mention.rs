@@ -64,12 +64,12 @@ impl PreparedText {
         entry: Option<&'a curios_core::Entrypoint>,
         lies: impl Fn(&Source) -> bool,
     ) -> Vec<Text<'a>> {
-        curios_common::profile!("texts");
+        curios_tracing::profile!("texts");
         // Each table this reads is restored or built the first time anything asks, so a span here times the first reader's share of it.
-        let anchors = curios_common::profile!("texts::anchors" => self.anchors());
+        let anchors = curios_tracing::profile!("texts::anchors" => self.anchors());
         let items = &self.core().items;
-        let scans = curios_common::profile!("texts::restored" => self.scans());
-        let bodies = curios_common::profile!("texts::bodies" => self.bodies());
+        let scans = curios_tracing::profile!("texts::restored" => self.scans());
+        let bodies = curios_tracing::profile!("texts::bodies" => self.bodies());
 
         // The module bodies written in the sources asked about: each file's own with the ones its text writes inline, and each no file backs.
         let mut written = Vec::new();
@@ -89,7 +89,7 @@ impl PreparedText {
         written.extend(unfiled);
 
         // Each declaration written in them, with the names its items declare, and the program's closing term.
-        let mut keys = curios_common::profile!("texts::declarations" => {
+        let mut keys = curios_tracing::profile!("texts::declarations" => {
             let mut keys = Vec::new();
             for module in &written {
                 let Some(body) = bodies.get(module) else {
@@ -142,7 +142,7 @@ impl PreparedText {
                 .map(|(stamp, _)| ((closing, stamp), Vec::new())),
         );
 
-        let mut texts = curios_common::profile!("texts::labels" => {
+        let mut texts = curios_tracing::profile!("texts::labels" => {
             keys
                 .into_iter()
                 .filter_map(|(key, names)| {

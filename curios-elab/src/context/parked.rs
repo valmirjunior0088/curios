@@ -28,7 +28,7 @@ impl<'s> Context<'s> {
         held: &HeldFrames,
         work: impl FnOnce(&mut Self) -> R,
     ) -> R {
-        curios_common::profile!("ctx::standing_on");
+        curios_tracing::profile!("ctx::standing_on");
         let set_aside_refined = self.typing.frames.locally_refined();
         let stood_on_refined = held.refined();
         // What the frames held define that the frames in view do not, or define otherwise.
@@ -169,7 +169,7 @@ impl<'s> Context<'s> {
 
     /// Park blocked work: hold the local frames as they stand around it and record which unsolved metavariables could unblock it.
     pub(crate) fn park(&mut self, work: ParkedWork, origin: Term) {
-        curios_common::profile!("ctx::park");
+        curios_tracing::profile!("ctx::park");
         let frames = self.hold_frames();
         self.repark(work, origin, frames);
     }
@@ -200,7 +200,7 @@ impl<'s> Context<'s> {
     }
 
     pub(crate) fn wake_parked(&mut self) -> Vec<ParkedProblem> {
-        curios_common::profile!("ctx::wake_parked");
+        curios_tracing::profile!("ctx::wake_parked");
         self.underway.attempt.solutions.wake_parked()
     }
 

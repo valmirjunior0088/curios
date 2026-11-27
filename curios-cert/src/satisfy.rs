@@ -12,7 +12,7 @@ use {crate::Error, curios_analysis::satisfiable, curios_core::UniverseContext};
 ///
 /// Every context a walk assumes is decided here, wherever it is assumed from: a registry entry's and a definition's, each before [`certify_definitions`](crate::certify_definitions) judges anything. A group carries no context of its own, so a `rec` is no position of its own either — its members' levels are the enclosing declaration's, whose context was decided with every other. An unsatisfiable set assumed anywhere is the same hypothesis set from which everything follows, so the clause is one function rather than one per place that assumes one.
 pub fn universe_verdict(context: &UniverseContext) -> Option<Error> {
-    curios_common::profile!("universe_verdict");
+    curios_tracing::profile!("universe_verdict");
     if !context.is_closed() {
         return Some(Error::UnclosedUniverses);
     }

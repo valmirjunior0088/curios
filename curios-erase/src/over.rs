@@ -265,7 +265,7 @@ impl<'a> ErasedOver<'a> {
         let candidates = self.baseline.candidates?;
         let names = item.declared_names();
         let first = names.first()?;
-        curios_common::profile!("erase::candidates");
+        curios_tracing::profile!("erase::candidates");
         let identity = match self.module.items.part(place) {
             Some(stored) => stored.digest,
             None => curios_core::ItemRun::identity(item).ok()?,

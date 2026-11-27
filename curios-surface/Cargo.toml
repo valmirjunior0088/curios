@@ -12,6 +12,7 @@ workspace = true
 curios-abi = { workspace = true }
 curios-archive = { workspace = true }
 curios-common = { workspace = true }
+curios-tracing = { workspace = true }
 curios-core = { workspace = true }
 curios-num = { workspace = true }
 curios-parse = { workspace = true }

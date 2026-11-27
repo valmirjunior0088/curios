@@ -16,6 +16,7 @@ test-support = ["dep:curios-cert", "dep:curios-core"]
 [dependencies]
 curios-archive = { workspace = true }
 curios-common = { workspace = true }
+curios-tracing = { workspace = true }
 curios-document = { workspace = true }
 curios-unit = { workspace = true }
 # The certifier's environment and the items a root holds, for the test support alone.

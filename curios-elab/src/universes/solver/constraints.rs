@@ -215,7 +215,7 @@ impl ConstraintStore {
         head: LevelHead,
         solution: &Level,
     ) -> Result<(), UniverseError> {
-        curios_common::profile!("universe::substitute");
+        curios_tracing::profile!("universe::substitute");
         let positions = self.mentioning(head).collect::<Vec<_>>();
         let arrived = solution
             .atoms()

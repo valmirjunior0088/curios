@@ -94,7 +94,7 @@ pub const ROUND_LIMIT: usize = 1024;
 
 /// Run the verifier-delimited, FIFO simplifier of Curios/CPS. What a pass reads off the module whole is the module's, filed with the generation it was read at (`Module::calls` and its siblings), so a fact asked again over a module no pass has written since is not built again, and nothing outlives a write.
 pub fn optimize(module: &mut Module) {
-    curios_common::profile!("cps_optimize");
+    curios_tracing::profile!("cps_optimize");
     module
         .verify()
         .expect("invalid high CPS before optimization");
@@ -107,19 +107,19 @@ pub fn optimize(module: &mut Module) {
     // Name and time one pass, and record whether it fired. The two together are what separate the fixpoint's hypotheses: a pass that admits one candidate per call fires on as many rounds as it has candidates, while a pair undoing each other's work fires in lockstep for rounds neither needed.
     macro_rules! pass {
         ($name:literal, $pass:expr) => {{
-            let changed = curios_common::profile!($name => $pass);
-            curios_common::sample!($name, changed as u64);
+            let changed = curios_tracing::profile!($name => $pass);
+            curios_tracing::sample!($name, changed as u64);
             // The growth ledger beside the fired ledger: what each pass left standing, so a size regression names its pass the way a time regression names its span.
-            curios_common::sample!(
+            curios_tracing::sample!(
                 concat!($name, "::nodes"),
                 module.live_nodes().count()
             );
-            curios_common::sample!(
+            curios_tracing::sample!(
                 concat!($name, "::conts"),
                 module.live_continuations().count()
             );
-            curios_common::sample!(concat!($name, "::cap"), module.nodes().len());
-            curios_common::sample!(concat!($name, "::values"), module.value_ids().count());
+            curios_tracing::sample!(concat!($name, "::cap"), module.nodes().len());
+            curios_tracing::sample!(concat!($name, "::values"), module.value_ids().count());
             changed
         }};
     }
@@ -130,7 +130,7 @@ pub fn optimize(module: &mut Module) {
     let mut values_taken = false;
     for round in 1..=ROUND_LIMIT {
         let mut substitutions =
-            curios_common::profile!("cps::known_values" => known_values(module));
+            curios_tracing::profile!("cps::known_values" => known_values(module));
         if !values_taken {
             substitutions.retain(|_, atom| !matches!(atom, Atom::Value(_)));
         }
@@ -202,7 +202,7 @@ pub fn optimize(module: &mut Module) {
             values_taken = true;
         }
     }
-    curios_common::sample!("cps_optimize::rounds", converged.unwrap_or(ROUND_LIMIT));
+    curios_tracing::sample!("cps_optimize::rounds", converged.unwrap_or(ROUND_LIMIT));
 
     // Loud rather than silent: a module that exhausts the limit is emitted less optimized than an equivalent one that did not, and no later stage can detect the difference. Debug-only because the consequence is worse code rather than wrong code — a release compile should still produce a working program.
     debug_assert!(
@@ -211,7 +211,7 @@ pub fn optimize(module: &mut Module) {
     );
 
     // Once the fixpoint has settled, each class of equal continuations is kept once: before it, a body the inliner would copy into each of its callers is merged first and copied again.
-    curios_common::profile!(
+    curios_tracing::profile!(
         "cps::merge_equal_continuations" => merge_equal_continuations(module)
     );
 

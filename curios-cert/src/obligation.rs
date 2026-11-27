@@ -185,7 +185,7 @@ pub fn check_positions(
     own: &[Global],
     memo: &mut PositionVerdicts,
 ) -> Result<(), Error> {
-    curios_common::profile!("check_positions");
+    curios_tracing::profile!("check_positions");
     let partial = |certifier: &Certifier, name: &Global| totals.partial(certifier, name);
     for position in positions {
         let written = position

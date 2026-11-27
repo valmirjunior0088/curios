@@ -11,6 +11,7 @@ workspace = true
 [dependencies]
 curios-abi = { workspace = true }
 curios-common = { workspace = true }
+curios-tracing = { workspace = true }
 curios-num = { workspace = true }
 curios-cps = { workspace = true }
 curios-wasm = { workspace = true }

@@ -203,7 +203,7 @@ fn every_field_a_span_or_an_event_carries_is_written() {
     let buffer = Buffer::default();
     trace(buffer.destination(), &[], || {
         let _span = tracing::trace_span!("grouped", group = %"Nat/add", extra = 7).entered();
-        curios_common::sample!("magnitude", 42);
+        curios_tracing::sample!("magnitude", 42);
     })
     .expect("a stream destination opens");
 
@@ -321,7 +321,7 @@ fn a_span_is_charged_nothing_the_recorder_takes() {
         let _span = tracing::trace_span!("around").entered();
         for round in 0..64_u64 {
             let _inside = tracing::trace_span!("inside", round).entered();
-            curios_common::sample!("inside::round", round);
+            curios_tracing::sample!("inside::round", round);
         }
     })
     .expect("a stream destination opens");

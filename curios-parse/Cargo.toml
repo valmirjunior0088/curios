@@ -12,3 +12,4 @@ workspace = true
 # The characters the database calls default-ignorable, which `unseen` reads as printing as nothing.
 curios-unicode = { workspace = true }
 curios-common = { workspace = true }
+curios-tracing = { workspace = true }

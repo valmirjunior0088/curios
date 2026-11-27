@@ -120,7 +120,7 @@ pub struct Relay {
 impl Audiences {
     /// The audiences of the unit whose direct interface is `table` and whose export view is `public`, each the unit's own layer.
     pub(super) fn of(table: &Table<ModuleInfo>, public: &Table<PublicInterface>) -> Self {
-        curios_common::profile!("audiences::of");
+        curios_tracing::profile!("audiences::of");
         // What the unit declares. The compilation root every unit seeds lists each mounted prefix as a child, an earlier unit's among them, and an export may name an earlier unit's declaration: neither is this unit's to decide.
         let declares_module = |module: &Qualifier| table.contains_key(module);
         let declares_binding = |binding: &Qualifier| {
@@ -836,7 +836,7 @@ pub fn resolve_unit<'a>(
     reach: Reach<'_>,
     scope: Scoped<'a, PublicInterface>,
 ) -> Result<Scoped<'a, PublicInterface>, Error> {
-    curios_common::profile!("resolve_unit");
+    curios_tracing::profile!("resolve_unit");
     let mut public = scope;
     let mut pub_uses = Vec::new();
 
@@ -887,7 +887,7 @@ pub fn resolve_unit_over<'a>(
     touched: &HashSet<Qualifier>,
     removed: &[Qualifier],
 ) -> Result<(Scoped<'a, PublicInterface>, Resolution), Error> {
-    curios_common::profile!("resolve_unit_over");
+    curios_tracing::profile!("resolve_unit_over");
     for module in removed {
         public.remove(module);
     }

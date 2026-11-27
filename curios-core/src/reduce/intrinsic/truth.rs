@@ -112,7 +112,7 @@ pub fn decide_bool(
     if !is_bool_connective(this) && !is_bool_connective(that) {
         return Ok(false);
     }
-    curios_common::profile!("truth::decide_bool");
+    curios_tracing::profile!("truth::decide_bool");
 
     let mut table = Table::default();
     let left = table.read(reducer, this.clone())?;
@@ -132,7 +132,7 @@ pub fn bool_value(reducer: &mut impl Reducer, term: &Term) -> Result<Option<bool
     if !is_bool_connective(term) {
         return Ok(term.as_bool());
     }
-    curios_common::profile!("truth::bool_value");
+    curios_tracing::profile!("truth::bool_value");
 
     let mut table = Table::default();
     let root = table.read(reducer, term.clone())?;

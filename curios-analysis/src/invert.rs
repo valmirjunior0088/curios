@@ -125,7 +125,7 @@ pub fn invert_indices<J: Judge>(
     targets: &[Term],
     flex: &[Free],
 ) -> Result<Invert, J::Error> {
-    curios_common::profile!("invert_indices");
+    curios_tracing::profile!("invert_indices");
     Unifier::new(&*judge, flex).solve(judge, actuals, targets)
 }
 

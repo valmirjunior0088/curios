@@ -3,7 +3,7 @@ name = "curios-profile"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "Programmatic profiling for the Curios workspace: the subscriber that writes what curios-common's macros instrument as Perfetto's trace, and the fold that reads a trace back"
+description = "Programmatic profiling for the Curios workspace: the subscriber that writes what curios-tracing's macros instrument as Perfetto's trace, and the fold that reads a trace back"
 
 [lints]
 workspace = true
@@ -11,7 +11,7 @@ workspace = true
 [dependencies]
 # The report a profile's answer is drawn as, the block every answer of the command line is.
 curios-common = { workspace = true }
-# The subscriber's side of `tracing`, which `curios-common`'s macros write to.
+# The subscriber's side of `tracing`, which `curios-tracing`'s macros write to.
 tracing = { workspace = true }
 # The codec of the messages the build script generates from Perfetto's schema; this crate alone takes it, so its pin is here.
 prost = { version = "0.14.6" }
@@ -27,5 +27,7 @@ prost-types = { version = "0.14.6" }
 protox = { version = "0.9.1" }
 
 [dev-dependencies]
-# The directory of its own every suite here works in, canonical and removed however the test ends, and the macros whose reading the recorder holds.
+# The directory of its own every suite here works in, canonical and removed however the test ends.
 curios-common = { workspace = true, features = ["test-support"] }
+# The macros whose reading the recorder holds.
+curios-tracing = { workspace = true }

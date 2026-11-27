@@ -18,6 +18,7 @@ curios-archive = { workspace = true, optional = true }
 curios-prelude-build = { workspace = true, optional = true }
 curios-abi = { workspace = true }
 curios-common = { workspace = true }
+curios-tracing = { workspace = true }
 curios-cert = { workspace = true }
 curios-cps = { workspace = true }
 curios-emit = { workspace = true }

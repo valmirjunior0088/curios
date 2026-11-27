@@ -18,7 +18,7 @@ pub fn elaborate_tuple_type(
     tt: &TupleType,
     extent: Option<Extent>,
 ) -> Result<(Term, Term), Error> {
-    curios_common::profile!("aggregate::elaborate_tuple_type");
+    curios_tracing::profile!("aggregate::elaborate_tuple_type");
     // Labels are part of the type's identity and the target of `.label` resolution, so they must be unique and survive the rebuild verbatim (the walk gensyms its binders to keep nested frames collision-free; `relabel` restores the written names afterwards).
     let source_labels = tt.telescope.labels();
     for (position, label) in source_labels.iter().enumerate() {
@@ -80,7 +80,7 @@ pub fn elaborate_tuple(
     term: &Term,
     mode: Mode,
 ) -> Result<(Term, Term), Error> {
-    curios_common::profile!("aggregate::elaborate_tuple");
+    curios_tracing::profile!("aggregate::elaborate_tuple");
     let Tuple { fields, names } = tuple;
 
     let expected = match mode {

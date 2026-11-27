@@ -148,7 +148,7 @@ pub fn positivity_vectors<D: Driver>(
     driver: &mut D,
     declarations: Declarations<'_>,
 ) -> Result<BTreeMap<Global, Vec<Polarity>>, PositivityRefusal<D::Error>> {
-    curios_common::profile!("positivity_vectors");
+    curios_tracing::profile!("positivity_vectors");
     if declarations.is_empty() {
         return Ok(BTreeMap::new());
     }

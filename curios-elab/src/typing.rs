@@ -244,7 +244,7 @@ pub fn expect_as(
     inferred: &Term,
     expectation: &Expectation,
 ) -> Result<(), Error> {
-    curios_common::profile!("typing::expect");
+    curios_tracing::profile!("typing::expect");
     let expected = &expectation.type_;
     let site = expectation.site.as_ref();
     let outcome =
@@ -399,7 +399,7 @@ impl Context<'_> {
         if self.parking_suppressed() {
             return Ok(());
         }
-        curios_common::profile!("typing::retry_parked");
+        curios_tracing::profile!("typing::retry_parked");
 
         loop {
             let woken = self.wake_parked();
@@ -830,7 +830,7 @@ impl Context<'_> {
 
     /// Retry everything parked to a fixpoint, taking what no term awaited as a term's completion takes its own, then report any survivor as a mismatch at its origin.
     fn drain_store(&mut self) -> Result<(), Error> {
-        curios_common::profile!("typing::drain_parked");
+        curios_tracing::profile!("typing::drain_parked");
         let mut taken = BTreeSet::new();
         loop {
             self.retry_parked()?;

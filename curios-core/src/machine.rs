@@ -255,7 +255,7 @@ pub fn reduce_closed<H: ClosedHost>(
     term: Term,
     demand: Demand,
 ) -> Result<Term, ReduceError> {
-    curios_common::profile!("machine::reduce_closed");
+    curios_tracing::profile!("machine::reduce_closed");
     Machine {
         stack: Vec::new(),
         peak: 0,

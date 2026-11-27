@@ -26,6 +26,7 @@ test-support = [
 [dependencies]
 curios-archive = { workspace = true }
 curios-common = { workspace = true }
+curios-tracing = { workspace = true }
 curios-core = { workspace = true }
 curios-module = { workspace = true }
 curios-unit = { workspace = true }

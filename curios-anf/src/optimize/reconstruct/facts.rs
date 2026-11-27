@@ -104,7 +104,7 @@ impl ValueFacts {
         bindings: &Rebindings,
         templates: &BTreeMap<FunctionId, ConstructionTemplate>,
     ) -> Self {
-        curios_common::profile!("reconstruction_facts");
+        curios_tracing::profile!("reconstruction_facts");
         let mut facts = Self {
             facts: BTreeMap::new(),
             sites: BTreeMap::new(),

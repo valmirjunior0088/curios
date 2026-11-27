@@ -17,6 +17,7 @@ test-support = []
 # The language server's protocol crates have this crate as their one owner.
 [dependencies]
 curios-common = { workspace = true }
+curios-tracing = { workspace = true }
 curios-document = { workspace = true }
 # For what a name is declared as and where its declaration's name is written, which `--at` and `--name` answer in the lowering's own terms.
 curios-core = { workspace = true }

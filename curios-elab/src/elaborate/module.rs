@@ -1343,7 +1343,7 @@ fn cycles(edges: &[Vec<usize>]) -> Vec<Vec<usize>> {
 ///
 /// **An item that wrote a goal is held.** Its goals are found here and reported once every declaration of the unit has finished, in the state it elaborated in, which is the only one that knows them ([`Holding`]). It is published by its types alone ([`Context::publish_held`]), so the declarations that read it elaborate and report their own.
 fn elaborate_module_item(context: &mut Context, item: &Item) -> Result<Elaborated, Error> {
-    curios_common::profile!("elaborate_module_item");
+    curios_tracing::profile!("elaborate_module_item");
     let item_module = match item {
         Item::Let(definition) => definition.island,
         Item::Rec(rec) => rec.island(),
@@ -1354,7 +1354,7 @@ fn elaborate_module_item(context: &mut Context, item: &Item) -> Result<Elaborate
     let declared = item.declared_names();
     let owner = declared.first();
     // One span per top-level item, aggregated per item rather than across all of them: the fixed prelude is over a thousand declarations whose costs differ by three orders of magnitude, and a single averaged row cannot say which one a pass is actually spending on.
-    curios_common::profile!("declaration", group = %item.describe());
+    curios_tracing::profile!("declaration", group = %item.describe());
 
     // The step budget is per declaration, so it is restored here rather than drained across the module: whether this item typechecks must not depend on how much the items before it happened to spend.
     context.restore_budget();
@@ -1555,7 +1555,7 @@ fn elaborate_definitions_suffix<'s>(
     minted: &Rc<Minted>,
     tail: Option<Tail<'_>>,
 ) -> Result<ElaboratedSuffix, Error> {
-    curios_common::profile!("elaborate_definitions_suffix");
+    curios_tracing::profile!("elaborate_definitions_suffix");
     // The scope is read through, and nothing of it goes in but each unit's mounts, which a privilege question is answered out of and which the unit's own items may ask while they elaborate. `register_*` rejects a key the scope holds, and the unit declares only its own, so the two cannot collide: a baseline answers for no name before the walk keeps its declaration.
     if let Some(established) = established {
         established.coherent()?;
@@ -1625,7 +1625,7 @@ fn elaborate_definitions_suffix<'s>(
     }
     context.begin_unit(declarations.clone(), demand.held_names());
     {
-        curios_common::profile!("demand::all");
+        curios_tracing::profile!("demand::all");
         demand.all(context, &vocabulary);
     }
     if let Some(established) = established {
@@ -1789,7 +1789,7 @@ fn finalize_and_check(
     held: Vec<Holding>,
     mut obligations: Vec<Error>,
 ) -> Result<Finalized, Error> {
-    curios_common::profile!("finalize_and_check");
+    curios_tracing::profile!("finalize_and_check");
     let mut entry_terms = Vec::new();
     if let Some(entry) = &entry {
         entry_terms.push(entry.body.clone());
@@ -2031,7 +2031,7 @@ fn elaborate_and_zonk<'s>(
     minted: &Rc<Minted>,
     tail: Option<Tail<'_>>,
 ) -> Result<(Finalized, Traces), Error> {
-    curios_common::profile!("elaborate_and_zonk_with_prelude");
+    curios_tracing::profile!("elaborate_and_zonk_with_prelude");
     grown(|| {
         let declarations = Declarations::of(definitions);
         let elaborated = elaborate_definitions_suffix(
@@ -2148,7 +2148,7 @@ fn elaborate_and_zonk_over<'s>(
     minted: &Rc<Minted>,
     tail: Option<Tail<'_>>,
 ) -> Result<(Recompiled, Option<Entrypoint>), Error> {
-    curios_common::profile!("elaborate_and_zonk_unit_over");
+    curios_tracing::profile!("elaborate_and_zonk_unit_over");
     grown(|| {
         let over = Over {
             baseline: recompile.baseline,
@@ -2215,7 +2215,7 @@ fn elaborate_and_zonk_over<'s>(
             places,
             order,
         } = {
-            curios_common::profile!("assemble_unit_over");
+            curios_tracing::profile!("assemble_unit_over");
             recompile.assembled(&made_names, made)
         };
         traces.ordered(order.clone());
@@ -2274,7 +2274,7 @@ impl Recompile<'_> {
             };
         }
 
-        curios_common::profile!("order_unit_over");
+        curios_tracing::profile!("order_unit_over");
         let mut items = Items::from(made);
         items.extend(
             self.baseline

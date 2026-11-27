@@ -321,7 +321,7 @@ impl Readable<'_> {
 
 /// Complete what judging each definition of `module` read, held where `places` says and concluded as `certification` records, where no filing has ([`curios_core::ReadRecord::complete`]): with the identity of the item judged, the certifier's own digest of each part read — of a declaration of the unit, over the unit as it stands, and of another unit's, the digest the walk recorded of it, none of a fixed unit's — and the verdict. What a cabinet's filing asks of the certifier before the unit is filed, so a later walk at its address finds the verdict by the item it judged, and nothing outside the certifier computes any part of what that walk compares.
 pub fn complete(unit: Filed<'_>) {
-    curios_common::profile!("judgments::complete");
+    curios_tracing::profile!("judgments::complete");
     let mut globals = Globals::default();
     globals.mount(unit);
     let mut completing = Completing {

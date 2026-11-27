@@ -108,7 +108,7 @@ pub fn erase_unit(
     scope: Erasures<'_>,
     definitions: &curios_cert::Accepted<curios_core::Definitions>,
 ) -> Result<ErasedUnit, Error> {
-    curios_common::profile!("erase_unit");
+    curios_tracing::profile!("erase_unit");
     grown(|| {
         let definitions = definitions.as_definitions();
         let places = curios_core::Places::of(definitions);
@@ -123,7 +123,7 @@ pub fn erase_unit_over(
     definitions: &curios_cert::Accepted<curios_core::Definitions>,
     baseline: ErasedBaseline<'_>,
 ) -> Result<ErasedUnit, Error> {
-    curios_common::profile!("erase_unit");
+    curios_tracing::profile!("erase_unit");
     grown(|| {
         let definitions = definitions.as_definitions();
         let over = ErasedOver::new(baseline, definitions, scope);
@@ -137,7 +137,7 @@ pub fn erase_program(
     scope: Erasures<'_>,
     program: &curios_cert::Accepted<curios_core::Program>,
 ) -> Result<ErasedProgram, Error> {
-    curios_common::profile!("erase_unit");
+    curios_tracing::profile!("erase_unit");
     grown(|| {
         let definitions = &program.as_program().definitions;
         let places = curios_core::Places::of(definitions);
@@ -222,7 +222,7 @@ pub fn erase_items(
                 continue;
             }
             (None, Some((held, record))) => {
-                curios_common::sample!("erase::taken", record.len());
+                curios_tracing::sample!("erase::taken", record.len());
                 unit.keep(place, item, held);
 
                 record
@@ -231,7 +231,7 @@ pub fn erase_items(
                 let (erased, read) =
                     erase_forms(reader, scope, &unit, (definitions, places), item)?;
                 // One sample for each item erased, with how much its erasure read.
-                curios_common::sample!("erase::asked", read.len());
+                curios_tracing::sample!("erase::asked", read.len());
                 unit.push(place, item, erased);
 
                 Rc::new(AskedRecord::new(read))

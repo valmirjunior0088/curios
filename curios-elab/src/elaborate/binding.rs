@@ -22,7 +22,7 @@ use {
 
 /// Elaborate a local `let` block. The bindings are a flat `Vec` in one node, so this loops over them — elaborating each binding's type/body, minting its binder, and defining it in a single frame — rather than recursing once per binding, which a long straight-line sequence of `let`s would overflow the stack with. The tail continues with one ordinary (recursive) `elaborate`, its depth bounded by how often `let` and `rec` alternate, not by chain length. Rebuilding is one `Term::let_block`, which closes the bindings back into a single flat `Let` in one pass. The whole block is one source term with one extent, stamped by `elaborate`'s wrapper — no per-binding extent bookkeeping.
 pub fn elaborate_let(context: &mut Context, let_: &Let, mode: Mode) -> Result<(Term, Term), Error> {
-    curios_common::profile!("binding::elaborate_let");
+    curios_tracing::profile!("binding::elaborate_let");
     // The type a `!` in this block reads its region off, where the block is checked: what a binding of the region's monad is an action of.
     let region = match &mode {
         Mode::Check(expected) => Some(expected.type_.clone()),

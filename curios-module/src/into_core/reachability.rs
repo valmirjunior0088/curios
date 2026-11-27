@@ -146,7 +146,7 @@ impl Reachability {
         own: &[Mount],
         entry: BTreeSet<curios_core::Global>,
     ) -> Self {
-        curios_common::profile!("reachability::of");
+        curios_tracing::profile!("reachability::of");
         let open = open_modules(public, own);
         let mut gathered = HashMap::<curios_core::Global, Vec<curios_core::Global>>::new();
         let mut reportable = HashMap::<Qualifier, usize>::new();
@@ -232,7 +232,7 @@ impl Reachability {
         audiences: &dyn Fn(&Qualifier) -> Vec<(Qualifier, String)>,
         entry: BTreeSet<curios_core::Global>,
     ) -> Self {
-        curios_common::profile!("reachability::revised");
+        curios_tracing::profile!("reachability::revised");
         let mut state = self.clone();
         let mut candidates = Vec::<curios_core::Global>::new();
 

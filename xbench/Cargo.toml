@@ -25,6 +25,7 @@ curios-archive = { workspace = true }
 curios-cert = { workspace = true }
 # The arena ids a CPS module's nodes are keyed by, which the census walks, and its test support's `fill!`, which spells the programs a reduction measurement grows.
 curios-common = { workspace = true, features = ["test-support"] }
+curios-tracing = { workspace = true }
 # The look count the checkers' walks keep, which the towers and the growths read, and its test support: the closed machine's host, which the machine's spend is read through.
 curios-core = { workspace = true, features = ["test-support"] }
 # The optimized CPS module the census surveys.

@@ -55,7 +55,7 @@ pub fn identify_universe_levels(
         Alignment::Distinct => return Ok(Identification::Distinct),
         Alignment::GroundUnequal => return Ok(Identification::GroundUnequal),
         Alignment::Curried { apart, .. } => {
-            curios_common::sample!("identify::curried", apart.len());
+            curios_tracing::sample!("identify::curried", apart.len());
 
             return Ok(Identification::Curried(apart));
         }
@@ -69,8 +69,8 @@ pub fn identify_universe_levels(
     }
 
     // How many pairs an identification equates and how many it records weak, per call that identifies, and above how many it leaves to a curried head's type per call that declines for one: the magnitudes a change to what it commits moves.
-    curios_common::sample!("identify::equated", compared.len());
-    curios_common::sample!("identify::weak", irrelevant.len());
+    curios_tracing::sample!("identify::equated", compared.len());
+    curios_tracing::sample!("identify::weak", irrelevant.len());
 
     for (this_level, that_level) in compared {
         context
@@ -110,7 +110,7 @@ pub fn hold_at_one_instance(
     }
 
     // How many pairs a key's hit commits, per hit that commits any.
-    curios_common::sample!("identify::key", compared.len() + sorts.len());
+    curios_tracing::sample!("identify::key", compared.len() + sorts.len());
     let mark = context.solution_mark();
     let held = compared.into_iter().all(|(this_level, that_level)| {
         context
@@ -516,7 +516,7 @@ pub fn apply_param_types(
 
 /// Report, while a recorder listens, a site that could not determine a universe level and fell back to `Type 0`. Diagnostic only: it changes nothing, and it is what tells a level these fallbacks chose from one a declaration's generalization did.
 pub fn probe_level_fallback(site: &'static str, type_: &Term, syntax: &SyntaxRegistry) {
-    curios_common::note!(
+    curios_tracing::note!(
         target: "curios_elab::sort",
         site,
         type_ = %type_.faithful(syntax),
@@ -527,7 +527,7 @@ pub fn probe_level_fallback(site: &'static str, type_: &Term, syntax: &SyntaxReg
 /// Report, while a recorder listens, that the reader named `reader` took its answer for a sort its declaration leaves to a caller ([`UniverseSolver::left_to_caller`](crate::UniverseSolver::left_to_caller)). Each reader answers for such a sort in the direction it calls safe, and the notes under `curios_elab::sort` that carry a `reader` are what counts which of them meet one, and how often. Diagnostic only: it changes nothing.
 pub fn probe_open_sort(context: &Context, reader: &'static str, quality: Quality) {
     if context.universes().left_to_caller(quality) {
-        curios_common::note!(
+        curios_tracing::note!(
             target: "curios_elab::sort",
             reader,
             "answered for a sort left to a caller",

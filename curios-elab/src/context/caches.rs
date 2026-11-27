@@ -349,14 +349,14 @@ impl Caches {
         // An entry recording that a term is its own weak-head form says the same of every spelling the stored one carries to, as any hit does, and the asking spelling is the one to hand back: the stored one was written elsewhere, and a Π-type served in its place carried that spelling's binder names into a report about this one. A spelling the door equates and the stored one does not carry to is no hit: a polymorphic name standing bare is withheld where its instance unfolds.
         if reduct == key {
             let served = AcrossUniverses::between(&key, term).is_some();
-            curios_common::sample!("reduction::across_levels", u64::from(served));
+            curios_tracing::sample!("reduction::across_levels", u64::from(served));
             return served.then(|| term.clone());
         }
         let adapted = (!term.has_metavar() && !reduct.has_metavar())
             .then(|| AcrossUniverses::between(&key, term))
             .flatten()
             .and_then(|across| across.carried(&reduct));
-        curios_common::sample!("reduction::across_levels", u64::from(adapted.is_some()));
+        curios_tracing::sample!("reduction::across_levels", u64::from(adapted.is_some()));
 
         adapted
     }
@@ -876,7 +876,7 @@ impl Caches {
         self.note_universe_write();
         let stands = |filed: &Filed| filed.filed <= filings;
         // How many reducts the rollback throws away.
-        curios_common::sample!(
+        curios_tracing::sample!(
             "caches::rollback_dropped",
             self.lasting
                 .iter()
@@ -931,7 +931,7 @@ impl Caches {
     pub fn invalidate_for_withdrawn_answers(&mut self) {
         self.withdrawals += 1;
         // How many reducts the clear throws away.
-        curios_common::sample!(
+        curios_tracing::sample!(
             "caches::withdrawn_dropped",
             (self.reduction[0].len() + self.reduction[1].len()) as u64
         );

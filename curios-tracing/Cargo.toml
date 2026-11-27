@@ -1,0 +1,13 @@
+[package]
+name = "curios-tracing"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "The macros a site instruments with, profile!, sample! and note!, over tracing alone, so the runtime and the slim launcher take them as the compiler does"
+
+[lints]
+workspace = true
+
+[dependencies]
+# What `profile!`, `sample!` and `note!` expand to; `curios-profile` names it too, for the subscriber it implements.
+tracing = { workspace = true }

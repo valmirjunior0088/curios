@@ -1156,7 +1156,7 @@ fn refined_reduct(context: &mut Context, value: &Term) -> Result<Option<Term>, R
     {
         return Ok(None);
     }
-    curios_common::profile!("reduce::refined_reduct");
+    curios_tracing::profile!("reduce::refined_reduct");
 
     let probe = reduct_spelling(context, value)?;
     // The binders the form names that are proofs, which the filter in front of every entry passes over.
@@ -1185,7 +1185,7 @@ fn refined_reduct(context: &mut Context, value: &Term) -> Result<Option<Term>, R
         let Some((frame, key, original)) = unsettled else {
             // What a lookup that asked conversion would have been put to: the entries this stuck form could be the term of, each settled and none answering.
             if let asked @ 1.. = admitted.len() {
-                curios_common::sample!("reduce::missed_lookup", asked);
+                curios_tracing::sample!("reduce::missed_lookup", asked);
             }
             return Ok(None);
         };
@@ -1215,7 +1215,7 @@ fn refolded(context: &mut Context, folded: &Term) -> Result<Option<Term>, Reduce
     match within.classable() {
         true => {
             // What a stuck fold puts to conversion: the atoms it pairs, where some two may be one.
-            curios_common::sample!("reduce::classable_fold", within.atoms());
+            curios_tracing::sample!("reduce::classable_fold", within.atoms());
             asked_within(context, &mut within)?;
         }
         // Nothing is put to conversion, and the readers still class the operation's nodes.
@@ -1385,7 +1385,7 @@ fn proofs_named(context: &mut Context, probe: &Term) -> Result<Vec<Free>, Reduce
 
 /// Which of `atoms` are one, as reduction asks of a stuck form beside an equation's scrutinee: each pair put to the elaborator's conversion with nothing committed (`same_uncommitted`), by plain reduction ([`Context::plainly`]). A comparison with no value at the type level is that the two are not known to be one.
 fn asked_classes(context: &mut Context, atoms: &[Term]) -> Result<Classes, ReduceError> {
-    curios_common::profile!("reduce::asked_classes");
+    curios_tracing::profile!("reduce::asked_classes");
     context.note_question();
     context.plainly(|context| {
         classing(context, atoms, |context, this, that| {
@@ -1398,7 +1398,7 @@ fn asked_classes(context: &mut Context, atoms: &[Term]) -> Result<Classes, Reduc
 
 /// The atoms a stuck fold still has to class, classed among what its operands' classifications kept, each pair put to the elaborator's conversion as [`asked_classes`] puts it.
 fn asked_within(context: &mut Context, within: &mut Within) -> Result<(), ReduceError> {
-    curios_common::profile!("reduce::asked_classes");
+    curios_tracing::profile!("reduce::asked_classes");
     context.note_question();
     context.plainly(|context| {
         within.class(|this, that| {
@@ -1422,7 +1422,7 @@ fn asked_scrutinee(
     key: &Term,
     value: &Term,
 ) -> Result<bool, ReduceError> {
-    curios_common::profile!("reduce::asked_scrutinee");
+    curios_tracing::profile!("reduce::asked_scrutinee");
     context.note_question();
     let height = context.scrutinee_height();
     let asked = context.plainly(|context| {
@@ -1583,7 +1583,7 @@ fn settle_at(
     height: Height,
 ) -> Result<(), ReduceError> {
     // The term reduced and its frame are what a hunt for repeated settlements needs: the same pair recurring at an entry's own height is the entry settled anew, and its slowest slices, ordered by a query of the trace, name the keys that pay. The height tells one settled again under an arm from one settled anew. The term is written in Curios/Core, which names every global in full and reads back as the term, and a trace writes a key's text once however often it is settled.
-    curios_common::profile!(
+    curios_tracing::profile!(
         "reduce::settle",
         key = %start.spelled(&Rc::new(Spelling::core_text(&context.syntax()))),
         frame,

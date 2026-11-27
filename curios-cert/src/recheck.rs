@@ -552,7 +552,7 @@ fn struct_residue(declaration: &StructDecl) -> Option<Error> {
 ///
 /// **Refused whole.** A module that redeclares offers the rest of itself no environment to be judged in, so nothing of it is: the verdicts handed back are its redeclarations and nothing else, each naming its declaration, a group by its first member as everywhere.
 fn redeclarations(definitions: &Definitions, globals: &Globals) -> Vec<Refusal> {
-    curios_common::profile!("redeclarations");
+    curios_tracing::profile!("redeclarations");
     let mut refused: BTreeSet<Global> = BTreeSet::new();
     let mut redeclared = Vec::new();
     let mut refuse = |name: &Global| {
@@ -616,7 +616,7 @@ fn verdicts_within<'s>(
     globals: &'s Globals<'s>,
     over: Option<Over<'s>>,
 ) -> Walk {
-    curios_common::profile!("recheck_definitions");
+    curios_tracing::profile!("recheck_definitions");
     // Whether each part the baseline's walk read of a unit that moved is the part in scope now: asked once, a part being read by every declaration that names it.
     let abroad = RefCell::new(HashMap::<(Global, bool), bool>::new());
     let changed = over.map(|over| Changed::of(definitions, globals, over, &abroad));
@@ -982,7 +982,7 @@ pub fn verdicts_visiting<'s>(
         }
 
         // One span per judged item, grouped as the elaborator's `declaration` span is, so an item's cost in the certifier is read beside its cost in the elaborator by the same key.
-        curios_common::profile!("certify_declaration", group = %item.describe());
+        curios_tracing::profile!("certify_declaration", group = %item.describe());
 
         // What the walk states of the item's binders and of its families' payloads, before the closed machine runs on any of its terms; its families are held as stated from here on.
         certifier.restore_budget();
@@ -1646,7 +1646,7 @@ fn stored(
         Some(stored) => stored.digest,
         None => ItemRun::identity(item).ok()?,
     };
-    curios_common::profile!("certify::candidates");
+    curios_tracing::profile!("certify::candidates");
     let found = candidates
         .candidates(Facet::Judgment, &identity)
         .into_iter()

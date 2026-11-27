@@ -59,7 +59,7 @@ thread_local! {
 }
 
 fn validate_archives() -> [Validated; 2] {
-    curios_common::profile!("validate_archives");
+    curios_tracing::profile!("validate_archives");
     ROOTS.map(|(root, bytes, pack)| validate_bytes(root, bytes, pack))
 }
 
@@ -98,7 +98,7 @@ fn archived() -> &'static [Validated; 2] {
 ///
 /// The universe invariants are *not* re-checked here, nor is anything certified again. Both are settled once by the build, on the values it is about to serialize, and these bytes are exactly the bytes written from those values — constants of the same build, whose structure `validate_bytes` confirms. Walking the whole standard library again per compilation would re-derive an answer already settled.
 fn restore_archives() -> [(Record, Unit); 2] {
-    curios_common::profile!("restore_archives");
+    curios_tracing::profile!("restore_archives");
     let mut units = archived()
         .iter()
         .zip(ROOTS)
@@ -135,7 +135,7 @@ fn restore_archives() -> [(Record, Unit); 2] {
 ///
 /// Apart from [`with_prelude`], because no unit carries a record: a compilation restores none, and a command that documents restores these and no unit for them. Restored on each call and kept by nothing here, since a process documents once.
 pub fn documentation() -> Vec<Documentation> {
-    curios_common::profile!("restore_documentation");
+    curios_tracing::profile!("restore_documentation");
     curios_archive::from_bytes::<Vec<Documentation>>(DOCUMENTATION_BYTES)
         .unwrap_or_else(|error| panic!("the prelude's documentation failed to restore: {error}"))
 }
@@ -149,7 +149,7 @@ pub fn root_prefixes() -> [Qualifier; 2] {
 ///
 /// A slice rather than one unit, and in dependency order rather than any: what `Predecessors::over` takes is exactly this, so a product puts the whole prelude in scope by handing it along instead of deciding how its roots compose.
 pub fn with_prelude<R>(use_prelude: impl FnOnce(&[&Unit]) -> R) -> R {
-    curios_common::profile!("with_prelude");
+    curios_tracing::profile!("with_prelude");
     PRELUDE.with(|prelude| {
         let [sys, std] = &**prelude;
         use_prelude(&[sys, std])

@@ -648,6 +648,7 @@ dependencies = [
  "curios-common",
  "curios-core",
  "curios-num",
+ "curios-tracing",
 ]
 
 [[package]]
@@ -659,6 +660,7 @@ dependencies = [
  "curios-common",
  "curios-cps",
  "curios-num",
+ "curios-tracing",
 ]
 
 [[package]]
@@ -678,7 +680,7 @@ name = "curios-binaryen"
 version = "0.16.25"
 dependencies = [
  "cmake",
- "curios-common",
+ "curios-tracing",
 ]
 
 [[package]]
@@ -710,6 +712,7 @@ dependencies = [
  "curios-core",
  "curios-num",
  "curios-surface",
+ "curios-tracing",
 ]
 
 [[package]]
@@ -720,7 +723,6 @@ dependencies = [
  "curios-unicode",
  "sha2 0.11.1",
  "stacker",
- "tracing",
 ]
 
 [[package]]
@@ -732,6 +734,7 @@ dependencies = [
  "curios-archive",
  "curios-common",
  "curios-num",
+ "curios-tracing",
 ]
 
 [[package]]
@@ -741,14 +744,15 @@ dependencies = [
  "curios-abi",
  "curios-common",
  "curios-num",
+ "curios-tracing",
 ]
 
 [[package]]
 name = "curios-cranelift"
 version = "0.16.25"
 dependencies = [
- "curios-common",
  "curios-native",
+ "curios-tracing",
  "wasmtime",
 ]
 
@@ -773,6 +777,7 @@ dependencies = [
  "curios-core",
  "curios-num",
  "curios-surface",
+ "curios-tracing",
 ]
 
 [[package]]
@@ -783,6 +788,7 @@ dependencies = [
  "curios-common",
  "curios-cps",
  "curios-num",
+ "curios-tracing",
  "curios-wasm",
 ]
 
@@ -800,6 +806,7 @@ dependencies = [
  "curios-elab",
  "curios-num",
  "curios-surface",
+ "curios-tracing",
 ]
 
 [[package]]
@@ -831,6 +838,7 @@ dependencies = [
  "curios-parse",
  "curios-print",
  "curios-surface",
+ "curios-tracing",
 ]
 
 [[package]]
@@ -880,6 +888,7 @@ name = "curios-parse"
 version = "0.16.25"
 dependencies = [
  "curios-common",
+ "curios-tracing",
  "curios-unicode",
 ]
 
@@ -902,6 +911,7 @@ dependencies = [
  "curios-prelude",
  "curios-prelude-build",
  "curios-surface",
+ "curios-tracing",
  "curios-unit",
  "curios-wasm",
 ]
@@ -924,6 +934,7 @@ dependencies = [
  "curios-pipeline",
  "curios-prelude-build",
  "curios-surface",
+ "curios-tracing",
  "curios-unicode",
  "curios-unit",
  "curios-verdict",
@@ -960,6 +971,7 @@ name = "curios-profile"
 version = "0.16.25"
 dependencies = [
  "curios-common",
+ "curios-tracing",
  "libc",
  "prost",
  "prost-build",
@@ -980,7 +992,15 @@ dependencies = [
  "curios-num",
  "curios-parse",
  "curios-print",
+ "curios-tracing",
  "serde_json",
+]
+
+[[package]]
+name = "curios-tracing"
+version = "0.16.25"
+dependencies = [
+ "tracing",
 ]
 
 [[package]]
@@ -1016,6 +1036,7 @@ dependencies = [
  "curios-pipeline",
  "curios-prelude",
  "curios-surface",
+ "curios-tracing",
  "curios-unit",
  "curios-wasm",
 ]
@@ -1045,6 +1066,7 @@ dependencies = [
  "curios-pipeline",
  "curios-prelude",
  "curios-surface",
+ "curios-tracing",
  "curios-unit",
  "curios-verdict",
  "curios-wasm",
@@ -3341,6 +3363,7 @@ dependencies = [
  "curios-prelude-build",
  "curios-profile",
  "curios-surface",
+ "curios-tracing",
  "curios-unit",
  "curios-wasm",
  "curios-wonder",

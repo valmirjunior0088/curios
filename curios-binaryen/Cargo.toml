@@ -10,7 +10,7 @@ workspace = true
 
 [dependencies]
 # The span over its work, `profile!`, as every stage's owner opens one for the recorder.
-curios-common = { workspace = true }
+curios-tracing = { workspace = true }
 
 [build-dependencies]
 cmake = "0.1.58"

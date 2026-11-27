@@ -23,7 +23,7 @@ pub fn entails<'a>(
     lower: &Level,
     upper: &Level,
 ) -> bool {
-    curios_common::profile!("entails");
+    curios_tracing::profile!("entails");
     let assumed = assumed.into_iter();
     let mut model = LevelModel::of(upper);
 
