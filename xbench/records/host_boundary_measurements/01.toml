@@ -1,0 +1,1048 @@
+taken = 2026-11-27
+subject = "curios 0.16.25 (ecde5d0a8)"
+
+[platform]
+machine = "AMD Ryzen 7 5800X3D 8-Core Processor, x86_64, 16 cpus, 31.2 GiB"
+state = "governor performance, boost on, smt on"
+software = "kernel 7.3.4-ogc8.1.fc45.x86_64, microcode 0xa201213"
+
+[[pinned]]
+tool = "rustc"
+version = "1.99.1"
+
+[[pinned]]
+tool = "wasmtime"
+version = "50.0.0"
+
+[[pinned]]
+tool = "wasmtime in Curios"
+version = "50.0.0"
+
+[[pinned]]
+tool = "binaryen"
+version = "version_133"
+
+[[figures]]
+name = "monad_io/compile"
+measure = "microseconds"
+readings = [[537154, 532428, 534620, 530827, 529552], [530841, 532550, 533385, 527759, 537263], [530727, 535031, 526082, 535078, 537541], [536503, 536714, 536214, 529801, 529782], [535920, 531496, 537580, 525497, 530905]]
+
+[[figures]]
+name = "monad_io/compile/calls"
+measure = "count"
+readings = [[1, 1, 1, 1, 1], [1, 1, 1, 1, 1], [1, 1, 1, 1, 1], [1, 1, 1, 1, 1], [1, 1, 1, 1, 1]]
+
+[[figures]]
+name = "monad_io/compile/allocated"
+measure = "bytes"
+readings = [[195844331, 195876611, 195858995, 195866323, 195855395], [195858019, 195852083, 195865259, 195872443, 195875891], [195861731, 195864331, 195854747, 195872139, 195863579], [195867931, 195865043, 195889691, 195878619, 195870163], [195856147, 195866115, 195868603, 195861603, 195860883]]
+
+[[figures]]
+name = "monad_io/compile/allocations"
+measure = "allocations"
+readings = [[1949297, 1949518, 1949523, 1949504, 1949426], [1949385, 1949367, 1949490, 1949472, 1949644], [1949469, 1949569, 1949314, 1949507, 1949423], [1949505, 1949508, 1949650, 1949560, 1949555], [1949393, 1949497, 1949521, 1949399, 1949455]]
+
+[[figures]]
+name = "monad_io/compile/looks"
+measure = "count"
+readings = [[304293, 304293, 304293, 304293, 304293], [304293, 304293, 304293, 304293, 304293], [304293, 304293, 304293, 304293, 304293], [304293, 304293, 304293, 304293, 304293], [304293, 304293, 304293, 304293, 304293]]
+
+[[figures]]
+name = "monad_io/run"
+measure = "microseconds"
+readings = [[606, 615, 590, 618, 633], [599, 559, 626, 610, 611], [679, 541, 623, 617, 627], [614, 557, 624, 675, 606], [622, 621, 613, 601, 615]]
+
+[[figures]]
+name = "monad_io/run/calls"
+measure = "count"
+readings = [[1, 1, 1, 1, 1], [1, 1, 1, 1, 1], [1, 1, 1, 1, 1], [1, 1, 1, 1, 1], [1, 1, 1, 1, 1]]
+
+[[figures]]
+name = "monad_io/run/allocated"
+measure = "bytes"
+readings = [[18848, 18848, 18848, 18848, 18848], [18848, 18848, 18848, 18848, 18848], [18848, 18848, 18848, 18848, 18848], [18848, 18848, 18848, 18848, 18848], [18848, 18848, 18848, 18848, 18848]]
+
+[[figures]]
+name = "monad_io/run/allocations"
+measure = "allocations"
+readings = [[372, 372, 372, 372, 372], [372, 372, 372, 372, 372], [372, 372, 372, 372, 372], [372, 372, 372, 372, 372], [372, 372, 372, 372, 372]]
+
+[[figures]]
+name = "monad_io/run/looks"
+measure = "count"
+readings = [[0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0]]
+
+[[figures]]
+name = "monad_io/host::call//std/Proc/proc_args"
+measure = "microseconds"
+readings = [[27, 25, 26, 25, 26], [26, 21, 26, 25, 25], [27, 21, 25, 26, 26], [26, 21, 26, 25, 26], [26, 26, 26, 25, 26]]
+
+[[figures]]
+name = "monad_io/host::call//std/Proc/proc_args/calls"
+measure = "count"
+readings = [[1, 1, 1, 1, 1], [1, 1, 1, 1, 1], [1, 1, 1, 1, 1], [1, 1, 1, 1, 1], [1, 1, 1, 1, 1]]
+
+[[figures]]
+name = "monad_io/host::call//std/Proc/proc_args/allocated"
+measure = "bytes"
+readings = [[1936, 1936, 1936, 1936, 1936], [1936, 1936, 1936, 1936, 1936], [1936, 1936, 1936, 1936, 1936], [1936, 1936, 1936, 1936, 1936], [1936, 1936, 1936, 1936, 1936]]
+
+[[figures]]
+name = "monad_io/host::call//std/Proc/proc_args/allocations"
+measure = "allocations"
+readings = [[14, 14, 14, 14, 14], [14, 14, 14, 14, 14], [14, 14, 14, 14, 14], [14, 14, 14, 14, 14], [14, 14, 14, 14, 14]]
+
+[[figures]]
+name = "monad_io/host::call//std/Proc/proc_args/looks"
+measure = "count"
+readings = [[0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0]]
+
+[[figures]]
+name = "monad_io/host::lower"
+measure = "microseconds"
+readings = [[11, 9, 9, 9, 10], [10, 9, 10, 9, 10], [11, 8, 9, 10, 10], [10, 8, 10, 9, 9], [10, 10, 9, 9, 9]]
+
+[[figures]]
+name = "monad_io/host::lower/calls"
+measure = "count"
+readings = [[2, 2, 2, 2, 2], [2, 2, 2, 2, 2], [2, 2, 2, 2, 2], [2, 2, 2, 2, 2], [2, 2, 2, 2, 2]]
+
+[[figures]]
+name = "monad_io/host::lower/allocated"
+measure = "bytes"
+readings = [[1908, 1908, 1908, 1908, 1908], [1908, 1908, 1908, 1908, 1908], [1908, 1908, 1908, 1908, 1908], [1908, 1908, 1908, 1908, 1908], [1908, 1908, 1908, 1908, 1908]]
+
+[[figures]]
+name = "monad_io/host::lower/allocations"
+measure = "allocations"
+readings = [[12, 12, 12, 12, 12], [12, 12, 12, 12, 12], [12, 12, 12, 12, 12], [12, 12, 12, 12, 12], [12, 12, 12, 12, 12]]
+
+[[figures]]
+name = "monad_io/host::lower/looks"
+measure = "count"
+readings = [[0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0]]
+
+[[figures]]
+name = "monad_io/host::call//std/internal/Handle/handle_write"
+measure = "microseconds"
+readings = [[10, 9, 9, 10, 10], [9, 9, 9, 9, 10], [10, 8, 9, 10, 9], [9, 10, 9, 12, 9], [9, 10, 9, 9, 10]]
+
+[[figures]]
+name = "monad_io/host::call//std/internal/Handle/handle_write/calls"
+measure = "count"
+readings = [[1, 1, 1, 1, 1], [1, 1, 1, 1, 1], [1, 1, 1, 1, 1], [1, 1, 1, 1, 1], [1, 1, 1, 1, 1]]
+
+[[figures]]
+name = "monad_io/host::call//std/internal/Handle/handle_write/allocated"
+measure = "bytes"
+readings = [[49, 49, 49, 49, 49], [49, 49, 49, 49, 49], [49, 49, 49, 49, 49], [49, 49, 49, 49, 49], [49, 49, 49, 49, 49]]
+
+[[figures]]
+name = "monad_io/host::call//std/internal/Handle/handle_write/allocations"
+measure = "allocations"
+readings = [[6, 6, 6, 6, 6], [6, 6, 6, 6, 6], [6, 6, 6, 6, 6], [6, 6, 6, 6, 6], [6, 6, 6, 6, 6]]
+
+[[figures]]
+name = "monad_io/host::call//std/internal/Handle/handle_write/looks"
+measure = "count"
+readings = [[0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0]]
+
+[[figures]]
+name = "monad_io/host::lift"
+measure = "microseconds"
+readings = [[4, 4, 4, 4, 4], [4, 4, 4, 4, 4], [5, 3, 4, 5, 4], [4, 4, 4, 5, 4], [4, 4, 4, 4, 4]]
+
+[[figures]]
+name = "monad_io/host::lift/calls"
+measure = "count"
+readings = [[2, 2, 2, 2, 2], [2, 2, 2, 2, 2], [2, 2, 2, 2, 2], [2, 2, 2, 2, 2], [2, 2, 2, 2, 2]]
+
+[[figures]]
+name = "monad_io/host::lift/allocated"
+measure = "bytes"
+readings = [[9, 9, 9, 9, 9], [9, 9, 9, 9, 9], [9, 9, 9, 9, 9], [9, 9, 9, 9, 9], [9, 9, 9, 9, 9]]
+
+[[figures]]
+name = "monad_io/host::lift/allocations"
+measure = "allocations"
+readings = [[4, 4, 4, 4, 4], [4, 4, 4, 4, 4], [4, 4, 4, 4, 4], [4, 4, 4, 4, 4], [4, 4, 4, 4, 4]]
+
+[[figures]]
+name = "monad_io/host::lift/looks"
+measure = "count"
+readings = [[0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0]]
+
+[[figures]]
+name = "monad_io/host::answer"
+measure = "microseconds"
+readings = [[2, 2, 2, 2, 2], [2, 2, 2, 2, 2], [3, 2, 2, 3, 2], [3, 2, 2, 2, 2], [2, 2, 2, 2, 3]]
+
+[[figures]]
+name = "monad_io/host::answer/calls"
+measure = "count"
+readings = [[2, 2, 2, 2, 2], [2, 2, 2, 2, 2], [2, 2, 2, 2, 2], [2, 2, 2, 2, 2], [2, 2, 2, 2, 2]]
+
+[[figures]]
+name = "monad_io/host::answer/allocated"
+measure = "bytes"
+readings = [[68, 68, 68, 68, 68], [68, 68, 68, 68, 68], [68, 68, 68, 68, 68], [68, 68, 68, 68, 68], [68, 68, 68, 68, 68]]
+
+[[figures]]
+name = "monad_io/host::answer/allocations"
+measure = "allocations"
+readings = [[4, 4, 4, 4, 4], [4, 4, 4, 4, 4], [4, 4, 4, 4, 4], [4, 4, 4, 4, 4], [4, 4, 4, 4, 4]]
+
+[[figures]]
+name = "monad_io/host::answer/looks"
+measure = "count"
+readings = [[0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0]]
+
+[[figures]]
+name = "monad_io/output"
+measure = "count"
+readings = [[6, 6, 6, 6, 6], [6, 6, 6, 6, 6], [6, 6, 6, 6, 6], [6, 6, 6, 6, 6], [6, 6, 6, 6, 6]]
+
+[[figures]]
+name = "stream_copy/compile"
+measure = "microseconds"
+readings = [[158608, 157360, 160862, 158789, 158907], [159321, 157537, 159045, 157725, 159107], [156574, 160724, 157138, 157683, 157211], [156085, 157966, 158610, 158351, 158946], [158148, 158515, 156294, 156141, 156854]]
+
+[[figures]]
+name = "stream_copy/compile/calls"
+measure = "count"
+readings = [[1, 1, 1, 1, 1], [1, 1, 1, 1, 1], [1, 1, 1, 1, 1], [1, 1, 1, 1, 1], [1, 1, 1, 1, 1]]
+
+[[figures]]
+name = "stream_copy/compile/allocated"
+measure = "bytes"
+readings = [[79900092, 79899972, 79899372, 79898476, 79898916], [79899212, 79900300, 79899172, 79898884, 79898380], [79900540, 79898796, 79899084, 79900092, 79898172], [79898540, 79898452, 79901148, 79897364, 79896988], [79900812, 79899148, 79900452, 79899108, 79899908]]
+
+[[figures]]
+name = "stream_copy/compile/allocations"
+measure = "allocations"
+readings = [[942306, 942306, 942302, 942294, 942306], [942301, 942317, 942297, 942304, 942299], [942314, 942300, 942299, 942318, 942300], [942297, 942298, 942317, 942289, 942295], [942317, 942294, 942305, 942304, 942319]]
+
+[[figures]]
+name = "stream_copy/compile/looks"
+measure = "count"
+readings = [[48383, 48383, 48383, 48383, 48383], [48383, 48383, 48383, 48383, 48383], [48383, 48383, 48383, 48383, 48383], [48383, 48383, 48383, 48383, 48383], [48383, 48383, 48383, 48383, 48383]]
+
+[[figures]]
+name = "stream_copy/run"
+measure = "microseconds"
+readings = [[54374, 54523, 54242, 54524, 56449], [54655, 54845, 54436, 55567, 54943], [55183, 54786, 54831, 55410, 54613], [53982, 54644, 53581, 54281, 56130], [54872, 54454, 54454, 56542, 54659]]
+
+[[figures]]
+name = "stream_copy/run/calls"
+measure = "count"
+readings = [[1, 1, 1, 1, 1], [1, 1, 1, 1, 1], [1, 1, 1, 1, 1], [1, 1, 1, 1, 1], [1, 1, 1, 1, 1]]
+
+[[figures]]
+name = "stream_copy/run/allocated"
+measure = "bytes"
+readings = [[18848, 18848, 18848, 18848, 18848], [18848, 18848, 18848, 18848, 18848], [18848, 18848, 18848, 18848, 18848], [18848, 18848, 18848, 18848, 18848], [18848, 18848, 18848, 18848, 18848]]
+
+[[figures]]
+name = "stream_copy/run/allocations"
+measure = "allocations"
+readings = [[372, 372, 372, 372, 372], [372, 372, 372, 372, 372], [372, 372, 372, 372, 372], [372, 372, 372, 372, 372], [372, 372, 372, 372, 372]]
+
+[[figures]]
+name = "stream_copy/run/looks"
+measure = "count"
+readings = [[0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0]]
+
+[[figures]]
+name = "stream_copy/host::call//std/internal/Handle/handle_read"
+measure = "microseconds"
+readings = [[16129, 16084, 15884, 16085, 16774], [16197, 16106, 16094, 16481, 16265], [16197, 16143, 16246, 16499, 16320], [16050, 16377, 15908, 16035, 16635], [16127, 16141, 16074, 16704, 16089]]
+
+[[figures]]
+name = "stream_copy/host::call//std/internal/Handle/handle_read/calls"
+measure = "count"
+readings = [[4000, 4000, 4000, 4000, 4000], [4000, 4000, 4000, 4000, 4000], [4000, 4000, 4000, 4000, 4000], [4000, 4000, 4000, 4000, 4000], [4000, 4000, 4000, 4000, 4000]]
+
+[[figures]]
+name = "stream_copy/host::call//std/internal/Handle/handle_read/allocated"
+measure = "bytes"
+readings = [[3208340, 3208340, 3208340, 3208340, 3208340], [3208340, 3208340, 3208340, 3208340, 3208340], [3208340, 3208340, 3208340, 3208340, 3208340], [3208340, 3208340, 3208340, 3208340, 3208340], [3208340, 3208340, 3208340, 3208340, 3208340]]
+
+[[figures]]
+name = "stream_copy/host::call//std/internal/Handle/handle_read/allocations"
+measure = "allocations"
+readings = [[30001, 30001, 30001, 30001, 30001], [30001, 30001, 30001, 30001, 30001], [30001, 30001, 30001, 30001, 30001], [30001, 30001, 30001, 30001, 30001], [30001, 30001, 30001, 30001, 30001]]
+
+[[figures]]
+name = "stream_copy/host::call//std/internal/Handle/handle_read/looks"
+measure = "count"
+readings = [[0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0]]
+
+[[figures]]
+name = "stream_copy/host::call//std/internal/Handle/handle_watch"
+measure = "microseconds"
+readings = [[7962, 8107, 8168, 8113, 8432], [7988, 8101, 7963, 8161, 8144], [8102, 8049, 8262, 8311, 7953], [7872, 7977, 7845, 8013, 8346], [7964, 7984, 7875, 8388, 7873]]
+
+[[figures]]
+name = "stream_copy/host::call//std/internal/Handle/handle_watch/calls"
+measure = "count"
+readings = [[1999, 1999, 1999, 1999, 1999], [1999, 1999, 1999, 1999, 1999], [1999, 1999, 1999, 1999, 1999], [1999, 1999, 1999, 1999, 1999], [1999, 1999, 1999, 1999, 1999]]
+
+[[figures]]
+name = "stream_copy/host::call//std/internal/Handle/handle_watch/allocated"
+measure = "bytes"
+readings = [[1359029, 1359029, 1359029, 1359029, 1359029], [1359029, 1359029, 1359029, 1359029, 1359029], [1359029, 1359029, 1359029, 1359029, 1359029], [1359029, 1359029, 1359029, 1359029, 1359029], [1359029, 1359029, 1359029, 1359029, 1359029]]
+
+[[figures]]
+name = "stream_copy/host::call//std/internal/Handle/handle_watch/allocations"
+measure = "allocations"
+readings = [[17992, 17992, 17992, 17992, 17992], [17992, 17992, 17992, 17992, 17992], [17992, 17992, 17992, 17992, 17992], [17992, 17992, 17992, 17992, 17992], [17992, 17992, 17992, 17992, 17992]]
+
+[[figures]]
+name = "stream_copy/host::call//std/internal/Handle/handle_watch/looks"
+measure = "count"
+readings = [[0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0]]
+
+[[figures]]
+name = "stream_copy/host::call//std/internal/Handle/handle_write"
+measure = "microseconds"
+readings = [[7541, 7522, 7294, 7492, 7635], [7575, 7624, 7236, 7483, 7533], [7719, 7493, 7474, 7535, 7367], [7400, 7538, 7363, 7404, 7709], [7491, 7649, 7368, 7859, 7592]]
+
+[[figures]]
+name = "stream_copy/host::call//std/internal/Handle/handle_write/calls"
+measure = "count"
+readings = [[2000, 2000, 2000, 2000, 2000], [2000, 2000, 2000, 2000, 2000], [2000, 2000, 2000, 2000, 2000], [2000, 2000, 2000, 2000, 2000], [2000, 2000, 2000, 2000, 2000]]
+
+[[figures]]
+name = "stream_copy/host::call//std/internal/Handle/handle_write/allocated"
+measure = "bytes"
+readings = [[1106288, 1106288, 1106288, 1106288, 1106288], [1106288, 1106288, 1106288, 1106288, 1106288], [1106288, 1106288, 1106288, 1106288, 1106288], [1106288, 1106288, 1106288, 1106288, 1106288], [1106288, 1106288, 1106288, 1106288, 1106288]]
+
+[[figures]]
+name = "stream_copy/host::call//std/internal/Handle/handle_write/allocations"
+measure = "allocations"
+readings = [[10012, 10012, 10012, 10012, 10012], [10012, 10012, 10012, 10012, 10012], [10012, 10012, 10012, 10012, 10012], [10012, 10012, 10012, 10012, 10012], [10012, 10012, 10012, 10012, 10012]]
+
+[[figures]]
+name = "stream_copy/host::call//std/internal/Handle/handle_write/looks"
+measure = "count"
+readings = [[0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0]]
+
+[[figures]]
+name = "stream_copy/host::lower"
+measure = "microseconds"
+readings = [[7352, 7413, 7397, 7437, 7772], [7265, 7278, 7365, 7513, 7322], [7444, 7442, 7528, 7483, 7347], [7276, 7302, 7447, 7280, 7690], [7410, 7271, 7248, 7768, 7497]]
+
+[[figures]]
+name = "stream_copy/host::lower/calls"
+measure = "count"
+readings = [[9998, 9998, 9998, 9998, 9998], [9998, 9998, 9998, 9998, 9998], [9998, 9998, 9998, 9998, 9998], [9998, 9998, 9998, 9998, 9998], [9998, 9998, 9998, 9998, 9998]]
+
+[[figures]]
+name = "stream_copy/host::lower/allocated"
+measure = "bytes"
+readings = [[4099413, 4099413, 4099413, 4099413, 4099413], [4099413, 4099413, 4099413, 4099413, 4099413], [4099413, 4099413, 4099413, 4099413, 4099413], [4099413, 4099413, 4099413, 4099413, 4099413], [4099413, 4099413, 4099413, 4099413, 4099413]]
+
+[[figures]]
+name = "stream_copy/host::lower/allocations"
+measure = "allocations"
+readings = [[31996, 31996, 31996, 31996, 31996], [31996, 31996, 31996, 31996, 31996], [31996, 31996, 31996, 31996, 31996], [31996, 31996, 31996, 31996, 31996], [31996, 31996, 31996, 31996, 31996]]
+
+[[figures]]
+name = "stream_copy/host::lower/looks"
+measure = "count"
+readings = [[0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0]]
+
+[[figures]]
+name = "stream_copy/host::call//std/internal/Handle/handle_close"
+measure = "microseconds"
+readings = [[7186, 7133, 7132, 7178, 7485], [7226, 7265, 7250, 7436, 7367], [7338, 7304, 7472, 7560, 7401], [7264, 7251, 7099, 7215, 7410], [7360, 7242, 7268, 7643, 7155]]
+
+[[figures]]
+name = "stream_copy/host::call//std/internal/Handle/handle_close/calls"
+measure = "count"
+readings = [[1999, 1999, 1999, 1999, 1999], [1999, 1999, 1999, 1999, 1999], [1999, 1999, 1999, 1999, 1999], [1999, 1999, 1999, 1999, 1999], [1999, 1999, 1999, 1999, 1999]]
+
+[[figures]]
+name = "stream_copy/host::call//std/internal/Handle/handle_close/allocated"
+measure = "bytes"
+readings = [[17232, 17232, 17232, 17232, 17232], [17232, 17232, 17232, 17232, 17232], [17232, 17232, 17232, 17232, 17232], [17232, 17232, 17232, 17232, 17232], [17232, 17232, 17232, 17232, 17232]]
+
+[[figures]]
+name = "stream_copy/host::call//std/internal/Handle/handle_close/allocations"
+measure = "allocations"
+readings = [[11994, 11994, 11994, 11994, 11994], [11994, 11994, 11994, 11994, 11994], [11994, 11994, 11994, 11994, 11994], [11994, 11994, 11994, 11994, 11994], [11994, 11994, 11994, 11994, 11994]]
+
+[[figures]]
+name = "stream_copy/host::call//std/internal/Handle/handle_close/looks"
+measure = "count"
+readings = [[0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0]]
+
+[[figures]]
+name = "stream_copy/host::lift"
+measure = "microseconds"
+readings = [[6442, 6338, 6431, 6380, 6685], [6390, 6431, 6504, 6669, 6563], [6377, 6383, 6422, 6533, 6474], [6415, 6368, 6354, 6411, 6682], [6272, 6270, 6425, 6601, 6464]]
+
+[[figures]]
+name = "stream_copy/host::lift/calls"
+measure = "count"
+readings = [[9998, 9998, 9998, 9998, 9998], [9998, 9998, 9998, 9998, 9998], [9998, 9998, 9998, 9998, 9998], [9998, 9998, 9998, 9998, 9998], [9998, 9998, 9998, 9998, 9998]]
+
+[[figures]]
+name = "stream_copy/host::lift/allocated"
+measure = "bytes"
+readings = [[539740, 539740, 539740, 539740, 539740], [539740, 539740, 539740, 539740, 539740], [539740, 539740, 539740, 539740, 539740], [539740, 539740, 539740, 539740, 539740], [539740, 539740, 539740, 539740, 539740]]
+
+[[figures]]
+name = "stream_copy/host::lift/allocations"
+measure = "allocations"
+readings = [[27994, 27994, 27994, 27994, 27994], [27994, 27994, 27994, 27994, 27994], [27994, 27994, 27994, 27994, 27994], [27994, 27994, 27994, 27994, 27994], [27994, 27994, 27994, 27994, 27994]]
+
+[[figures]]
+name = "stream_copy/host::lift/looks"
+measure = "count"
+readings = [[0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0]]
+
+[[figures]]
+name = "stream_copy/host::answer"
+measure = "microseconds"
+readings = [[4919, 4837, 4912, 5068, 5089], [4811, 4946, 4944, 4943, 5068], [5019, 4857, 5106, 5100, 5059], [4769, 5005, 4894, 5014, 5082], [4869, 4846, 5128, 5086, 4939]]
+
+[[figures]]
+name = "stream_copy/host::answer/calls"
+measure = "count"
+readings = [[9998, 9998, 9998, 9998, 9998], [9998, 9998, 9998, 9998, 9998], [9998, 9998, 9998, 9998, 9998], [9998, 9998, 9998, 9998, 9998], [9998, 9998, 9998, 9998, 9998]]
+
+[[figures]]
+name = "stream_copy/host::answer/allocated"
+measure = "bytes"
+readings = [[1051736, 1051736, 1051736, 1051736, 1051736], [1051736, 1051736, 1051736, 1051736, 1051736], [1051736, 1051736, 1051736, 1051736, 1051736], [1051736, 1051736, 1051736, 1051736, 1051736], [1051736, 1051736, 1051736, 1051736, 1051736]]
+
+[[figures]]
+name = "stream_copy/host::answer/allocations"
+measure = "allocations"
+readings = [[10009, 10009, 10009, 10009, 10009], [10009, 10009, 10009, 10009, 10009], [10009, 10009, 10009, 10009, 10009], [10009, 10009, 10009, 10009, 10009], [10009, 10009, 10009, 10009, 10009]]
+
+[[figures]]
+name = "stream_copy/host::answer/looks"
+measure = "count"
+readings = [[0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0]]
+
+[[figures]]
+name = "stream_copy/output"
+measure = "count"
+readings = [[512000, 512000, 512000, 512000, 512000], [512000, 512000, 512000, 512000, 512000], [512000, 512000, 512000, 512000, 512000], [512000, 512000, 512000, 512000, 512000], [512000, 512000, 512000, 512000, 512000]]
+
+[[figures]]
+name = "tui/compile"
+measure = "microseconds"
+readings = [[3130880, 3117315, 3079334, 3117553, 3125765], [3083886, 3100819, 3111621, 3094669, 3063648], [3091701, 3061724, 3123067, 3100323, 3078522], [3089805, 3080600, 3101178, 3088891, 3103910], [3131052, 3070670, 3087623, 3047384, 3089925]]
+
+[[figures]]
+name = "tui/compile/calls"
+measure = "count"
+readings = [[1, 1, 1, 1, 1], [1, 1, 1, 1, 1], [1, 1, 1, 1, 1], [1, 1, 1, 1, 1], [1, 1, 1, 1, 1]]
+
+[[figures]]
+name = "tui/compile/allocated"
+measure = "bytes"
+readings = [[1200335954, 1200327058, 1200319642, 1200324474, 1200328426], [1200333730, 1200341370, 1200336394, 1200332346, 1200332610], [1200330826, 1200326210, 1200326122, 1200330258, 1200330754], [1200334770, 1200329538, 1200320466, 1200332258, 1200320986], [1200330386, 1200329042, 1200328618, 1200335978, 1200323426]]
+
+[[figures]]
+name = "tui/compile/allocations"
+measure = "allocations"
+readings = [[14029753, 14029665, 14029604, 14029655, 14029672], [14029722, 14029761, 14029747, 14029714, 14029705], [14029709, 14029646, 14029687, 14029654, 14029682], [14029753, 14029676, 14029584, 14029728, 14029620], [14029686, 14029674, 14029667, 14029734, 14029638]]
+
+[[figures]]
+name = "tui/compile/looks"
+measure = "count"
+readings = [[115596, 115596, 115596, 115596, 115596], [115596, 115596, 115596, 115596, 115596], [115596, 115596, 115596, 115596, 115596], [115596, 115596, 115596, 115596, 115596], [115596, 115596, 115596, 115596, 115596]]
+
+[[figures]]
+name = "tui/run"
+measure = "microseconds"
+readings = [[56584, 56615, 55420, 54427, 54976], [55858, 55407, 55827, 54503, 55539], [54827, 56334, 55412, 55407, 55768], [56286, 56058, 56790, 54858, 54842], [55701, 55081, 55997, 55421, 54323]]
+
+[[figures]]
+name = "tui/run/calls"
+measure = "count"
+readings = [[1, 1, 1, 1, 1], [1, 1, 1, 1, 1], [1, 1, 1, 1, 1], [1, 1, 1, 1, 1], [1, 1, 1, 1, 1]]
+
+[[figures]]
+name = "tui/run/allocated"
+measure = "bytes"
+readings = [[18848, 18848, 18848, 18848, 18848], [18848, 18848, 18848, 18848, 18848], [18848, 18848, 18848, 18848, 18848], [18848, 18848, 18848, 18848, 18848], [18848, 18848, 18848, 18848, 18848]]
+
+[[figures]]
+name = "tui/run/allocations"
+measure = "allocations"
+readings = [[372, 372, 372, 372, 372], [372, 372, 372, 372, 372], [372, 372, 372, 372, 372], [372, 372, 372, 372, 372], [372, 372, 372, 372, 372]]
+
+[[figures]]
+name = "tui/run/looks"
+measure = "count"
+readings = [[0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0]]
+
+[[figures]]
+name = "tui/host::call//std/internal/Handle/handle_read"
+measure = "microseconds"
+readings = [[2013, 2009, 2044, 1974, 2003], [1981, 1996, 2066, 1987, 1959], [1951, 1990, 1969, 1990, 2004], [2009, 2022, 2143, 2023, 1978], [1948, 2006, 2136, 1990, 1973]]
+
+[[figures]]
+name = "tui/host::call//std/internal/Handle/handle_read/calls"
+measure = "count"
+readings = [[405, 405, 405, 405, 405], [405, 405, 405, 405, 405], [405, 405, 405, 405, 405], [405, 405, 405, 405, 405], [405, 405, 405, 405, 405]]
+
+[[figures]]
+name = "tui/host::call//std/internal/Handle/handle_read/allocated"
+measure = "bytes"
+readings = [[275197, 275197, 275197, 275197, 275197], [275197, 275197, 275197, 275197, 275197], [275197, 275197, 275197, 275197, 275197], [275197, 275197, 275197, 275197, 275197], [275197, 275197, 275197, 275197, 275197]]
+
+[[figures]]
+name = "tui/host::call//std/internal/Handle/handle_read/allocations"
+measure = "allocations"
+readings = [[4658, 4658, 4658, 4658, 4658], [4658, 4658, 4658, 4658, 4658], [4658, 4658, 4658, 4658, 4658], [4658, 4658, 4658, 4658, 4658], [4658, 4658, 4658, 4658, 4658]]
+
+[[figures]]
+name = "tui/host::call//std/internal/Handle/handle_read/looks"
+measure = "count"
+readings = [[0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0]]
+
+[[figures]]
+name = "tui/host::call//std/internal/Handle/handle_ready"
+measure = "microseconds"
+readings = [[1905, 1913, 1937, 1872, 1931], [1912, 1839, 1937, 1857, 1861], [1903, 1899, 1869, 1915, 1978], [1985, 1898, 2040, 1900, 1868], [1919, 1887, 1994, 1884, 1902]]
+
+[[figures]]
+name = "tui/host::call//std/internal/Handle/handle_ready/calls"
+measure = "count"
+readings = [[405, 405, 405, 405, 405], [405, 405, 405, 405, 405], [405, 405, 405, 405, 405], [405, 405, 405, 405, 405], [405, 405, 405, 405, 405]]
+
+[[figures]]
+name = "tui/host::call//std/internal/Handle/handle_ready/allocated"
+measure = "bytes"
+readings = [[313916, 313916, 313916, 313916, 313916], [313916, 313916, 313916, 313916, 313916], [313916, 313916, 313916, 313916, 313916], [313916, 313916, 313916, 313916, 313916], [313916, 313916, 313916, 313916, 313916]]
+
+[[figures]]
+name = "tui/host::call//std/internal/Handle/handle_ready/allocations"
+measure = "allocations"
+readings = [[4896, 4896, 4896, 4896, 4896], [4896, 4896, 4896, 4896, 4896], [4896, 4896, 4896, 4896, 4896], [4896, 4896, 4896, 4896, 4896], [4896, 4896, 4896, 4896, 4896]]
+
+[[figures]]
+name = "tui/host::call//std/internal/Handle/handle_ready/looks"
+measure = "count"
+readings = [[0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0]]
+
+[[figures]]
+name = "tui/host::lower"
+measure = "microseconds"
+readings = [[1370, 1370, 1392, 1335, 1392], [1351, 1346, 1395, 1365, 1313], [1340, 1393, 1320, 1343, 1407], [1396, 1367, 1490, 1376, 1363], [1353, 1360, 1523, 1326, 1318]]
+
+[[figures]]
+name = "tui/host::lower/calls"
+measure = "count"
+readings = [[1439, 1439, 1439, 1439, 1439], [1439, 1439, 1439, 1439, 1439], [1439, 1439, 1439, 1439, 1439], [1439, 1439, 1439, 1439, 1439], [1439, 1439, 1439, 1439, 1439]]
+
+[[figures]]
+name = "tui/host::lower/allocated"
+measure = "bytes"
+readings = [[691523, 691523, 691523, 691523, 691523], [691523, 691523, 691523, 691523, 691523], [691523, 691523, 691523, 691523, 691523], [691523, 691523, 691523, 691523, 691523], [691523, 691523, 691523, 691523, 691523]]
+
+[[figures]]
+name = "tui/host::lower/allocations"
+measure = "allocations"
+readings = [[4900, 4900, 4900, 4900, 4900], [4900, 4900, 4900, 4900, 4900], [4900, 4900, 4900, 4900, 4900], [4900, 4900, 4900, 4900, 4900], [4900, 4900, 4900, 4900, 4900]]
+
+[[figures]]
+name = "tui/host::lower/looks"
+measure = "count"
+readings = [[0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0]]
+
+[[figures]]
+name = "tui/host::lift"
+measure = "microseconds"
+readings = [[1214, 1221, 1223, 1209, 1241], [1217, 1206, 1219, 1201, 1212], [1258, 1200, 1175, 1206, 1202], [1200, 1173, 1199, 1178, 1167], [1279, 1202, 1218, 1207, 1209]]
+
+[[figures]]
+name = "tui/host::lift/calls"
+measure = "count"
+readings = [[1439, 1439, 1439, 1439, 1439], [1439, 1439, 1439, 1439, 1439], [1439, 1439, 1439, 1439, 1439], [1439, 1439, 1439, 1439, 1439], [1439, 1439, 1439, 1439, 1439]]
+
+[[figures]]
+name = "tui/host::lift/allocated"
+measure = "bytes"
+readings = [[53374, 53374, 53374, 53374, 53374], [53374, 53374, 53374, 53374, 53374], [53374, 53374, 53374, 53374, 53374], [53374, 53374, 53374, 53374, 53374], [53374, 53374, 53374, 53374, 53374]]
+
+[[figures]]
+name = "tui/host::lift/allocations"
+measure = "allocations"
+readings = [[6352, 6352, 6352, 6352, 6352], [6352, 6352, 6352, 6352, 6352], [6352, 6352, 6352, 6352, 6352], [6352, 6352, 6352, 6352, 6352], [6352, 6352, 6352, 6352, 6352]]
+
+[[figures]]
+name = "tui/host::lift/looks"
+measure = "count"
+readings = [[0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0]]
+
+[[figures]]
+name = "tui/host::call//std/internal/Handle/handle_write"
+measure = "microseconds"
+readings = [[1127, 1139, 1135, 1091, 1123], [1110, 1090, 1110, 1087, 1066], [1171, 1110, 1103, 1122, 1131], [1105, 1109, 1216, 1102, 1096], [1129, 1143, 1156, 1135, 1132]]
+
+[[figures]]
+name = "tui/host::call//std/internal/Handle/handle_write/calls"
+measure = "count"
+readings = [[206, 206, 206, 206, 206], [206, 206, 206, 206, 206], [206, 206, 206, 206, 206], [206, 206, 206, 206, 206], [206, 206, 206, 206, 206]]
+
+[[figures]]
+name = "tui/host::call//std/internal/Handle/handle_write/allocated"
+measure = "bytes"
+readings = [[28234, 28234, 28234, 28234, 28234], [28234, 28234, 28234, 28234, 28234], [28234, 28234, 28234, 28234, 28234], [28234, 28234, 28234, 28234, 28234], [28234, 28234, 28234, 28234, 28234]]
+
+[[figures]]
+name = "tui/host::call//std/internal/Handle/handle_write/allocations"
+measure = "allocations"
+readings = [[1653, 1653, 1653, 1653, 1653], [1653, 1653, 1653, 1653, 1653], [1653, 1653, 1653, 1653, 1653], [1653, 1653, 1653, 1653, 1653], [1653, 1653, 1653, 1653, 1653]]
+
+[[figures]]
+name = "tui/host::call//std/internal/Handle/handle_write/looks"
+measure = "count"
+readings = [[0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0]]
+
+[[figures]]
+name = "tui/host::answer"
+measure = "microseconds"
+readings = [[916, 971, 954, 914, 957], [923, 931, 961, 918, 923], [930, 935, 947, 970, 1000], [983, 953, 951, 936, 925], [901, 936, 949, 980, 945]]
+
+[[figures]]
+name = "tui/host::answer/calls"
+measure = "count"
+readings = [[1439, 1439, 1439, 1439, 1439], [1439, 1439, 1439, 1439, 1439], [1439, 1439, 1439, 1439, 1439], [1439, 1439, 1439, 1439, 1439], [1439, 1439, 1439, 1439, 1439]]
+
+[[figures]]
+name = "tui/host::answer/allocated"
+measure = "bytes"
+readings = [[17198, 17198, 17198, 17198, 17198], [17198, 17198, 17198, 17198, 17198], [17198, 17198, 17198, 17198, 17198], [17198, 17198, 17198, 17198, 17198], [17198, 17198, 17198, 17198, 17198]]
+
+[[figures]]
+name = "tui/host::answer/allocations"
+measure = "allocations"
+readings = [[3501, 3501, 3501, 3501, 3501], [3501, 3501, 3501, 3501, 3501], [3501, 3501, 3501, 3501, 3501], [3501, 3501, 3501, 3501, 3501], [3501, 3501, 3501, 3501, 3501]]
+
+[[figures]]
+name = "tui/host::answer/looks"
+measure = "count"
+readings = [[0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0]]
+
+[[figures]]
+name = "tui/host::call//std/internal/Handle/handle_watch"
+measure = "microseconds"
+readings = [[906, 935, 929, 909, 924], [912, 913, 927, 916, 992], [921, 916, 893, 916, 900], [920, 888, 917, 887, 896], [900, 883, 972, 895, 903]]
+
+[[figures]]
+name = "tui/host::call//std/internal/Handle/handle_watch/calls"
+measure = "count"
+readings = [[202, 202, 202, 202, 202], [202, 202, 202, 202, 202], [202, 202, 202, 202, 202], [202, 202, 202, 202, 202], [202, 202, 202, 202, 202]]
+
+[[figures]]
+name = "tui/host::call//std/internal/Handle/handle_watch/allocated"
+measure = "bytes"
+readings = [[137158, 137158, 137158, 137158, 137158], [137158, 137158, 137158, 137158, 137158], [137158, 137158, 137158, 137158, 137158], [137158, 137158, 137158, 137158, 137158], [137158, 137158, 137158, 137158, 137158]]
+
+[[figures]]
+name = "tui/host::call//std/internal/Handle/handle_watch/allocations"
+measure = "allocations"
+readings = [[2222, 2222, 2222, 2222, 2222], [2222, 2222, 2222, 2222, 2222], [2222, 2222, 2222, 2222, 2222], [2222, 2222, 2222, 2222, 2222], [2222, 2222, 2222, 2222, 2222]]
+
+[[figures]]
+name = "tui/host::call//std/internal/Handle/handle_watch/looks"
+measure = "count"
+readings = [[0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0]]
+
+[[figures]]
+name = "tui/host::call//std/internal/Handle/handle_close"
+measure = "microseconds"
+readings = [[785, 805, 814, 774, 797], [801, 790, 831, 781, 777], [802, 797, 785, 834, 805], [788, 807, 824, 788, 779], [792, 803, 819, 821, 806]]
+
+[[figures]]
+name = "tui/host::call//std/internal/Handle/handle_close/calls"
+measure = "count"
+readings = [[207, 207, 207, 207, 207], [207, 207, 207, 207, 207], [207, 207, 207, 207, 207], [207, 207, 207, 207, 207], [207, 207, 207, 207, 207]]
+
+[[figures]]
+name = "tui/host::call//std/internal/Handle/handle_close/allocated"
+measure = "bytes"
+readings = [[1242, 1242, 1242, 1242, 1242], [1242, 1242, 1242, 1242, 1242], [1242, 1242, 1242, 1242, 1242], [1242, 1242, 1242, 1242, 1242], [1242, 1242, 1242, 1242, 1242]]
+
+[[figures]]
+name = "tui/host::call//std/internal/Handle/handle_close/allocations"
+measure = "allocations"
+readings = [[1242, 1242, 1242, 1242, 1242], [1242, 1242, 1242, 1242, 1242], [1242, 1242, 1242, 1242, 1242], [1242, 1242, 1242, 1242, 1242], [1242, 1242, 1242, 1242, 1242]]
+
+[[figures]]
+name = "tui/host::call//std/internal/Handle/handle_close/looks"
+measure = "count"
+readings = [[0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0]]
+
+[[figures]]
+name = "tui/host::call//std/internal/Handle/file_open"
+measure = "microseconds"
+readings = [[27, 27, 28, 27, 28], [27, 28, 31, 27, 23], [22, 37, 27, 28, 27], [27, 29, 28, 28, 44], [27, 27, 30, 27, 23]]
+
+[[figures]]
+name = "tui/host::call//std/internal/Handle/file_open/calls"
+measure = "count"
+readings = [[1, 1, 1, 1, 1], [1, 1, 1, 1, 1], [1, 1, 1, 1, 1], [1, 1, 1, 1, 1], [1, 1, 1, 1, 1]]
+
+[[figures]]
+name = "tui/host::call//std/internal/Handle/file_open/allocated"
+measure = "bytes"
+readings = [[1491, 1491, 1491, 1491, 1491], [1491, 1491, 1491, 1491, 1491], [1491, 1491, 1491, 1491, 1491], [1491, 1491, 1491, 1491, 1491], [1491, 1491, 1491, 1491, 1491]]
+
+[[figures]]
+name = "tui/host::call//std/internal/Handle/file_open/allocations"
+measure = "allocations"
+readings = [[11, 11, 11, 11, 11], [11, 11, 11, 11, 11], [11, 11, 11, 11, 11], [11, 11, 11, 11, 11], [11, 11, 11, 11, 11]]
+
+[[figures]]
+name = "tui/host::call//std/internal/Handle/file_open/looks"
+measure = "count"
+readings = [[0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0]]
+
+[[figures]]
+name = "tui/host::call//std/Io/clock_deadline"
+measure = "microseconds"
+readings = [[17, 19, 19, 17, 17], [17, 16, 19, 17, 16], [17, 17, 19, 19, 19], [16, 17, 21, 17, 19], [19, 17, 21, 19, 17]]
+
+[[figures]]
+name = "tui/host::call//std/Io/clock_deadline/calls"
+measure = "count"
+readings = [[4, 4, 4, 4, 4], [4, 4, 4, 4, 4], [4, 4, 4, 4, 4], [4, 4, 4, 4, 4], [4, 4, 4, 4, 4]]
+
+[[figures]]
+name = "tui/host::call//std/Io/clock_deadline/allocated"
+measure = "bytes"
+readings = [[3620, 3620, 3620, 3620, 3620], [3620, 3620, 3620, 3620, 3620], [3620, 3620, 3620, 3620, 3620], [3620, 3620, 3620, 3620, 3620], [3620, 3620, 3620, 3620, 3620]]
+
+[[figures]]
+name = "tui/host::call//std/Io/clock_deadline/allocations"
+measure = "allocations"
+readings = [[29, 29, 29, 29, 29], [29, 29, 29, 29, 29], [29, 29, 29, 29, 29], [29, 29, 29, 29, 29], [29, 29, 29, 29, 29]]
+
+[[figures]]
+name = "tui/host::call//std/Io/clock_deadline/looks"
+measure = "count"
+readings = [[0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0]]
+
+[[figures]]
+name = "tui/host::call//std/time/Instant/clock_mono"
+measure = "microseconds"
+readings = [[15, 17, 15, 15, 15], [15, 15, 16, 14, 15], [15, 15, 16, 17, 17], [14, 15, 18, 15, 16], [16, 15, 17, 17, 15]]
+
+[[figures]]
+name = "tui/host::call//std/time/Instant/clock_mono/calls"
+measure = "count"
+readings = [[4, 4, 4, 4, 4], [4, 4, 4, 4, 4], [4, 4, 4, 4, 4], [4, 4, 4, 4, 4], [4, 4, 4, 4, 4]]
+
+[[figures]]
+name = "tui/host::call//std/time/Instant/clock_mono/allocated"
+measure = "bytes"
+readings = [[512, 512, 512, 512, 512], [512, 512, 512, 512, 512], [512, 512, 512, 512, 512], [512, 512, 512, 512, 512], [512, 512, 512, 512, 512]]
+
+[[figures]]
+name = "tui/host::call//std/time/Instant/clock_mono/allocations"
+measure = "allocations"
+readings = [[4, 4, 4, 4, 4], [4, 4, 4, 4, 4], [4, 4, 4, 4, 4], [4, 4, 4, 4, 4], [4, 4, 4, 4, 4]]
+
+[[figures]]
+name = "tui/host::call//std/time/Instant/clock_mono/looks"
+measure = "count"
+readings = [[0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0]]
+
+[[figures]]
+name = "tui/host::call//std/Tty/tty_size"
+measure = "microseconds"
+readings = [[14, 14, 15, 14, 14], [13, 14, 17, 13, 12], [13, 15, 13, 14, 15], [14, 13, 19, 13, 14], [14, 54, 14, 13, 12]]
+
+[[figures]]
+name = "tui/host::call//std/Tty/tty_size/calls"
+measure = "count"
+readings = [[3, 3, 3, 3, 3], [3, 3, 3, 3, 3], [3, 3, 3, 3, 3], [3, 3, 3, 3, 3], [3, 3, 3, 3, 3]]
+
+[[figures]]
+name = "tui/host::call//std/Tty/tty_size/allocated"
+measure = "bytes"
+readings = [[399, 399, 399, 399, 399], [399, 399, 399, 399, 399], [399, 399, 399, 399, 399], [399, 399, 399, 399, 399], [399, 399, 399, 399, 399]]
+
+[[figures]]
+name = "tui/host::call//std/Tty/tty_size/allocations"
+measure = "allocations"
+readings = [[21, 21, 21, 21, 21], [21, 21, 21, 21, 21], [21, 21, 21, 21, 21], [21, 21, 21, 21, 21], [21, 21, 21, 21, 21]]
+
+[[figures]]
+name = "tui/host::call//std/Tty/tty_size/looks"
+measure = "count"
+readings = [[0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0]]
+
+[[figures]]
+name = "tui/host::call//std/Tty/tty_take"
+measure = "microseconds"
+readings = [[7, 8, 8, 7, 8], [7, 8, 11, 7, 6], [6, 8, 7, 8, 8], [7, 8, 7, 7, 8], [8, 8, 7, 7, 6]]
+
+[[figures]]
+name = "tui/host::call//std/Tty/tty_take/calls"
+measure = "count"
+readings = [[1, 1, 1, 1, 1], [1, 1, 1, 1, 1], [1, 1, 1, 1, 1], [1, 1, 1, 1, 1], [1, 1, 1, 1, 1]]
+
+[[figures]]
+name = "tui/host::call//std/Tty/tty_take/allocated"
+measure = "bytes"
+readings = [[288, 288, 288, 288, 288], [288, 288, 288, 288, 288], [288, 288, 288, 288, 288], [288, 288, 288, 288, 288], [288, 288, 288, 288, 288]]
+
+[[figures]]
+name = "tui/host::call//std/Tty/tty_take/allocations"
+measure = "allocations"
+readings = [[10, 10, 10, 10, 10], [10, 10, 10, 10, 10], [10, 10, 10, 10, 10], [10, 10, 10, 10, 10], [10, 10, 10, 10, 10]]
+
+[[figures]]
+name = "tui/host::call//std/Tty/tty_take/looks"
+measure = "count"
+readings = [[0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0]]
+
+[[figures]]
+name = "tui/host::call//std/Tty/tty_give"
+measure = "microseconds"
+readings = [[5, 5, 5, 4, 5], [5, 5, 5, 5, 5], [5, 5, 5, 5, 5], [64, 6, 5, 5, 5], [5, 5, 5, 4, 5]]
+
+[[figures]]
+name = "tui/host::call//std/Tty/tty_give/calls"
+measure = "count"
+readings = [[1, 1, 1, 1, 1], [1, 1, 1, 1, 1], [1, 1, 1, 1, 1], [1, 1, 1, 1, 1], [1, 1, 1, 1, 1]]
+
+[[figures]]
+name = "tui/host::call//std/Tty/tty_give/allocated"
+measure = "bytes"
+readings = [[38, 38, 38, 38, 38], [38, 38, 38, 38, 38], [38, 38, 38, 38, 38], [38, 38, 38, 38, 38], [38, 38, 38, 38, 38]]
+
+[[figures]]
+name = "tui/host::call//std/Tty/tty_give/allocations"
+measure = "allocations"
+readings = [[7, 7, 7, 7, 7], [7, 7, 7, 7, 7], [7, 7, 7, 7, 7], [7, 7, 7, 7, 7], [7, 7, 7, 7, 7]]
+
+[[figures]]
+name = "tui/host::call//std/Tty/tty_give/looks"
+measure = "count"
+readings = [[0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0]]
+
+[[figures]]
+name = "tui/output"
+measure = "count"
+readings = [[8747, 8747, 8747, 8747, 8747], [8747, 8747, 8747, 8747, 8747], [8747, 8747, 8747, 8747, 8747], [8747, 8747, 8747, 8747, 8747], [8747, 8747, 8747, 8747, 8747]]
+
+[[figures]]
+name = "print_loop/compile"
+measure = "microseconds"
+readings = [[172086, 170774, 174316, 172181, 171557], [173810, 171933, 172272, 173501, 173055], [170751, 174051, 173240, 171211, 174557], [170451, 173667, 172132, 172263, 172531], [171418, 173046, 172308, 171907, 171838]]
+
+[[figures]]
+name = "print_loop/compile/calls"
+measure = "count"
+readings = [[1, 1, 1, 1, 1], [1, 1, 1, 1, 1], [1, 1, 1, 1, 1], [1, 1, 1, 1, 1], [1, 1, 1, 1, 1]]
+
+[[figures]]
+name = "print_loop/compile/allocated"
+measure = "bytes"
+readings = [[82878987, 82880115, 82886011, 82885691, 82885211], [82886971, 82884395, 82880795, 82884611, 82880451], [82885467, 82889419, 82880643, 82885331, 82879163], [82880539, 82884627, 82884827, 82880427, 82881627], [82879707, 82884931, 82879931, 82883259, 82891619]]
+
+[[figures]]
+name = "print_loop/compile/allocations"
+measure = "allocations"
+readings = [[954879, 954872, 954925, 954911, 954909], [954946, 954898, 954905, 954910, 954882], [954931, 954954, 954891, 954929, 954895], [954906, 954908, 954912, 954864, 954877], [954869, 954909, 954903, 954898, 954968]]
+
+[[figures]]
+name = "print_loop/compile/looks"
+measure = "count"
+readings = [[39492, 39492, 39492, 39492, 39492], [39492, 39492, 39492, 39492, 39492], [39492, 39492, 39492, 39492, 39492], [39492, 39492, 39492, 39492, 39492], [39492, 39492, 39492, 39492, 39492]]
+
+[[figures]]
+name = "print_loop/run"
+measure = "microseconds"
+readings = [[976746, 933817, 915412, 954176, 940650], [934373, 936520, 942554, 945920, 930070], [954448, 928747, 918901, 986276, 953232], [943704, 942136, 947036, 922359, 930273], [929219, 922748, 1005570, 939899, 918881]]
+
+[[figures]]
+name = "print_loop/run/calls"
+measure = "count"
+readings = [[1, 1, 1, 1, 1], [1, 1, 1, 1, 1], [1, 1, 1, 1, 1], [1, 1, 1, 1, 1], [1, 1, 1, 1, 1]]
+
+[[figures]]
+name = "print_loop/run/allocated"
+measure = "bytes"
+readings = [[18848, 18848, 18848, 18848, 18848], [18848, 18848, 18848, 18848, 18848], [18848, 18848, 18848, 18848, 18848], [18848, 18848, 18848, 18848, 18848], [18848, 18848, 18848, 18848, 18848]]
+
+[[figures]]
+name = "print_loop/run/allocations"
+measure = "allocations"
+readings = [[372, 372, 372, 372, 372], [372, 372, 372, 372, 372], [372, 372, 372, 372, 372], [372, 372, 372, 372, 372], [372, 372, 372, 372, 372]]
+
+[[figures]]
+name = "print_loop/run/looks"
+measure = "count"
+readings = [[0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0]]
+
+[[figures]]
+name = "print_loop/host::call//std/internal/Handle/handle_write"
+measure = "microseconds"
+readings = [[752240, 720430, 696216, 736078, 720568], [719066, 721446, 725934, 728090, 712016], [735313, 714802, 706537, 754974, 733662], [727855, 725965, 725829, 704600, 716790], [709607, 707894, 773331, 726799, 699783]]
+
+[[figures]]
+name = "print_loop/host::call//std/internal/Handle/handle_write/calls"
+measure = "count"
+readings = [[200000, 200000, 200000, 200000, 200000], [200000, 200000, 200000, 200000, 200000], [200000, 200000, 200000, 200000, 200000], [200000, 200000, 200000, 200000, 200000], [200000, 200000, 200000, 200000, 200000]]
+
+[[figures]]
+name = "print_loop/host::call//std/internal/Handle/handle_write/allocated"
+measure = "bytes"
+readings = [[9048576, 9048576, 9048576, 9048576, 9048576], [9048576, 9048576, 9048576, 9048576, 9048576], [9048576, 9048576, 9048576, 9048576, 9048576], [9048576, 9048576, 9048576, 9048576, 9048576], [9048576, 9048576, 9048576, 9048576, 9048576]]
+
+[[figures]]
+name = "print_loop/host::call//std/internal/Handle/handle_write/allocations"
+measure = "allocations"
+readings = [[1000018, 1000018, 1000018, 1000018, 1000018], [1000018, 1000018, 1000018, 1000018, 1000018], [1000018, 1000018, 1000018, 1000018, 1000018], [1000018, 1000018, 1000018, 1000018, 1000018], [1000018, 1000018, 1000018, 1000018, 1000018]]
+
+[[figures]]
+name = "print_loop/host::call//std/internal/Handle/handle_write/looks"
+measure = "count"
+readings = [[0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0]]
+
+[[figures]]
+name = "print_loop/host::lift"
+measure = "microseconds"
+readings = [[147491, 141543, 139693, 144179, 142257], [145536, 143700, 144351, 148723, 142506], [141490, 141178, 139297, 147593, 143250], [142205, 143850, 143031, 139281, 142399], [142337, 138516, 155203, 149181, 136630]]
+
+[[figures]]
+name = "print_loop/host::lift/calls"
+measure = "count"
+readings = [[200000, 200000, 200000, 200000, 200000], [200000, 200000, 200000, 200000, 200000], [200000, 200000, 200000, 200000, 200000], [200000, 200000, 200000, 200000, 200000], [200000, 200000, 200000, 200000, 200000]]
+
+[[figures]]
+name = "print_loop/host::lift/allocated"
+measure = "bytes"
+readings = [[1600000, 1600000, 1600000, 1600000, 1600000], [1600000, 1600000, 1600000, 1600000, 1600000], [1600000, 1600000, 1600000, 1600000, 1600000], [1600000, 1600000, 1600000, 1600000, 1600000], [1600000, 1600000, 1600000, 1600000, 1600000]]
+
+[[figures]]
+name = "print_loop/host::lift/allocations"
+measure = "allocations"
+readings = [[800000, 800000, 800000, 800000, 800000], [800000, 800000, 800000, 800000, 800000], [800000, 800000, 800000, 800000, 800000], [800000, 800000, 800000, 800000, 800000], [800000, 800000, 800000, 800000, 800000]]
+
+[[figures]]
+name = "print_loop/host::lift/looks"
+measure = "count"
+readings = [[0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0]]
+
+[[figures]]
+name = "print_loop/host::lower"
+measure = "microseconds"
+readings = [[92653, 87867, 86595, 87905, 85534], [89354, 85304, 85887, 85183, 85047], [93457, 86076, 85102, 98941, 87290], [86175, 87709, 86846, 84519, 84979], [86940, 84799, 100549, 84942, 84606]]
+
+[[figures]]
+name = "print_loop/host::lower/calls"
+measure = "count"
+readings = [[200000, 200000, 200000, 200000, 200000], [200000, 200000, 200000, 200000, 200000], [200000, 200000, 200000, 200000, 200000], [200000, 200000, 200000, 200000, 200000], [200000, 200000, 200000, 200000, 200000]]
+
+[[figures]]
+name = "print_loop/host::lower/allocated"
+measure = "bytes"
+readings = [[6400000, 6400000, 6400000, 6400000, 6400000], [6400000, 6400000, 6400000, 6400000, 6400000], [6400000, 6400000, 6400000, 6400000, 6400000], [6400000, 6400000, 6400000, 6400000, 6400000], [6400000, 6400000, 6400000, 6400000, 6400000]]
+
+[[figures]]
+name = "print_loop/host::lower/allocations"
+measure = "allocations"
+readings = [[200000, 200000, 200000, 200000, 200000], [200000, 200000, 200000, 200000, 200000], [200000, 200000, 200000, 200000, 200000], [200000, 200000, 200000, 200000, 200000], [200000, 200000, 200000, 200000, 200000]]
+
+[[figures]]
+name = "print_loop/host::lower/looks"
+measure = "count"
+readings = [[0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0]]
+
+[[figures]]
+name = "print_loop/host::answer"
+measure = "microseconds"
+readings = [[90491, 85016, 83182, 90294, 90483], [82486, 85432, 89561, 85758, 84698], [87228, 85007, 84948, 88737, 91347], [89643, 88296, 86419, 83934, 90153], [82622, 87663, 92274, 90225, 83095]]
+
+[[figures]]
+name = "print_loop/host::answer/calls"
+measure = "count"
+readings = [[200000, 200000, 200000, 200000, 200000], [200000, 200000, 200000, 200000, 200000], [200000, 200000, 200000, 200000, 200000], [200000, 200000, 200000, 200000, 200000], [200000, 200000, 200000, 200000, 200000]]
+
+[[figures]]
+name = "print_loop/host::answer/allocated"
+measure = "bytes"
+readings = [[1048576, 1048576, 1048576, 1048576, 1048576], [1048576, 1048576, 1048576, 1048576, 1048576], [1048576, 1048576, 1048576, 1048576, 1048576], [1048576, 1048576, 1048576, 1048576, 1048576], [1048576, 1048576, 1048576, 1048576, 1048576]]
+
+[[figures]]
+name = "print_loop/host::answer/allocations"
+measure = "allocations"
+readings = [[18, 18, 18, 18, 18], [18, 18, 18, 18, 18], [18, 18, 18, 18, 18], [18, 18, 18, 18, 18], [18, 18, 18, 18, 18]]
+
+[[figures]]
+name = "print_loop/host::answer/looks"
+measure = "count"
+readings = [[0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0]]
+
+[[figures]]
+name = "print_loop/output"
+measure = "count"
+readings = [[1000000, 1000000, 1000000, 1000000, 1000000], [1000000, 1000000, 1000000, 1000000, 1000000], [1000000, 1000000, 1000000, 1000000, 1000000], [1000000, 1000000, 1000000, 1000000, 1000000], [1000000, 1000000, 1000000, 1000000, 1000000]]
+
+[[figures]]
+name = "pure_loop/compile"
+measure = "microseconds"
+readings = [[163771, 162569, 162658, 159921, 147307], [156104, 157329, 156223, 155923, 146013], [160211, 158183, 158687, 158823, 144308], [157755, 161067, 158650, 161016, 145725], [158453, 158532, 156308, 157919, 143012]]
+
+[[figures]]
+name = "pure_loop/compile/calls"
+measure = "count"
+readings = [[1, 1, 1, 1, 1], [1, 1, 1, 1, 1], [1, 1, 1, 1, 1], [1, 1, 1, 1, 1], [1, 1, 1, 1, 1]]
+
+[[figures]]
+name = "pure_loop/compile/allocated"
+measure = "bytes"
+readings = [[250294783, 250295647, 250294459, 250295083, 250294147], [250294975, 250296047, 250294539, 250294715, 250295075], [250293967, 250295839, 250294939, 250295419, 250294275], [250294719, 250294863, 250294283, 250294843, 250295219], [250294735, 250295263, 250294411, 250295003, 250294947]]
+
+[[figures]]
+name = "pure_loop/compile/allocations"
+measure = "allocations"
+readings = [[2422344, 2422345, 2422343, 2422345, 2422336], [2422342, 2422350, 2422341, 2422344, 2422346], [2422335, 2422351, 2422345, 2422352, 2422338], [2422340, 2422338, 2422339, 2422344, 2422348], [2422341, 2422342, 2422340, 2422348, 2422344]]
+
+[[figures]]
+name = "pure_loop/compile/looks"
+measure = "count"
+readings = [[19770, 19770, 19770, 19770, 19770], [19770, 19770, 19770, 19770, 19770], [19770, 19770, 19770, 19770, 19770], [19770, 19770, 19770, 19770, 19770], [19770, 19770, 19770, 19770, 19770]]
+
+[[figures]]
+name = "pure_loop/run"
+measure = "microseconds"
+readings = [[4489, 4575, 4590, 4421, 4733], [4791, 4578, 4486, 4529, 4681], [4452, 4646, 4530, 4529, 4616], [4567, 4619, 4526, 4599, 4614], [4716, 4558, 4495, 4621, 4444]]
+
+[[figures]]
+name = "pure_loop/run/calls"
+measure = "count"
+readings = [[1, 1, 1, 1, 1], [1, 1, 1, 1, 1], [1, 1, 1, 1, 1], [1, 1, 1, 1, 1], [1, 1, 1, 1, 1]]
+
+[[figures]]
+name = "pure_loop/run/allocated"
+measure = "bytes"
+readings = [[18848, 18848, 18848, 18848, 18848], [18848, 18848, 18848, 18848, 18848], [18848, 18848, 18848, 18848, 18848], [18848, 18848, 18848, 18848, 18848], [18848, 18848, 18848, 18848, 18848]]
+
+[[figures]]
+name = "pure_loop/run/allocations"
+measure = "allocations"
+readings = [[372, 372, 372, 372, 372], [372, 372, 372, 372, 372], [372, 372, 372, 372, 372], [372, 372, 372, 372, 372], [372, 372, 372, 372, 372]]
+
+[[figures]]
+name = "pure_loop/run/looks"
+measure = "count"
+readings = [[0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0]]
+
+[[figures]]
+name = "pure_loop/output"
+measure = "count"
+readings = [[0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0]]
