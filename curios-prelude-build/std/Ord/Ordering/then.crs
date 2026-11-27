@@ -60,8 +60,4 @@ pub let assoc(
     y: Ordering,
     z: Ordering,
 ) -> Eq()(then(then(x, y), z), then(x, then(y, z))) =
-    match x
-    | lt() => Eq/refl()
-    | eq() => Eq/refl()
-    | gt() => Eq/refl()
-    end;
+    match x | lt() | eq() | gt() => Eq/refl() end;

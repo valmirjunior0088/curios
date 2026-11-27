@@ -44,12 +44,7 @@ pub let then(
         match py
         | lt() =>
             match pz
-            | lt() =>
-                match x
-                | lt() => True/qed()
-                | eq() => True/qed()
-                | gt() => True/qed()
-                end
+            | lt() => match x | lt() | eq() | gt() => True/qed() end
             | eq() => match prefix end
             | gt() => match prefix end
             end

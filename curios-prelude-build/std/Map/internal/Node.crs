@@ -451,9 +451,8 @@ pub let count_set(
         match i
         | 0 =>
             match h
-            | empty() => match n | empty() | leaf(_, _) | branch(_, _) => Eq/refl() end
-            | leaf(_, _) => match n | empty() | leaf(_, _) | branch(_, _) => Eq/refl() end
-            | branch(_, _) => match n | empty() | leaf(_, _) | branch(_, _) => Eq/refl() end
+            | empty() | leaf(_, _) | branch(_, _) =>
+                match n | empty() | leaf(_, _) | branch(_, _) => Eq/refl() end
             end
         | j + 1 =>
             let inner = count_set(r, j, @proved(), n);
